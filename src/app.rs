@@ -1,25 +1,24 @@
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
+use egui::TextEdit;
+
+static INIT_ANSWER_HINT: &str = "give your expected date";
+
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct TemplateApp {
-    // Example stuff:
-    label: String,
-
-    #[serde(skip)] // This how you opt-out of serialization of a field
-    value: f32,
+pub struct App {
+    user_name: String,
+    answers: Vec<String>,
 }
 
-impl Default for TemplateApp {
+impl Default for App {
     fn default() -> Self {
         Self {
-            // Example stuff:
-            label: "My first eGUI app!".to_owned(),
-            value: 2.7,
+            user_name: String::new(),
+            answers: vec![String::new(); 4],
         }
     }
 }
 
-impl TemplateApp {
+impl App {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // This is also where you can customize the look and feel of egui using
@@ -33,9 +32,13 @@ impl TemplateApp {
 
         Default::default()
     }
+
+    fn clear(&mut self) {
+        self.answers = vec!["".to_owned(); 4];
+    }
 }
 
-impl eframe::App for TemplateApp {
+impl eframe::App for App {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, self);
@@ -50,7 +53,6 @@ impl eframe::App for TemplateApp {
             // The top panel is often a good place for a menu bar:
 
             egui::menu::bar(ui, |ui| {
-                // NOTE: no File->Quit on web pages!
                 let is_web = cfg!(target_arch = "wasm32");
                 if !is_web {
                     ui.menu_button("File", |ui| {
@@ -68,23 +70,43 @@ impl eframe::App for TemplateApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("Prono");
+            ui.heading("Guess SpaceX Starship achievements");
+
+            ui.spacing();
+
+            ui.hyperlink_to("SpaceX Starship", "http://www.spacex.com");
 
             ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(&mut self.label);
+                ui.label("Name:");
+                ui.add(
+                    TextEdit::singleline(&mut self.user_name).hint_text("Please fill in your name"),
+                );
             });
 
-            ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                self.value += 1.0;
+            static QUESTIONS: [&str; 4] = [
+                "First cargo only Moon landing",
+                "First man on the Moon landing",
+                "First cargo only Mars landing",
+                "First man on Mars landing",
+            ];
+
+            for (i, &question) in QUESTIONS.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.label(question);
+                    ui.add(TextEdit::singleline(&mut self.answers[i]).hint_text(INIT_ANSWER_HINT));
+                });
             }
 
-            ui.separator();
+            ui.horizontal(|ui| {
+                if ui.button("Reset").clicked() {
+                    self.clear();
+                }
+                if ui.button("Submit").clicked() {
+                    todo!("Submit answers");
+                }
+            });
 
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/main/",
-                "Source code."
-            ));
+            ui.separator();
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 powered_by_egui_and_eframe(ui);
@@ -97,6 +119,7 @@ impl eframe::App for TemplateApp {
 fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
+        ui.label("Made by Sam Jaques. ");
         ui.label("Powered by ");
         ui.hyperlink_to("egui", "https://github.com/emilk/egui");
         ui.label(" and ");

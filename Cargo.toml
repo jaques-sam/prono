@@ -1,10 +1,9 @@
 [package]
-name = "eframe_template"
+name = "prono"
 version = "0.1.0"
-authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
+authors = ["Sam Jaques <sam.jaques@me.com>"]
 edition = "2021"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
-rust-version = "1.76"
 
 [package.metadata.docs.rs]
 all-features = true

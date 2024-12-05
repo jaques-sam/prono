@@ -134,21 +134,11 @@ jobs:
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable --profile default --target ${{ matrix.TARGET }} -y
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    # For linux, it's necessary to use cross from the git repository to avoid glibc problems
-    # Ref: https://github.com/cross-rs/cross/issues/1510
-    - name: Install cross for linux
-      if: contains(matrix.TARGET, 'linux')
-      run: |
-        cargo install cross --git https://github.com/cross-rs/cross --rev 1b8cf50d20180c1a394099e608141480f934b7f7
-
-    - name: Install cross for mac and windows
-      if: ${{ !contains(matrix.TARGET, 'linux') }}
-      run: |
-        cargo install cross
+    - name: Install cross
+      run: cargo install cross
 
     - name: Build
-      run: |
-        cross build --verbose --release --target=${{ matrix.TARGET }}
+      run: cross build --verbose --release --target=${{ matrix.TARGET }}
 
     - name: Rename
       run: cp target/${{ matrix.TARGET }}/release/prono${{ matrix.EXTENSION }} prono-${{ matrix.TARGET }}${{ matrix.EXTENSION }}

@@ -78,9 +78,7 @@ impl eframe::App for App {
 
             ui.horizontal(|ui| {
                 ui.label("Name:");
-                ui.add(
-                    TextEdit::singleline(&mut self.user_name).hint_text("Please fill in your name"),
-                );
+                ui.add(TextEdit::singleline(&mut self.user_name).hint_text("Please fill in your name"));
             });
 
             static QUESTIONS: [&str; 4] = [
@@ -123,10 +121,7 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
         ui.label("Powered by ");
         ui.hyperlink_to("egui", "https://github.com/emilk/egui");
         ui.label(" and ");
-        ui.hyperlink_to(
-            "eframe",
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
-        );
+        ui.hyperlink_to("eframe", "https://github.com/emilk/egui/tree/master/crates/eframe");
         ui.label(".");
     });
 }

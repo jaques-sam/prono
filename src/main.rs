@@ -1,7 +1,12 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-// When compiling natively:
+use eframe::AppCreator;
+
+fn build_app<'a>() -> AppCreator<'a> {
+    Box::new(|cc| Ok(Box::new(prono::App::new(cc))))
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -17,14 +22,9 @@ fn main() -> eframe::Result {
             ),
         ..Default::default()
     };
-    eframe::run_native(
-        "eframe template",
-        native_options,
-        Box::new(|cc| Ok(Box::new(prono::App::new(cc)))),
-    )
+    eframe::run_native("eframe template", native_options, build_app())
 }
 
-// When compiling to web using trunk:
 #[cfg(target_arch = "wasm32")]
 fn main() {
     use eframe::wasm_bindgen::JsCast as _;
@@ -35,10 +35,7 @@ fn main() {
     let web_options = eframe::WebOptions::default();
 
     wasm_bindgen_futures::spawn_local(async {
-        let document = web_sys::window()
-            .expect("No window")
-            .document()
-            .expect("No document");
+        let document = web_sys::window().expect("No window").document().expect("No document");
 
         let canvas = document
             .get_element_by_id("the_canvas_id")
@@ -47,11 +44,7 @@ fn main() {
             .expect("the_canvas_id was not a HtmlCanvasElement");
 
         let start_result = eframe::WebRunner::new()
-            .start(
-                canvas,
-                web_options,
-                Box::new(|cc| Ok(Box::new(prono::App::new(cc)))),
-            )
+            .start(canvas, web_options, build_app())
             .await;
 
         // Remove the loading text and spinner:
@@ -61,9 +54,7 @@ fn main() {
                     loading_text.remove();
                 }
                 Err(e) => {
-                    loading_text.set_inner_html(
-                        "<p> The app has crashed. See the developer console for details. </p>",
-                    );
+                    loading_text.set_inner_html("<p> The app has crashed. See the developer console for details. </p>");
                     panic!("Failed to start eframe: {e:?}");
                 }
             }

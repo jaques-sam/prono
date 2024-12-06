@@ -1,19 +1,23 @@
 use egui::TextEdit;
+use serde::{Deserialize, Serialize};
+
+use crate::{config, Answer, Survey};
 
 static INIT_ANSWER_HINT: &str = "give your expected date";
+static SURVEY_CONFIG: &str = include_str!("./configurations/survey_spacex_starship.json");
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
     user_name: String,
-    answers: Vec<String>,
+    survey: Survey,
 }
 
 impl Default for App {
     fn default() -> Self {
         Self {
             user_name: String::new(),
-            answers: vec![String::new(); 4],
+            survey: config::Survey::create_from_file(SURVEY_CONFIG).into(),
         }
     }
 }
@@ -34,7 +38,7 @@ impl App {
     }
 
     fn clear(&mut self) {
-        self.answers = vec!["".to_owned(); 4];
+        self.survey.clear();
     }
 }
 
@@ -91,7 +95,18 @@ impl eframe::App for App {
             for (i, &question) in QUESTIONS.iter().enumerate() {
                 ui.horizontal(|ui| {
                     ui.label(question);
-                    ui.add(TextEdit::singleline(&mut self.answers[i]).hint_text(INIT_ANSWER_HINT));
+                    match &mut self.survey.questions[i].answer {
+                        Answer::Text(answer) => {
+                            ui.add(TextEdit::singleline(answer).hint_text(INIT_ANSWER_HINT));
+                        }
+                        // FIXME add 2 synced combo boxes
+                        Answer::PredictionDate { day: _, month, year } => {
+                            let month_str = month.to_string();
+                            ui.add(TextEdit::singleline(&mut month_str.clone()).hint_text("month"));
+                            let year_str = year.to_string();
+                            ui.add(TextEdit::singleline(&mut year_str.clone()).hint_text("year"));
+                        }
+                    }
                 });
             }
 

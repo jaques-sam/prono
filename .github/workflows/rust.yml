@@ -150,7 +150,7 @@ jobs:
 
     - uses: svenstaro/upload-release-action@v2
       name: Upload binaries to release
-      if: ${{ github.event_name == 'push' }}
+      if: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'release') }}
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: prono-${{ matrix.TARGET }}${{ matrix.EXTENSION }}

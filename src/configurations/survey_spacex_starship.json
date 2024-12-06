@@ -1,0 +1,21 @@
+{
+    "description": "SpaceX Starship achievements survey",
+    "questions": [
+        {
+            "question": "First cargo only Moon landing",
+            "answer_type": "prediction_date"
+        },
+        {
+            "question": "First man on the Moon landing",
+            "answer_type": "prediction_date"
+        },
+        {
+            "question": "First cargo only Mars landing",
+            "answer_type": "prediction_date"
+        },
+        {
+            "question": "First man on Mars landing",
+            "answer_type": "prediction_date"
+        }
+    ]
+}

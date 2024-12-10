@@ -4,7 +4,7 @@ use super::{Answer, Clear};
 
 #[derive(Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Question {
-    pub id: u16,
+    pub id: String,
     pub question: String,
     pub answer: Answer,
 }

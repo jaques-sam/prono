@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Survey {
+    #[serde(rename = "survey_id")]
+    id: u64,
     description: String,
     questions: Vec<Question>,
 }
@@ -16,32 +19,26 @@ impl Survey {
 impl From<Survey> for super::Survey {
     fn from(survey: Survey) -> Self {
         Self {
+            id: survey.id,
             description: survey.description,
-            questions: survey
-                .questions
-                .into_iter()
-                .enumerate()
-                .map(|(index, mut q)| {
-                    q.id = index as u16;
-                    q.into()
-                })
-                .collect(),
+            questions: survey.questions.into_iter().map(Into::into).collect(),
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Question {
-    #[serde(skip)]
-    id: u16,
     question: String,
     answer_type: AnswerType,
 }
 
 impl From<Question> for super::Question {
     fn from(question: Question) -> Self {
+        let data_to_hash = format!("{}{:?}", question.question, question.answer_type);
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, data_to_hash.as_bytes()).to_string();
+
         Self {
-            id: question.id,
+            id,
             question: question.question,
             answer: match question.answer_type {
                 AnswerType::Text => super::Answer::new_text(),
@@ -61,6 +58,8 @@ pub enum AnswerType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
+    use serde_json::json;
 
     #[test]
     fn test_configuration_from_file() {
@@ -68,5 +67,125 @@ mod tests {
 
         let survey: Survey = serde_json::from_str(json_data).unwrap();
         println!("{:?}", survey);
+    }
+
+    #[test]
+    fn test_survey_creation_from_valid_json() {
+        let json_data = json!(
+        {
+            "survey_id": 1,
+            "description": "Test Survey",
+            "questions": [
+                {
+                    "question": "What is your name?",
+                    "answer_type": "text"
+                },
+                {
+                    "question": "When is the event?",
+                    "answer_type": "prediction_date"
+                }
+            ]
+        });
+
+        let survey: Survey = serde_json::from_value(json_data).unwrap();
+        assert_eq!(survey.id, 1);
+        assert_eq!(survey.description, "Test Survey");
+        assert_eq!(survey.questions.len(), 2);
+        assert_eq!(survey.questions[0].question, "What is your name?");
+        assert_eq!(survey.questions[0].answer_type, AnswerType::Text);
+        assert_eq!(survey.questions[1].question, "When is the event?");
+        assert_eq!(survey.questions[1].answer_type, AnswerType::PredictionDate);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unable to parse survey configuration")]
+    fn test_survey_creation_from_invalid_json() {
+        let invalid_json_data = r#"
+        {
+            "survey_id": "invalid_id",
+            "description": "Test Survey",
+            "questions": []
+        }
+        "#;
+
+        Survey::create_from_file(invalid_json_data);
+    }
+
+    #[test]
+    fn test_question_conversion() {
+        let config_question = Question {
+            question: String::from("What is your name?"),
+            answer_type: AnswerType::Text,
+        };
+
+        let question: crate::Question = config_question.into();
+        assert_eq!(question.question, "What is your name?");
+        assert_eq!(question.answer, crate::Answer::new_text());
+    }
+
+    #[test]
+    fn test_survey_conversion() {
+        let config_survey = Survey {
+            id: 1,
+            description: String::from("Test Survey"),
+            questions: vec![
+                Question {
+                    question: String::from("What is your name?"),
+                    answer_type: AnswerType::Text,
+                },
+                Question {
+                    question: String::from("When is the event?"),
+                    answer_type: AnswerType::PredictionDate,
+                },
+            ],
+        };
+
+        let survey: crate::Survey = config_survey.into();
+        assert_eq!(survey.id, 1);
+        assert_eq!(survey.description, "Test Survey");
+        assert_eq!(survey.questions.len(), 2);
+    }
+
+    #[test]
+    fn test_config_question_id_conversion_is_identical() {
+        let config_question_json = json!({
+            "question": "What is your name?",
+            "answer_type": "text"
+        });
+        let config_question_json: Question = serde_json::from_value(config_question_json).unwrap();
+
+        let config_question_obj = Question {
+            question: String::from("What is your name?"),
+            answer_type: AnswerType::Text,
+        };
+
+        let question_from_obj: crate::Question = config_question_obj.into();
+        let question_from_json: crate::Question = config_question_json.into();
+        assert_eq!(question_from_obj.id, question_from_json.id);
+        assert_eq!(question_from_obj, question_from_json); // sanity check
+    }
+
+    #[rstest]
+    #[case("What is your name", AnswerType::Text)]
+    #[case("What is your name.", AnswerType::Text)]
+    #[case("What is your Name?", AnswerType::Text)]
+    #[case("What is your name?", AnswerType::PredictionDate)]
+    #[case("", AnswerType::Text)]
+    fn test_config_question_id_conversion_is_different(#[case] question: &str, #[case] answer_type: AnswerType) {
+        let config_question_json = json!({
+            "question": "What is your name?",
+            "answer_type": "text"
+        });
+        let config_question_json: Question = serde_json::from_value(config_question_json).unwrap();
+
+        let config_question_obj = Question {
+            question: question.to_string(),
+            answer_type,
+        };
+
+        let question_from_obj: crate::Question = config_question_obj.into();
+        let question_from_json: crate::Question = config_question_json.into();
+        assert_ne!(question_from_obj.id, question_from_json.id);
+        assert_ne!(question_from_obj, question_from_json); // sanity check
     }
 }

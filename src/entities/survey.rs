@@ -5,6 +5,7 @@ use super::{Clear, Question};
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Default))]
 pub struct Survey {
+    pub id: u64,
     pub description: String,
     pub questions: Vec<Question>,
 }

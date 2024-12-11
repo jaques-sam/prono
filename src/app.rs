@@ -11,6 +11,8 @@ static SURVEY_CONFIG: &str = include_str!("./configurations/survey_spacex_starsh
 pub struct App {
     user_name: String,
     survey: Survey,
+    #[serde(skip)]
+    db: Box<dyn crate::DB>,
 }
 
 impl Default for App {
@@ -18,6 +20,7 @@ impl Default for App {
         Self {
             user_name: String::new(),
             survey: config::Survey::create_from_file(SURVEY_CONFIG).into(),
+            db: Box::new(crate::MysqlDb::new()),
         }
     }
 }

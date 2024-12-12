@@ -5,6 +5,10 @@ name: CI
 env:
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
+  DB_HOST_OVERRIDE: ${{ secrets.DB_PRONO_HOST_OVERRIDE }}
+  DB_PORT_OVERRIDE: ${{ secrets.DB_PRONO_PORT_OVERRIDE }}
+  DB_USER_OVERRIDE: ${{ secrets.DB_PRONO_USER_OVERRIDE }}
+  DB_PASS_OVERRIDE: ${{ secrets.DB_PRONO_PASS_OVERRIDE }}
 
 jobs:
   check:

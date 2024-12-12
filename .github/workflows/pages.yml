@@ -17,6 +17,8 @@ permissions:
 jobs:
   build-github-pages:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4 # repo checkout
       - name: Setup toolchain for wasm
@@ -37,8 +39,13 @@ jobs:
         # relatively as prono/favicon.ico. if we skip public-url option, the href paths will instead request username.github.io/favicon.ico which
         # will obviously return error 404 not found.
         run: ./trunk build --release --public-url $public_url
+
         env:
           public_url: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+          DB_HOST_OVERRIDE: ${{ secrets.DB_PRONO_HOST_OVERRIDE }}
+          DB_PORT_OVERRIDE: ${{ secrets.DB_PRONO_PORT_OVERRIDE }}
+          DB_USER_OVERRIDE: ${{ secrets.DB_PRONO_USER_OVERRIDE }}
+          DB_PASS_OVERRIDE: ${{ secrets.DB_PRONO_PASS_OVERRIDE }}
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:

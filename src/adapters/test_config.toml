@@ -1,0 +1,5 @@
+[db]
+host = "host"
+port = 5555
+user = "user"
+pass = "pass"

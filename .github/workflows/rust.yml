@@ -9,6 +9,7 @@ env:
   DB_PORT_OVERRIDE: ${{ secrets.DB_PRONO_PORT_OVERRIDE }}
   DB_USER_OVERRIDE: ${{ secrets.DB_PRONO_USER_OVERRIDE }}
   DB_PASS_OVERRIDE: ${{ secrets.DB_PRONO_PASS_OVERRIDE }}
+  RUST_BACKTRACE: 1
 
 jobs:
   check:
@@ -52,11 +53,16 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - run: sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
+      - name: Install dependencies
+        run: sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
+      - name: Install binstall
+        run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+      - name: Install nextest
+        run: cargo binstall cargo-nextest --secure
       - uses: actions-rs/cargo@v1
         with:
-          command: test
-          args: --workspace --all-features --all-targets -- --nocapture
+          command: nextest
+          args: run --workspace --all-features --all-targets
 
   fmt:
     name: Rustfmt

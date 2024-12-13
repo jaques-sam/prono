@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use log::{debug, info};
 // use mysql_async::prelude::*;
 use secure_string::SecureString;
 use serde::Deserialize;
@@ -76,7 +77,7 @@ impl DB for MysqlDb {
         let db_config = construct_db_config(overrides, secure_config);
 
         let _url = construct_url(db_config);
-        println!("MysqlDb initialized");
+        info!("MysqlDb initialized");
     }
 
     fn add_answer(&mut self, _user: u64, _id: u16, _answer: DbAnswer) {}
@@ -97,7 +98,7 @@ fn construct_url(db_config: DBConfig) -> SecureString {
 
 fn construct_db_config(overrides: EnvVarOverrides, secure_config: Option<SecureConfig>) -> DBConfig {
     if overrides.all_exist() {
-        println!("All secret environment vars are set");
+        debug!("All secret environment vars are set");
         DBConfig {
             host: overrides.host.expect("Host must be set"),
             port: overrides.port.expect("Port must be set"),
@@ -106,7 +107,7 @@ fn construct_db_config(overrides: EnvVarOverrides, secure_config: Option<SecureC
         }
     } else {
         let secure_config = secure_config.expect("secure config from file");
-        println!("Some or no secret environment vars are set. Read remaining config from secure_config.toml");
+        debug!("Some or no secret environment vars are set. Read remaining config from secure_config.toml");
         let mut db_config: DBConfig;
         db_config = secure_config.db;
 
@@ -163,6 +164,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_initialize_without_config_file() {
+        crate::generic::add_panic_hook();
+
         let mysql_db = MysqlDb::new();
         mysql_db.initialize(Path::new("file_does_not_exist.toml"));
     }
@@ -222,6 +225,8 @@ mod tests {
         #[case] user_override: Option<&str>,
         #[case] pass_override: Option<&str>,
     ) {
+        crate::generic::add_panic_hook();
+
         let overrides = EnvVarOverrides {
             host: host_override.map(Into::into),
             port: port_override.map(Into::into),

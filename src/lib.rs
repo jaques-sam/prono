@@ -1,6 +1,7 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
 mod app;
+pub mod generic;
 pub use app::App;
 
 // CLEAN ARCHITECTURE

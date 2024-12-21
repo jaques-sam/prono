@@ -1,5 +1,5 @@
 mod config_read;
-mod mysql_proto_db;
+mod mysql_prono_db;
 
 pub use config_read::*;
-pub use mysql_proto_db::*;
+pub use mysql_prono_db::*;

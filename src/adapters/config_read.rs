@@ -3,7 +3,7 @@ use std::path::Path;
 use log::debug;
 // use mysql_async::prelude::*;
 
-use crate::{proto_db, ReadConfig, SecureConfig};
+use crate::{prono_db, ReadConfig, SecureConfig};
 
 static HOST_OVERRIDE_ENV_VAR: &str = "DB_HOST_OVERRIDE";
 static PORT_OVERRIDE_ENV_VAR: &str = "DB_PORT_OVERRIDE";
@@ -15,7 +15,7 @@ pub struct ConfigRead {}
 
 impl ReadConfig<SecureConfig> for ConfigRead {
     fn read(&self, config: &Path) -> SecureConfig {
-        let overrides = proto_db::ConfigOverrides {
+        let overrides = prono_db::ConfigOverrides {
             host: std::env::var(HOST_OVERRIDE_ENV_VAR).ok().map(Into::into),
             port: std::env::var(PORT_OVERRIDE_ENV_VAR).ok().map(Into::into),
             user: std::env::var(USER_OVERRIDE_ENV_VAR).ok().map(Into::into),
@@ -74,7 +74,7 @@ mod tests {
         #[case] user_override: Option<&str>,
         #[case] pass_override: Option<&str>,
     ) {
-        use proto_db::{Config, ConfigOverrides};
+        use prono_db::{Config, ConfigOverrides};
 
         crate::generic::add_panic_hook();
 

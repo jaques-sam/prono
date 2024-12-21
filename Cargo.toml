@@ -26,6 +26,9 @@ serde_json = "1.0"
 uuid = { version = "1.11.0", features = ["js", "v4", "v5"] }
 toml = "0.8.19"
 secure-string = { version = "0.3.0", features = ["serde"] }
+mysql_async = { version = "0.34.2", default-features = false, features = ["minimal"]}
+async-trait = "0.1.83"
+tokio = { version = "1.42.0", features = ["full"] }
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

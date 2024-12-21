@@ -1,5 +1,4 @@
 mod answer;
-pub mod config;
 mod question;
 mod survey;
 

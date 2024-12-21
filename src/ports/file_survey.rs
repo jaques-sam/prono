@@ -2,22 +2,22 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Survey {
+pub struct FileSurvey {
     #[serde(rename = "survey_id")]
     id: u64,
     description: String,
     questions: Vec<Question>,
 }
 
-impl Survey {
+impl FileSurvey {
     pub fn create_from_file(json_body: &str) -> Self {
         serde_json::from_str(json_body)
             .unwrap_or_else(|err| panic!("Unable to parse survey configuration (err: {err})"))
     }
 }
 
-impl From<Survey> for super::Survey {
-    fn from(survey: Survey) -> Self {
+impl From<FileSurvey> for crate::Survey {
+    fn from(survey: FileSurvey) -> Self {
         Self {
             id: survey.id,
             description: survey.description,
@@ -32,7 +32,7 @@ struct Question {
     answer_type: AnswerType,
 }
 
-impl From<Question> for super::Question {
+impl From<Question> for crate::Question {
     fn from(question: Question) -> Self {
         let data_to_hash = format!("{}{:?}", question.question, question.answer_type);
         let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, data_to_hash.as_bytes()).to_string();
@@ -41,8 +41,8 @@ impl From<Question> for super::Question {
             id,
             question: question.question,
             answer: match question.answer_type {
-                AnswerType::Text => super::Answer::new_text(),
-                AnswerType::PredictionDate => super::Answer::new_prediction_date(),
+                AnswerType::Text => crate::Answer::new_text(),
+                AnswerType::PredictionDate => crate::Answer::new_prediction_date(),
             },
         }
     }
@@ -63,9 +63,9 @@ mod tests {
 
     #[test]
     fn test_configuration_from_file() {
-        let json_data = include_str!("../configurations/survey_spacex_starship.json");
+        let json_data = include_str!("../surveys/survey_spacex_starship.json");
 
-        let survey: Survey = serde_json::from_str(json_data).unwrap();
+        let survey: FileSurvey = serde_json::from_str(json_data).unwrap();
         println!("{:?}", survey);
     }
 
@@ -87,7 +87,7 @@ mod tests {
             ]
         });
 
-        let survey: Survey = serde_json::from_value(json_data).unwrap();
+        let survey: FileSurvey = serde_json::from_value(json_data).unwrap();
         assert_eq!(survey.id, 1);
         assert_eq!(survey.description, "Test Survey");
         assert_eq!(survey.questions.len(), 2);
@@ -108,7 +108,7 @@ mod tests {
         }
         "#;
 
-        Survey::create_from_file(invalid_json_data);
+        FileSurvey::create_from_file(invalid_json_data);
     }
 
     #[test]
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_survey_conversion() {
-        let config_survey = Survey {
+        let config_survey = FileSurvey {
             id: 1,
             description: String::from("Test Survey"),
             questions: vec![

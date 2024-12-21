@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use super::proto_db::{Config, ConfigOverrides};
+use super::prono_db::{Config, ConfigOverrides};
 
 #[derive(Deserialize)]
 pub struct SecureConfig {

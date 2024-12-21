@@ -14,14 +14,12 @@ pub struct App {
     user_name: String,
     survey: Survey,
     #[serde(skip)]
-    db: Box<dyn crate::proto_db::DB>,
+    db: Box<dyn crate::prono_db::DB>,
 }
 
 impl Default for App {
     fn default() -> Self {
-        let db_config = ConfigRead {}
-            .read(Path::new(CONFIG_FILENAME))
-            .db();
+        let db_config = ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db();
 
         Self {
             user_name: String::new(),

@@ -1,5 +1,5 @@
 mod config_read;
-pub mod proto_db;
+pub mod prono_db;
 mod secure_config;
 pub mod file_survey;
 

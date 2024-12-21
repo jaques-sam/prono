@@ -14,7 +14,7 @@ pub struct App {
     user_name: String,
     survey: Survey,
     #[serde(skip)]
-    db: Box<dyn crate::proto_db::DB>,
+    db: Box<dyn crate::prono_db::DB>,
 }
 
 impl Default for App {

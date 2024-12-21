@@ -4,16 +4,16 @@ use log::info;
 use mysql_async::Opts;
 use tokio::runtime;
 
-use crate::proto_db::{self, DbAnswer, DB};
+use crate::prono_db::{self, DbAnswer, DB};
 
-static DB_NAME: &str = "db_proto";
+static DB_NAME: &str = "db_prono";
 
 pub struct MysqlDb {
     rt: runtime::Runtime,
 }
 
 impl MysqlDb {
-    pub fn new(secure_config: proto_db::Config) -> Self {
+    pub fn new(secure_config: prono_db::Config) -> Self {
         let db = Self {
             rt: runtime::Builder::new_multi_thread().enable_all().build().unwrap(),
         };
@@ -24,7 +24,7 @@ impl MysqlDb {
 
 #[async_trait]
 impl DB for MysqlDb {
-    fn initialize(&self, secure_config: proto_db::Config) -> Result<()> {
+    fn initialize(&self, secure_config: prono_db::Config) -> Result<()> {
         info!("Initializing Mysql db {DB_NAME}...");
 
         self.rt.spawn(async move {

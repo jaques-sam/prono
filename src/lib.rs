@@ -10,7 +10,6 @@ mod entities;
 mod ports;
 mod use_cases;
 
-#[allow(unused_imports)]
 pub use adapters::*;
 pub(crate) use entities::*;
 pub use ports::*;

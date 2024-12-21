@@ -13,6 +13,10 @@ impl SecureConfig {
         Self { db }
     }
 
+    pub fn db(self) -> Config {
+        self.db
+    }
+
     pub fn override_db_config(mut self, overrides: ConfigOverrides) -> Self {
         self.db.apply_overrides(overrides);
         self

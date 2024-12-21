@@ -1,10 +1,10 @@
 use egui::TextEdit;
 use serde::{Deserialize, Serialize};
 
-use crate::{config, Answer, ConfigRead, Survey};
+use crate::{file_survey, Answer, ConfigRead, Survey};
 
 static INIT_ANSWER_HINT: &str = "give your expected date";
-static SURVEY_CONFIG: &str = include_str!("./configurations/survey_spacex_starship.json");
+static SURVEY_CONFIG: &str = include_str!("./surveys/survey_spacex_starship.json");
 
 #[derive(Deserialize, Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -19,7 +19,7 @@ impl Default for App {
     fn default() -> Self {
         Self {
             user_name: String::new(),
-            survey: config::Survey::create_from_file(SURVEY_CONFIG).into(),
+            survey: file_survey::FileSurvey::create_from_file(SURVEY_CONFIG).into(),
             db: Box::new(crate::MysqlDb::new(ConfigRead {})),
         }
     }

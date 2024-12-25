@@ -8,13 +8,26 @@ pub use entities::*;
 
 use eframe::AppCreator;
 
-fn build_app<'a>() -> AppCreator<'a> {
-    Box::new(|cc| Ok(Box::new(crate::App::new(cc))))
+fn build_app<'a, S>(api: Box<dyn prono_api::PronoApi<S>>) -> AppCreator<'a> {
+    Box::new(|cc| Ok(Box::new(crate::App::new(cc, api))))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
+
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+
+    // FIXME: this implies `prono::entities` being public (!)
+    // The API models must be defined in `prono`` itself
+    pub type ApiSurvey = crate::Survey;
+
+    impl prono_api::PronoApi<ApiSurvey> for prono::PronoLib {
+        fn survey(&self) -> Survey {
+            todo!()
+        }
+    }
+
+    let prono_api: Box<dyn prono_api::PronoApi<ApiSurvey>> = Box::new(prono::PronoLib::default());
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -27,11 +40,21 @@ fn main() -> eframe::Result {
             ),
         ..Default::default()
     };
-    eframe::run_native("eframe template", native_options, build_app())
+    eframe::run_native("eframe template", native_options, build_app(prono_api))
 }
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
+    struct ApiThroughRest();
+
+    pub type ApiSurvey = crate::Survey;
+
+    impl prono_api::PronoApi<ApiSurvey> for ApiThroughRest {
+        fn survey(&self) -> ApiSurvey {
+            todo!()
+        }
+    }
+
     use eframe::wasm_bindgen::JsCast as _;
 
     // Redirect `log` message to `console.log` and friends:
@@ -48,7 +71,7 @@ fn main() {
             .dyn_into::<web_sys::HtmlCanvasElement>()
             .expect("the_canvas_id was not a HtmlCanvasElement");
 
-        let start_result = eframe::WebRunner::new().start(canvas, web_options, build_app()).await;
+        let start_result = eframe::WebRunner::new().start(canvas, web_options, build_app(Box::new(ApiThroughRest()))).await;
 
         // Remove the loading text and spinner:
         if let Some(loading_text) = document.get_element_by_id("loading_text") {

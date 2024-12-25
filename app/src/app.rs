@@ -1,37 +1,52 @@
 use egui::TextEdit;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
-use crate::{file_survey, Answer, ConfigRead, ReadConfig, Survey};
+use crate::{Answer, Survey};
 
 static INIT_ANSWER_HINT: &str = "give your expected date";
-static SURVEY_CONFIG: &str = include_str!("./surveys/survey_spacex_starship.json");
-static CONFIG_FILENAME: &str = "secure_config.toml";
+
+fn survey_ui(ui: &mut egui::Ui, survey: &mut Survey) {
+    for question in survey.questions.iter_mut() {
+        ui.horizontal(|ui| {
+            ui.label(&question.question);
+            match &mut question.answer {
+                Answer::Text(answer) => {
+                    ui.add(TextEdit::singleline(answer).hint_text(INIT_ANSWER_HINT));
+                }
+                // FIXME add 2 synced combo boxes
+                Answer::PredictionDate { day: _, month, year } => {
+                    let month_str = month.to_string();
+                    ui.add(TextEdit::singleline(&mut month_str.clone()).hint_text("month"));
+                    let year_str = year.to_string();
+                    ui.add(TextEdit::singleline(&mut year_str.clone()).hint_text("year"));
+                }
+            }
+        });
+    }
+}
 
 #[derive(Deserialize, Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
     user_name: String,
-    survey: Survey,
+    survey: Option<Survey>,
     #[serde(skip)]
-    db: Box<dyn crate::prono_db::DB>,
+    prono_api: Option<Box<dyn prono_api::PronoApi<Survey>>>,
 }
 
 impl Default for App {
     fn default() -> Self {
-        let db_config = ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db();
-
         Self {
+            survey: None,
             user_name: String::new(),
-            survey: file_survey::FileSurvey::create_from_file(SURVEY_CONFIG).into(),
-            db: Box::new(crate::MysqlDb::new(db_config)),
+            prono_api: None,
         }
     }
 }
 
 impl App {
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, api: Box<dyn prono_api::PronoApi<Survey>>) -> Self {
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 
@@ -41,11 +56,16 @@ impl App {
             return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
 
-        Default::default()
+        Self {
+            prono_api: Some(api),
+            ..Default::default()
+        }
     }
 
     fn clear(&mut self) {
-        self.survey.clear();
+        if let Some(survey) = &mut self.survey {
+            survey.clear();
+        }
     }
 }
 
@@ -92,29 +112,12 @@ impl eframe::App for App {
                 ui.add(TextEdit::singleline(&mut self.user_name).hint_text("Please fill in your name"));
             });
 
-            static QUESTIONS: [&str; 4] = [
-                "First cargo only Moon landing",
-                "First man on the Moon landing",
-                "First cargo only Mars landing",
-                "First man on Mars landing",
-            ];
-
-            for (i, &question) in QUESTIONS.iter().enumerate() {
-                ui.horizontal(|ui| {
-                    ui.label(question);
-                    match &mut self.survey.questions[i].answer {
-                        Answer::Text(answer) => {
-                            ui.add(TextEdit::singleline(answer).hint_text(INIT_ANSWER_HINT));
-                        }
-                        // FIXME add 2 synced combo boxes
-                        Answer::PredictionDate { day: _, month, year } => {
-                            let month_str = month.to_string();
-                            ui.add(TextEdit::singleline(&mut month_str.clone()).hint_text("month"));
-                            let year_str = year.to_string();
-                            ui.add(TextEdit::singleline(&mut year_str.clone()).hint_text("year"));
-                        }
-                    }
-                });
+            if let Some(survey) = &mut self.survey {
+                survey_ui(ui, survey);
+            } else {
+                if ui.button("Start survey").clicked() {
+                    self.survey = Some(self.prono_api.as_ref().expect("catch this error").survey().into());
+                }
             }
 
             ui.horizontal(|ui| {

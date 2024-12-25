@@ -1,10 +1,15 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+mod app;
+pub use app::*;
+mod entities;
+pub use entities::*;
+
 use eframe::AppCreator;
 
 fn build_app<'a>() -> AppCreator<'a> {
-    Box::new(|cc| Ok(Box::new(prono::App::new(cc))))
+    Box::new(|cc| Ok(Box::new(crate::App::new(cc))))
 }
 
 #[cfg(not(target_arch = "wasm32"))]

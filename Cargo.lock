@@ -481,6 +481,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
+name = "backend"
+version = "0.1.0"
+
+[[package]]
 name = "backtrace"
 version = "0.3.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2540,6 +2544,7 @@ dependencies = [
  "chrono",
  "log",
  "mysql_async",
+ "prono_api",
  "rstest",
  "secure-string",
  "serde",
@@ -2560,6 +2565,7 @@ dependencies = [
  "env_logger",
  "log",
  "prono",
+ "prono_api",
  "secure-string",
  "serde",
  "serde_json",
@@ -2568,6 +2574,10 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
 ]
+
+[[package]]
+name = "prono_api"
+version = "0.1.0"
 
 [[package]]
 name = "quick-xml"

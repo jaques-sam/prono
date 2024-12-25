@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use eframe::Result;
 use log::info;
 use mysql_async::Opts;
 use tokio::runtime;
@@ -17,14 +16,14 @@ impl MysqlDb {
         let db = Self {
             rt: runtime::Builder::new_multi_thread().enable_all().build().unwrap(),
         };
-        db.initialize(secure_config).expect("catch this error");
+        db.initialize(secure_config);
         db
     }
 }
 
 #[async_trait]
 impl DB for MysqlDb {
-    fn initialize(&self, secure_config: prono_db::Config) -> Result<()> {
+    fn initialize(&self, secure_config: prono_db::Config) {
         info!("Initializing Mysql db {DB_NAME}...");
 
         self.rt.spawn(async move {
@@ -34,8 +33,6 @@ impl DB for MysqlDb {
 
             let mut _conn = pool.get_conn().await.expect("catch this error");
         });
-
-        Ok(())
     }
 
     async fn add_answer(&mut self, _user: u64, _id: u16, _answer: DbAnswer) {}

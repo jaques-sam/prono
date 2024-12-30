@@ -25,28 +25,18 @@ fn survey_ui(ui: &mut egui::Ui, survey: &mut Survey) {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
     user_name: String,
     survey: Option<Survey>,
     #[serde(skip)]
-    prono_api: Option<Box<dyn prono_api::PronoApi<Survey>>>,
-}
-
-impl Default for App {
-    fn default() -> Self {
-        Self {
-            survey: None,
-            user_name: String::new(),
-            prono_api: None,
-        }
-    }
+    prono_api: Option<Box<dyn prono::api::PronoApi>>,
 }
 
 impl App {
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>, api: Box<dyn prono_api::PronoApi<Survey>>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, api: Box<dyn prono::api::PronoApi>) -> Self {
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 
@@ -114,10 +104,8 @@ impl eframe::App for App {
 
             if let Some(survey) = &mut self.survey {
                 survey_ui(ui, survey);
-            } else {
-                if ui.button("Start survey").clicked() {
-                    self.survey = Some(self.prono_api.as_ref().expect("catch this error").survey().into());
-                }
+            } else if ui.button("Start survey").clicked() {
+                self.survey = Some(self.prono_api.as_ref().expect("catch this error").survey().into());
             }
 
             ui.horizontal(|ui| {

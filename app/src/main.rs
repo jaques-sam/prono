@@ -1,33 +1,31 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-mod app;
-pub use app::*;
+// CLEAN ARCHITECTURE
+mod adapters;
 mod entities;
+pub(crate) use adapters::*;
 pub use entities::*;
 
 use eframe::AppCreator;
+use prono::{api, ReadConfig};
+use std::path::Path;
 
-fn build_app<'a, S>(api: Box<dyn prono_api::PronoApi<S>>) -> AppCreator<'a> {
+static CONFIG_FILENAME: &str = "secure_config.toml";
+
+#[cfg(not(target_arch = "wasm32"))]
+static DB_NAME: &str = "db_prono";
+
+fn build_app<'a>(api: Box<dyn api::PronoApi>) -> AppCreator<'a> {
     Box::new(|cc| Ok(Box::new(crate::App::new(cc, api))))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
+    let db_config: prono_db::Config = ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db().into();
+    let db: Box<dyn api::PronoApi> = Box::new(prono_db::MysqlDb::new(db_config));
 
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
-
-    // FIXME: this implies `prono::entities` being public (!)
-    // The API models must be defined in `prono`` itself
-    pub type ApiSurvey = crate::Survey;
-
-    impl prono_api::PronoApi<ApiSurvey> for prono::PronoLib {
-        fn survey(&self) -> Survey {
-            todo!()
-        }
-    }
-
-    let prono_api: Box<dyn prono_api::PronoApi<ApiSurvey>> = Box::new(prono::PronoLib::default());
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -40,17 +38,20 @@ fn main() -> eframe::Result {
             ),
         ..Default::default()
     };
-    eframe::run_native("eframe template", native_options, build_app(prono_api))
+    eframe::run_native("eframe template", native_options, build_app(db))
 }
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
     struct ApiThroughRest();
+    let _config = ConfigRead {}.read(Path::new(CONFIG_FILENAME));
 
-    pub type ApiSurvey = crate::Survey;
+    impl api::PronoApi for ApiThroughRest {
+        fn survey(&self) -> api::Survey {
+            todo!()
+        }
 
-    impl prono_api::PronoApi<ApiSurvey> for ApiThroughRest {
-        fn survey(&self) -> ApiSurvey {
+        fn answer(&self, _user: u64, _id: u16) -> api::Answer {
             todo!()
         }
     }
@@ -71,7 +72,9 @@ fn main() {
             .dyn_into::<web_sys::HtmlCanvasElement>()
             .expect("the_canvas_id was not a HtmlCanvasElement");
 
-        let start_result = eframe::WebRunner::new().start(canvas, web_options, build_app(Box::new(ApiThroughRest()))).await;
+        let start_result = eframe::WebRunner::new()
+            .start(canvas, web_options, build_app(Box::new(ApiThroughRest())))
+            .await;
 
         // Remove the loading text and spinner:
         if let Some(loading_text) = document.get_element_by_id("loading_text") {

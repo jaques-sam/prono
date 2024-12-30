@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(Clone))]
-pub struct Config {
+pub struct DbConfig {
     host: SecureString,
     #[serde(deserialize_with = "deserialize_as_u16")]
     port: SecureString,
@@ -19,21 +19,8 @@ where
     Ok(number.to_string().into())
 }
 
-impl Config {
-    pub fn construct_url(&self, db_name: &str) -> SecureString {
-        static DB_PROTOCOL: &str = "mysql";
-
-        let host = self.host.unsecure();
-        let port = self.port.unsecure();
-        let user = self.user.unsecure();
-        let pass = self.pass.unsecure();
-
-        format!("{DB_PROTOCOL}://{user}:{pass}@{host}:{port}/{db_name}").into()
-    }
-}
-
-impl Config {
-    pub fn apply_overrides(&mut self, overrides: ConfigOverrides) {
+impl DbConfig {
+    pub fn apply_overrides(&mut self, overrides: DbConfigOverrides) {
         if let Some(host) = overrides.host {
             self.host = host;
         }
@@ -49,18 +36,31 @@ impl Config {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+impl From<DbConfig> for prono_db::Config {
+    fn from(db_config: DbConfig) -> Self {
+        Self {
+            host: db_config.host,
+            port: db_config.port,
+            user: db_config.user,
+            pass: db_config.pass,
+            db_name: crate::DB_NAME.to_string(),
+        }
+    }
+}
+
 #[cfg_attr(test, derive(Clone))]
-pub struct ConfigOverrides {
+pub struct DbConfigOverrides {
     pub host: Option<SecureString>,
     pub port: Option<SecureString>,
     pub user: Option<SecureString>,
     pub pass: Option<SecureString>,
 }
 
-impl TryFrom<ConfigOverrides> for Config {
+impl TryFrom<DbConfigOverrides> for DbConfig {
     type Error = &'static str;
 
-    fn try_from(overrides: ConfigOverrides) -> Result<Self, &'static str> {
+    fn try_from(overrides: DbConfigOverrides) -> Result<Self, &'static str> {
         Ok(Self {
             host: overrides.host.ok_or("host override is missing")?,
             port: overrides.port.ok_or("port override is missing")?,
@@ -77,26 +77,6 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_construct_url() {
-        let db_config = Config {
-            host: SecureString::from("localhost"),
-            port: SecureString::from("5555"),
-            user: SecureString::from("user"),
-            pass: SecureString::from("password"),
-        };
-
-        let expected_host = db_config.host.unsecure();
-        let expected_user = db_config.user.unsecure();
-        let expected_pass = db_config.pass.unsecure();
-        let expected_port = db_config.port.unsecure();
-        let expected_url = format!("mysql://{expected_user}:{expected_pass}@{expected_host}:{expected_port}/db_name");
-
-        let constructed_url = db_config.construct_url("db_name");
-
-        assert_eq!(constructed_url.unsecure(), expected_url);
-    }
-
     #[rstest]
     #[case(Some("localhost"), Some("5555"), Some("user"), Some("password"))]
     #[case(None, Some("5555"), Some("user"), Some("password"))]
@@ -109,14 +89,14 @@ mod tests {
         #[case] user_override: Option<&str>,
         #[case] pass_override: Option<&str>,
     ) {
-        let overrides = ConfigOverrides {
+        let overrides = DbConfigOverrides {
             host: host_override.map(Into::into),
             port: port_override.map(Into::into),
             user: user_override.map(Into::into),
             pass: pass_override.map(Into::into),
         };
 
-        let mut config = Config {
+        let mut config = DbConfig {
             host: SecureString::from("localhost"),
             port: SecureString::from("5555"),
             user: SecureString::from("user"),
@@ -137,5 +117,30 @@ mod tests {
         if pass_override.is_some() {
             assert_eq!(config.pass.unsecure(), "password");
         }
+    }
+
+    #[rstest]
+    #[case(None, Some("5555"), Some("user"), Some("password"))]
+    #[case(Some("localhost"), None, Some("user"), Some("password"))]
+    #[case(Some("localhost"), Some("5555"), None, Some("password"))]
+    #[case(Some("localhost"), Some("5555"), Some("user"), None)]
+    #[should_panic]
+    fn test_config_file_not_found_when_constructing_db_config(
+        #[case] host_override: Option<&str>,
+        #[case] port_override: Option<&str>,
+        #[case] user_override: Option<&str>,
+        #[case] pass_override: Option<&str>,
+    ) {
+        generic::add_panic_hook();
+
+        let overrides = DbConfigOverrides {
+            host: host_override.map(Into::into),
+            port: port_override.map(Into::into),
+            user: user_override.map(Into::into),
+            pass: pass_override.map(Into::into),
+        };
+
+        let mut config: DbConfig = overrides.clone().try_into().unwrap();
+        config.apply_overrides(overrides);
     }
 }

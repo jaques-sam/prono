@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{Answer, Clear};
+use prono::api;
 
 #[derive(Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Question {
@@ -12,6 +13,16 @@ pub struct Question {
 impl Clear for Question {
     fn clear(&mut self) {
         self.answer.clear();
+    }
+}
+
+impl From<api::Question> for Question {
+    fn from(proto_question: api::Question) -> Self {
+        Question {
+            id: proto_question.id,
+            question: proto_question.question,
+            answer: proto_question.answer.into(),
+        }
     }
 }
 

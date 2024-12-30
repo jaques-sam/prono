@@ -1,3 +1,4 @@
+use prono::api;
 use serde::{Deserialize, Serialize};
 
 use chrono::{
@@ -50,6 +51,15 @@ impl Clear for Answer {
                 *month = dt.month() as u8;
                 *year = dt.year() as u16;
             }
+        }
+    }
+}
+
+impl From<api::Answer> for Answer {
+    fn from(proto_answer: api::Answer) -> Self {
+        match proto_answer {
+            api::Answer::Text(text) => Answer::Text(text),
+            api::Answer::PredictionDate { day, month, year } => Answer::PredictionDate { day, month, year },
         }
     }
 }

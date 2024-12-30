@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{Clear, Question};
+use prono::api;
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Default))]
@@ -13,6 +14,16 @@ pub struct Survey {
 impl Survey {
     pub fn clear(&mut self) {
         self.questions.iter_mut().for_each(Question::clear);
+    }
+}
+
+impl From<api::Survey> for Survey {
+    fn from(proto_survey: api::Survey) -> Self {
+        Survey {
+            id: proto_survey.id,
+            description: proto_survey.description,
+            questions: proto_survey.questions.into_iter().map(Into::into).collect(),
+        }
     }
 }
 

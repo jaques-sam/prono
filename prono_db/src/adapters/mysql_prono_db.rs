@@ -1,33 +1,42 @@
 use async_trait::async_trait;
 use log::info;
 use mysql_async::Opts;
+use prono::api::{PronoApi, Survey};
 use tokio::runtime;
 
-use crate::prono_db::{self, DbAnswer, DB};
-
-static DB_NAME: &str = "db_prono";
+use crate::{Config, DbAnswer, DB};
 
 pub struct MysqlDb {
     rt: runtime::Runtime,
 }
 
 impl MysqlDb {
-    pub fn new(secure_config: prono_db::Config) -> Self {
+    pub fn new(secure_config: Config) -> Self {
         let db = Self {
-            rt: runtime::Builder::new_multi_thread().enable_all().build().unwrap(),
+            rt: runtime::Builder::new_current_thread().enable_all().build().unwrap(),
         };
         db.initialize(secure_config);
         db
     }
 }
 
+impl PronoApi for MysqlDb {
+    fn survey(&self) -> Survey {
+        todo!()
+    }
+
+    fn answer(&self, _user: u64, _id: u16) -> prono::api::Answer {
+        todo!()
+    }
+}
+
 #[async_trait]
 impl DB for MysqlDb {
-    fn initialize(&self, secure_config: prono_db::Config) {
-        info!("Initializing Mysql db {DB_NAME}...");
+    fn initialize(&self, secure_config: Config) {
+        info!("Initializing Mysql db {}...", secure_config.db_name);
 
         self.rt.spawn(async move {
-            let database_url = secure_config.construct_url(DB_NAME);
+            let database_url = secure_config.construct_url();
             let database_url = database_url.unsecure();
             let pool = mysql_async::Pool::new(Opts::from_url(database_url).expect("catch this error"));
 

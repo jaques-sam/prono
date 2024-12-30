@@ -3,11 +3,11 @@
 set -eux
 
 typos
-cargo check --quiet --workspace --all-targets
-cargo check --quiet --workspace --all-features --lib --target wasm32-unknown-unknown
 cargo fmt --all -- --check
+cargo machete
+cargo check --quiet --workspace --all-targets --all-features
+cargo check --quiet --all-features --package prono-app --target wasm32-unknown-unknown
 cargo clippy --quiet --workspace --all-targets --all-features --  -D warnings -W clippy::all
 cargo test --quiet --workspace --all-targets --all-features
 cargo test --quiet --workspace --doc
-cargo machete
-trunk build
+trunk build  --release --config ./app

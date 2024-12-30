@@ -1,4 +1,4 @@
-use crate::Answer;
+use prono::api::Answer;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum DbAnswer {

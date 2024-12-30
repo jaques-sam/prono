@@ -1,0 +1,20 @@
+[package]
+name = "prono_db"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+prono = { path = "../prono" }
+
+async-trait = "0.1.83"
+mysql_async = { version = "0.34.2", default-features = false, features = [
+    "minimal",
+] }
+log = "0.4"
+tokio = { version = "1.42.0", features = ["rt", "macros"] }
+secure-string = "0.3.0"
+
+[dev-dependencies]
+generic = { path = "../generic" }
+
+rstest = "0.23.0"

@@ -1,7 +1,7 @@
 # Prono App
 
 [![dependency status](https://deps.rs/repo/github/jaques-sam/prono/status.svg)](https://deps.rs/repo/github/jaques-sam/prono)
-[![Build Status](https://deps.rs/repo/github/jaques-sam/prono/workflows/CI/badge.svg)](https://deps.rs/repo/github/jaques-sam/prono/actions?workflow=CI)
+[![Build Status](https://deps.rs/repo/github/jaques-sam/prono/workflows/CI/badge.svg)](https://github.com/jaques-sam/prono/actions?workflow=CI)
 
 Made possible by [this template repo](https://github.com/emilk/eframe_template) for [eframe](https://github.com/emilk/egui/tree/master/crates/eframe).
 
@@ -16,7 +16,7 @@ The first time you cloned the repo, ask the pub GPG key from @jaques-sam and imp
 
 Make sure you are using the latest version of stable rust by running `rustup update`.
 
-`cargo run --release`
+`cargo run --release --bin prono-app`
 
 On Linux you need to first run:
 

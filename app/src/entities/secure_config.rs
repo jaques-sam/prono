@@ -1,23 +1,22 @@
+use crate::{DbConfig, DbConfigOverrides};
 use serde::Deserialize;
-
-use super::prono_db::{Config, ConfigOverrides};
 
 #[derive(Deserialize)]
 pub struct SecureConfig {
     #[serde(rename = "db")]
-    db: Config,
+    db: DbConfig,
 }
 
 impl SecureConfig {
-    pub fn new(db: Config) -> Self {
+    pub fn new(db: DbConfig) -> Self {
         Self { db }
     }
 
-    pub fn db(self) -> Config {
+    pub fn db(self) -> DbConfig {
         self.db
     }
 
-    pub fn override_db_config(mut self, overrides: ConfigOverrides) -> Self {
+    pub fn override_db_config(mut self, overrides: DbConfigOverrides) -> Self {
         self.db.apply_overrides(overrides);
         self
     }

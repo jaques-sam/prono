@@ -1,9 +1,11 @@
-mod answer;
-mod config;
+// CLEAN ARCHITECTURE
+mod adapters;
+mod ports;
 
-pub use answer::*;
+pub use adapters::*;
+pub use ports::*;
+
 use async_trait::async_trait;
-pub use config::*;
 
 #[async_trait]
 pub trait DB {

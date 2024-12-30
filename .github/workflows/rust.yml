@@ -41,7 +41,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
-          args: --all-features --lib --target wasm32-unknown-unknown
+          args: --all-features --package prono-app --target wasm32-unknown-unknown
 
   test:
     name: Test Suite
@@ -110,9 +110,9 @@ jobs:
       - name: Download and install Trunk binary
         run: wget -qO- https://github.com/thedodd/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
       - name: Build
-        run: ./trunk build
+        run: ./trunk build --config ./app
 
-  build:
+  build_app:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -148,23 +148,23 @@ jobs:
       run: cargo install cross
 
     - name: Build
-      run: cross build --verbose --release --target=${{ matrix.TARGET }}
+      run: cross build --verbose --release --target=${{ matrix.TARGET }} --package prono-app
 
     - name: Rename
-      run: cp target/${{ matrix.TARGET }}/release/prono${{ matrix.EXTENSION }} prono-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+      run: cp target/${{ matrix.TARGET }}/release/prono-app${{ matrix.EXTENSION }} prono-app-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
 
     - uses: actions/upload-artifact@master
       with:
-        name: prono-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
-        path: prono-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        name: prono-app-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        path: prono-app-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
 
     - uses: svenstaro/upload-release-action@v2
       name: Upload binaries to release
       if: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'release') }}
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: prono-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
-        asset_name: prono-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        file: prono-app-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        asset_name: prono-app-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
         tag: ${{ github.ref }}
         prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
         overwrite: true

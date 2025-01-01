@@ -3,6 +3,7 @@
 set -eux
 
 typos
+lychee .
 cargo fmt --all -- --check
 cargo machete
 cargo check --quiet --workspace --all-targets --all-features
@@ -10,4 +11,4 @@ cargo check --quiet --all-features --package prono-app --target wasm32-unknown-u
 cargo clippy --quiet --workspace --all-targets --all-features --  -D warnings -W clippy::all
 cargo test --quiet --workspace --all-targets --all-features
 cargo test --quiet --workspace --doc
-trunk build  --release --config ./app
+trunk build --config ./app

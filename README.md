@@ -1,7 +1,7 @@
 # Prono App
 
 [![dependency status](https://deps.rs/repo/github/jaques-sam/prono/status.svg)](https://deps.rs/repo/github/jaques-sam/prono)
-[![Build Status](https://deps.rs/repo/github/jaques-sam/prono/workflows/CI/badge.svg)](https://github.com/jaques-sam/prono/actions?workflow=CI)
+[![Build Status](https://github.com/jaques-sam/prono/workflows/CI/badge.svg)](https://github.com/jaques-sam/prono/actions?workflow=CI)
 
 Made possible by [this template repo](https://github.com/emilk/eframe_template) for [eframe](https://github.com/emilk/egui/tree/master/crates/eframe).
 

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use log::info;
 use mysql_async::Opts;
-use prono::api::{PronoApi, Survey};
+use prono::api::PronoApi;
 use tokio::runtime;
 
 use crate::{Config, DbAnswer, DB};
@@ -21,10 +21,6 @@ impl MysqlDb {
 }
 
 impl PronoApi for MysqlDb {
-    fn survey(&self) -> Survey {
-        todo!()
-    }
-
     fn answer(&self, _user: u64, _id: u16) -> prono::api::Answer {
         todo!()
     }

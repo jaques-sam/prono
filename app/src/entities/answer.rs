@@ -20,21 +20,6 @@ pub enum Answer {
     PredictionDate { day: Option<u8>, month: u8, year: u16 },
 }
 
-impl Answer {
-    pub fn new_text() -> Answer {
-        Answer::Text(Default::default())
-    }
-
-    pub fn new_prediction_date() -> Answer {
-        let dt = datetime();
-        Answer::PredictionDate {
-            day: None,
-            month: dt.month() as u8,
-            year: dt.year() as u16,
-        }
-    }
-}
-
 impl Default for Answer {
     fn default() -> Self {
         Answer::Text(String::new())

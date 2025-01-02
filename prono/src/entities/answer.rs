@@ -11,7 +11,7 @@ pub trait Clear {
     fn clear(&mut self);
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Answer {
     Text(String),
     PredictionDate { day: Option<u8>, month: u8, year: u16 },

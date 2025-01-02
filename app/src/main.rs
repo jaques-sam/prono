@@ -22,7 +22,7 @@ fn build_app<'a>(api: Box<dyn api::PronoApi>) -> AppCreator<'a> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
-    let db_config: prono_db::Config = ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db().into();
+    let db_config: prono_db::Config = ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db.into();
     let db: Box<dyn api::PronoApi> = Box::new(prono_db::MysqlDb::new(db_config));
 
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).

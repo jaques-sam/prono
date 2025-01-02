@@ -31,11 +31,11 @@ impl ReadConfig<SecureConfig> for ConfigRead {
             secure_config.override_db_config(overrides)
         } else {
             debug!("All secret environment vars are set");
-            SecureConfig::new(
-                overrides
+            SecureConfig {
+                db: overrides
                     .try_into()
                     .expect("expect all overrides are set through env vars"),
-            )
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 use super::{Answer, Clear};
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Question {
     pub id: String,
     pub question: String,

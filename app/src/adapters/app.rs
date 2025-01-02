@@ -31,25 +31,29 @@ pub struct App {
     user_name: String,
     survey: Option<Survey>,
     #[serde(skip)]
-    prono_api: Option<Box<dyn prono::api::PronoApi>>,
+    prono: Option<Box<dyn prono::Prono>>,
 }
 
 impl App {
+    fn default_with_api(prono: impl prono::Prono + 'static) -> Self {
+        Self {
+            prono: Some(Box::new(prono)),
+            ..Default::default()
+        }
+    }
+
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>, api: Box<dyn prono::api::PronoApi>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, prono: impl prono::Prono + 'static) -> Self {
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
         if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or(Self::default_with_api(prono));
         }
 
-        Self {
-            prono_api: Some(api),
-            ..Default::default()
-        }
+        Self::default_with_api(prono)
     }
 
     fn clear(&mut self) {
@@ -105,7 +109,7 @@ impl eframe::App for App {
             if let Some(survey) = &mut self.survey {
                 survey_ui(ui, survey);
             } else if ui.button("Start survey").clicked() {
-                self.survey = Some(self.prono_api.as_ref().expect("catch this error").survey().into());
+                self.survey = Some(self.prono.as_ref().expect("no prono API adapter set").survey().into());
             }
 
             ui.horizontal(|ui| {

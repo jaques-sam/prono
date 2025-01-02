@@ -5,7 +5,7 @@
 mod adapters;
 mod entities;
 pub(crate) use adapters::*;
-pub use entities::*;
+pub(crate) use entities::*;
 
 use eframe::AppCreator;
 use prono::{api, ReadConfig};
@@ -16,8 +16,8 @@ static CONFIG_FILENAME: &str = "secure_config.toml";
 #[cfg(not(target_arch = "wasm32"))]
 static DB_NAME: &str = "db_prono";
 
-fn build_app<'a>(api: Box<dyn api::PronoApi>) -> AppCreator<'a> {
-    Box::new(|cc| Ok(Box::new(crate::App::new(cc, api))))
+fn build_app<'a>(prono: impl prono::Prono + 'static) -> AppCreator<'a> {
+    Box::new(|cc| Ok(Box::new(crate::App::new(cc, prono))))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -38,7 +38,8 @@ fn main() -> eframe::Result {
             ),
         ..Default::default()
     };
-    eframe::run_native("eframe template", native_options, build_app(db))
+    let prono_lib = prono::PronoLib::new(Some(db));
+    eframe::run_native("eframe template", native_options, build_app(prono_lib))
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -47,11 +48,13 @@ fn main() {
     let _config = ConfigRead {}.read(Path::new(CONFIG_FILENAME));
 
     impl api::PronoApi for ApiThroughRest {
-        fn survey(&self) -> api::Survey {
+        fn answer(&self, _user: u64, _id: u16) -> api::Answer {
             todo!()
         }
+    }
 
-        fn answer(&self, _user: u64, _id: u16) -> api::Answer {
+    impl prono::Prono for ApiThroughRest {
+        fn survey(&self) -> api::Survey {
             todo!()
         }
     }
@@ -73,7 +76,7 @@ fn main() {
             .expect("the_canvas_id was not a HtmlCanvasElement");
 
         let start_result = eframe::WebRunner::new()
-            .start(canvas, web_options, build_app(Box::new(ApiThroughRest())))
+            .start(canvas, web_options, build_app(ApiThroughRest()))
             .await;
 
         // Remove the loading text and spinner:

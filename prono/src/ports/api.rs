@@ -1,23 +1,10 @@
-#[derive(Debug, PartialEq, Eq)]
-pub enum Answer {
-    Text(String),
-    PredictionDate { day: Option<u8>, month: u8, year: u16 },
-}
+mod answer;
+mod question;
+mod survey;
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct Question {
-    pub id: String,
-    pub question: String,
-    pub answer: Answer,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(test, derive(Default))]
-pub struct Survey {
-    pub id: u64,
-    pub description: String,
-    pub questions: Vec<Question>,
-}
+pub use answer::*;
+pub use question::*;
+pub use survey::*;
 
 pub trait PronoApi {
     fn survey(&self) -> Survey;

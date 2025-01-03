@@ -7,6 +7,7 @@
 - [ ] Show all answers
   - [ ] In table as output
   - [ ] In time graph
+- [ ] Add drop down list for months or restrict number
 
 
 ## Technical Dept

@@ -13,12 +13,14 @@ fn survey_ui(ui: &mut egui::Ui, survey: &mut Survey) {
                 Answer::Text(answer) => {
                     ui.add(TextEdit::singleline(answer).hint_text(INIT_ANSWER_HINT));
                 }
-                // FIXME add 2 synced combo boxes
                 Answer::PredictionDate { day: _, month, year } => {
-                    let month_str = month.to_string();
-                    ui.add(TextEdit::singleline(&mut month_str.clone()).hint_text("month"));
-                    let year_str = year.to_string();
-                    ui.add(TextEdit::singleline(&mut year_str.clone()).hint_text("year"));
+                    let mut month_str = month.to_string();
+                    ui.add(TextEdit::singleline(&mut month_str).hint_text("month"));
+                    *month = month_str.parse().unwrap_or_default();
+
+                    let mut year_str = year.to_string();
+                    ui.add(TextEdit::singleline(&mut year_str).hint_text("year"));
+                    *year = year_str.parse().unwrap_or_default();
                 }
             }
         });

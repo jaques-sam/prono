@@ -48,7 +48,11 @@ fn main() {
     let _config = ConfigRead {}.read(Path::new(CONFIG_FILENAME));
 
     impl api::PronoApi for ApiThroughRest {
-        fn answer(&self, _user: u64, _id: u16) -> api::Answer {
+        fn answer(&self, _user: &str, _question_id: u64) -> api::Answer {
+            todo!()
+        }
+
+        fn response(&self, _user: &str, _survey_id: u64) -> Option<api::Survey> {
             todo!()
         }
     }

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// A survey retrieved from file, which can be seen as a template and does not contain any answers
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FileSurvey {
     #[serde(rename = "survey_id")]

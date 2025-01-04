@@ -7,5 +7,6 @@ pub use question::*;
 pub use survey::*;
 
 pub trait PronoApi {
-    fn answer(&self, user: u64, id: u16) -> Answer;
+    fn answer(&self, user: &str, question_id: u64) -> Answer;
+    fn response(&self, user: &str, survey_id: u64) -> Option<Survey>;
 }

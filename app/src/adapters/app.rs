@@ -37,13 +37,6 @@ pub struct App {
 }
 
 impl App {
-    fn default_with_api(prono: impl prono::Prono + 'static) -> Self {
-        Self {
-            prono: Some(Box::new(prono)),
-            ..Default::default()
-        }
-    }
-
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>, prono: impl prono::Prono + 'static) -> Self {
         // This is also where you can customize the look and feel of egui using
@@ -51,11 +44,13 @@ impl App {
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or(Self::default_with_api(prono));
-        }
-
-        Self::default_with_api(prono)
+        let mut app = if let Some(storage) = cc.storage {
+            eframe::get_value(storage, eframe::APP_KEY).unwrap_or(Self::default())
+        } else {
+            Self::default()
+        };
+        app.prono = Some(Box::new(prono));
+        app
     }
 
     fn clear(&mut self) {

@@ -104,7 +104,19 @@ impl eframe::App for App {
             });
 
             if let Some(survey) = &mut self.survey {
+                if let Some(db_survey) = self
+                    .prono
+                    .as_ref()
+                    .expect("no prono API adapter set")
+                    .response(&self.user_name, survey.id)
+                {
+                    let db_survey = db_survey.into();
+                    if survey != &db_survey {
+                        *survey = db_survey;
+                    }
+                }
                 survey_ui(ui, survey);
+                // TODO: update survey to api
             } else if ui.button("Start survey").clicked() {
                 self.survey = Some(self.prono.as_ref().expect("no prono API adapter set").survey().into());
             }

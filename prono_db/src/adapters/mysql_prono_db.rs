@@ -21,7 +21,13 @@ impl MysqlDb {
 }
 
 impl PronoApi for MysqlDb {
-    fn answer(&self, _user: u64, _id: u16) -> prono::api::Answer {
+    fn answer(&self, user: &str, question_id: u64) -> prono::api::Answer {
+        log::info!("DB: user {user} asks for answer for question id={question_id})");
+        todo!()
+    }
+
+    fn response(&self, user: &str, survey_id: u64) -> Option<prono::api::Survey> {
+        log::info!("DB: user {user} asks for response for survey id={survey_id})");
         todo!()
     }
 }
@@ -40,5 +46,7 @@ impl DB for MysqlDb {
         });
     }
 
-    async fn add_answer(&mut self, _user: u64, _id: u16, _answer: DbAnswer) {}
+    async fn add_answer(&mut self, user: u64, question_id: u16, _answer: DbAnswer) {
+        log::info!("DB: user {user} adds answer for question id={question_id})");
+    }
 }

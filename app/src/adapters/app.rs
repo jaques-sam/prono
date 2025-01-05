@@ -126,7 +126,14 @@ impl eframe::App for App {
                     self.clear();
                 }
                 if ui.button("Submit").clicked() {
-                    todo!("Submit answers");
+                    let survey = self.survey.take().expect("survey to submit");
+                    for question in survey.questions {
+                        self.prono.as_mut().expect("no prono API adapter set").add_answer(
+                            &self.user_name,
+                            question.id,
+                            (&question.answer).into(),
+                        );
+                    }
                 }
             });
 

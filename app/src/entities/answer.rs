@@ -49,6 +49,19 @@ impl From<api::Answer> for Answer {
     }
 }
 
+impl From<&Answer> for api::Answer {
+    fn from(proto_answer: &Answer) -> Self {
+        match proto_answer {
+            Answer::Text(text) => api::Answer::Text(text.clone()),
+            Answer::PredictionDate { day, month, year } => api::Answer::PredictionDate {
+                day: *day,
+                month: *month,
+                year: *year,
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

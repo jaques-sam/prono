@@ -57,12 +57,14 @@ jobs:
         run: sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
       - name: Install binstall
         run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-      - name: Install nextest
-        run: cargo binstall cargo-nextest --secure
+      - name: Install cargo tools
+        run: cargo binstall cargo-nextest grcov --secure
+      - name: Add llvm tools component
+        run: rustup component add llvm-tools-preview
       - uses: actions-rs/cargo@v1
         with:
-          command: nextest
-          args: run --workspace --all-features --all-targets
+          command: run
+          args: --bin coverage_generator
 
   fmt:
     name: Rustfmt

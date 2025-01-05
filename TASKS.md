@@ -16,6 +16,7 @@
 ## Technical Dept
 - [x] Move prono-api to shared lib prono
 - [x] Make shared prono-db library
+- [ ] Solve clippy pedantics, add `-Dclippy::pedantic`
 - [ ] Add coverage checker
 - [ ] Add unit tests (especially for operations right before db)
 - [ ] (*) Avoid asking survey responses on cursor movement etc.

@@ -16,7 +16,7 @@ pub struct ConfigRead {}
 
 impl ReadConfig<SecureConfig> for ConfigRead {
     fn read(&self, config: &Path) -> SecureConfig {
-        let overrides = crate::DbConfigOverrides {
+        let overrides = crate::db_config::Overrides {
             host: std::env::var(HOST_OVERRIDE_ENV_VAR).ok().map(Into::into),
             port: std::env::var(PORT_OVERRIDE_ENV_VAR).ok().map(Into::into),
             user: std::env::var(USER_OVERRIDE_ENV_VAR).ok().map(Into::into),
@@ -56,7 +56,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "secure config is missing")]
     fn test_read_without_config_file_fails() {
         generic::add_panic_hook();
 

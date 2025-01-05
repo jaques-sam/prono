@@ -91,7 +91,7 @@ fn main() {
     } else {
         false
     };
-    let extra_args: Vec<&str> = extra_args.iter().map(|s| s.as_str()).collect();
+    let extra_args: Vec<&str> = extra_args.iter().map(String::as_str).collect();
 
     let cargo_env = vec![
         ("CARGO_INCREMENTAL", "0"),

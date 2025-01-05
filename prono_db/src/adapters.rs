@@ -1,3 +1,3 @@
-mod mysql_prono_db;
+mod mysql_db;
 
-pub use mysql_prono_db::*;
+pub use mysql_db::*;

@@ -3,7 +3,7 @@ use super::{Answer, Clear};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Question {
     pub id: String,
-    pub question: String,
+    pub text: String,
     pub answer: Answer,
 }
 
@@ -26,6 +26,6 @@ mod tests {
 
         question.clear();
 
-        assert_eq!(question, Default::default());
+        assert_eq!(question, Question::default());
     }
 }

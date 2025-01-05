@@ -5,13 +5,14 @@ mod entities;
 mod ports;
 mod use_cases;
 
+#[allow(clippy::wildcard_imports)]
 pub(crate) use entities::*;
 pub use ports::*;
 
 static SURVEY_CONFIG: &str = include_str!("./surveys/survey_spacex_starship.json");
 
 pub struct PronoLib {
-    api: Option<Box<dyn api::PronoApi>>,
+    api: Option<Box<dyn api::Surveys>>,
     survey: Survey,
 }
 
@@ -25,7 +26,8 @@ impl Default for PronoLib {
 }
 
 impl PronoLib {
-    pub fn new(api: Option<Box<dyn api::PronoApi>>) -> Self {
+    #[must_use]
+    pub fn new(api: Option<Box<dyn api::Surveys>>) -> Self {
         Self {
             api,
             ..Default::default()
@@ -33,7 +35,7 @@ impl PronoLib {
     }
 }
 
-impl api::PronoApi for PronoLib {
+impl api::Surveys for PronoLib {
     fn answer(&self, user: &str, id: u64) -> api::Answer {
         self.api.as_ref().expect("prono api adapter not set").answer(user, id)
     }
@@ -46,7 +48,7 @@ impl api::PronoApi for PronoLib {
         self.api
             .as_mut()
             .expect("prono api adapter not set")
-            .add_answer(user, question_id, answer)
+            .add_answer(user, question_id, answer);
     }
 }
 

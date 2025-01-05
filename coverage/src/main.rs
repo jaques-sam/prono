@@ -17,7 +17,7 @@ fn workspace_dir() -> PathBuf {
     cargo_path.parent().unwrap().to_path_buf()
 }
 
-fn run_unit_tests(cargo_env: &[(&str, &str)]) {
+fn run_unit_tests(cargo_env: &[(&str, &str)], extra_args: &[&str]) {
     println!("=== running unit tests with coverage support ===");
 
     let cargo_result = Command::new("cargo")
@@ -29,6 +29,7 @@ fn run_unit_tests(cargo_env: &[(&str, &str)]) {
         .arg("--workspace")
         .arg("--all-targets")
         .arg("--all-features")
+        .args(extra_args)
         .status()
         .expect("Failed to run cargo test command");
 
@@ -74,15 +75,23 @@ fn run_gcovr(cargo_env: &[(&str, &str)], devmode: bool, work_dir: &Path) {
         .status()
         .expect("Failed to run grcov command");
 
-    assert!(
-        grcov_result.success(),
-        "grcov command failed with non-zero exit code"
-    );
+    assert!(grcov_result.success(), "grcov command failed with non-zero exit code");
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let devmode = args.iter().any(|arg| arg == "--dev-mode");
+    // Only keep arguments after "--"
+    let mut extra_args = env::args()
+        .skip_while(|arg| arg != "--")
+        .skip(1)
+        .collect::<Vec<String>>();
+
+    let devmode = if let Some(pos) = extra_args.iter().position(|arg| *arg == "--dev-mode") {
+        extra_args.remove(pos);
+        true
+    } else {
+        false
+    };
+    let extra_args: Vec<&str> = extra_args.iter().map(|s| s.as_str()).collect();
 
     let cargo_env = vec![
         ("CARGO_INCREMENTAL", "0"),
@@ -93,6 +102,6 @@ fn main() {
 
     let ws_dir = workspace_dir();
 
-    run_unit_tests(&cargo_env);
+    run_unit_tests(&cargo_env, extra_args.as_slice());
     run_gcovr(&cargo_env, devmode, &ws_dir);
 }

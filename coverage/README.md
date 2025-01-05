@@ -35,5 +35,7 @@ To have inline code coverage with lcov, add the `--dev-mode` option:
 ```sh
 cargo run --bin coverage_generator -- --dev-mode
 ```
+**Note:** Additional arguments (after `--` are passed to `cargo nextest`)
+
 The lcov file is generated in `./target/coverage/tests.lcov` and can be used by CoverageGutters.
 This is already configured for VScode.

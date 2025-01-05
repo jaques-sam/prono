@@ -9,6 +9,6 @@ cargo machete
 cargo check --quiet --workspace --all-targets --all-features
 cargo check --quiet --all-features --package prono-app --target wasm32-unknown-unknown
 cargo clippy --quiet --workspace --all-targets --all-features --  -D warnings -W clippy::all
-cargo run --bin coverage_generator -- --dev-mode
+cargo run --bin coverage_generator -- --dev-mode --cargo-quiet
 cargo test --quiet --workspace --doc
 trunk build --config ./app

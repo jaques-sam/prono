@@ -1,6 +1,4 @@
 {
-    "cSpell.words": [
-        "prono",
-        "jaques"
-    ]
+  "cSpell.words": ["prono", "jaques"],
+  "coverage-gutters.coverageFileNames": ["target/coverage/tests.lcov"]
 }

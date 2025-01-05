@@ -820,6 +820,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "coverage_generator"
+version = "0.1.2"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"

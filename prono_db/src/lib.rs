@@ -1,14 +1,10 @@
+#![allow(unused_imports)]
+
 // CLEAN ARCHITECTURE
 mod adapters;
+mod entities;
 mod ports;
 
 pub use adapters::*;
+pub(crate) use entities::*;
 pub use ports::*;
-
-use async_trait::async_trait;
-
-#[async_trait]
-pub trait DB {
-    fn initialize(&self, config: Config);
-    async fn add_answer(&mut self, user: u64, id: u16, answer: DbAnswer);
-}

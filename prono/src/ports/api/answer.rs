@@ -12,3 +12,14 @@ impl From<crate::Answer> for Answer {
         }
     }
 }
+
+impl std::fmt::Display for Answer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Answer::Text(text) => write!(f, "{}", text),
+            Answer::PredictionDate { day, month, year } => {
+                write!(f, "{:02}/{:02}/{:04}", day.unwrap_or(0), *month, *year)
+            }
+        }
+    }
+}

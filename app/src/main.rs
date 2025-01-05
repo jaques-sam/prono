@@ -55,6 +55,10 @@ fn main() {
         fn response(&self, _user: &str, _survey_id: u64) -> Option<api::Survey> {
             todo!()
         }
+
+        fn add_answer(&mut self, _user: &str, _question_id: String, _answer: api::Answer) {
+            todo!()
+        }
     }
 
     impl prono::Prono for ApiThroughRest {

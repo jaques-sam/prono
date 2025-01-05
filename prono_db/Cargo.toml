@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 prono = { path = "../prono" }
 
-async-trait = "0.1.83"
 mysql_async = { version = "0.34.2", default-features = false, features = [
     "minimal",
 ] }

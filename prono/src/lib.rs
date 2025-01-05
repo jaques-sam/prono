@@ -41,6 +41,13 @@ impl api::PronoApi for PronoLib {
     fn response(&self, user: &str, id: u64) -> Option<api::Survey> {
         self.api.as_ref().expect("prono api adapter not set").response(user, id)
     }
+
+    fn add_answer(&mut self, user: &str, question_id: String, answer: api::Answer) {
+        self.api
+            .as_mut()
+            .expect("prono api adapter not set")
+            .add_answer(user, question_id, answer)
+    }
 }
 
 impl Prono for PronoLib {

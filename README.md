@@ -14,9 +14,16 @@ The official egui docs are at <https://docs.rs/egui>. If you prefer watching a v
 
 The first time you cloned the repo, ask the pub GPG key from @jaques-sam and import it using `gpg --import <KEY_FILENAME>`. Then decrypt the secure file(s) with `git-crypt unlock` executed in the repo.
 
+### Pre-requisites
+
 Make sure you are using the latest version of stable rust by running `rustup update`.
 
 `cargo run --release --bin prono-app`
+
+Install necessary cargo tools:
+
+Use binstall: `curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash`
+Cargo tools: `cargo binstall cargo-nextest grcov --secure`
 
 On Linux you need to first run:
 

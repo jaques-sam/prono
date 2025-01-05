@@ -19,15 +19,15 @@ pub enum Answer {
 
 impl Answer {
     pub fn new_text() -> Answer {
-        Answer::Text(Default::default())
+        Answer::Text(String::default())
     }
 
     pub fn new_prediction_date() -> Answer {
         let dt = datetime();
         Answer::PredictionDate {
             day: None,
-            month: dt.month() as u8,
-            year: dt.year() as u16,
+            month: u8::try_from(dt.month()).expect("invalid month"),
+            year: u16::try_from(dt.year()).expect("invalid year"),
         }
     }
 }
@@ -45,8 +45,8 @@ impl Clear for Answer {
             Answer::PredictionDate { day, month, year } => {
                 let dt = datetime();
                 *day = None;
-                *month = dt.month() as u8;
-                *year = dt.year() as u16;
+                *month = u8::try_from(dt.month()).expect("invalid month");
+                *year = u16::try_from(dt.year()).expect("invalid year");
             }
         }
     }
@@ -60,7 +60,7 @@ mod tests {
     fn test_clear_text_answer() {
         let mut answer = Answer::Text("John".to_string());
         answer.clear();
-        assert_eq!(answer, Answer::Text("".to_string()));
+        assert_eq!(answer, Answer::Text(String::new()));
     }
 
     #[test]
@@ -77,8 +77,8 @@ mod tests {
             prediction,
             Answer::PredictionDate {
                 day: None,
-                month: datetime().month() as u8,
-                year: datetime().year() as u16,
+                month: u8::try_from(datetime().month()).expect("invalid month"),
+                year: u16::try_from(datetime().year()).expect("invalid year"),
             }
         );
     }

@@ -40,7 +40,7 @@ impl From<Question> for crate::Question {
 
         Self {
             id,
-            question: question.question,
+            text: question.question,
             answer: match question.answer_type {
                 AnswerType::Text => crate::Answer::new_text(),
                 AnswerType::PredictionDate => crate::Answer::new_prediction_date(),
@@ -67,7 +67,7 @@ mod tests {
         let json_data = include_str!("../surveys/survey_spacex_starship.json");
 
         let survey: FileSurvey = serde_json::from_str(json_data).unwrap();
-        println!("{:?}", survey);
+        println!("{survey:?}");
     }
 
     #[test]
@@ -120,7 +120,7 @@ mod tests {
         };
 
         let question: crate::Question = config_question.into();
-        assert_eq!(question.question, "What is your name?");
+        assert_eq!(question.text, "What is your name?");
         assert_eq!(question.answer, crate::Answer::new_text());
     }
 

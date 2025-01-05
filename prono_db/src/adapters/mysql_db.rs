@@ -17,7 +17,45 @@ pub struct MysqlDb {
 }
 
 impl MysqlDb {
-    pub fn new(secure_config: Config) -> Self {
+    /// Represents a mysql database connection pool and runtime.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if:
+    /// - The database URL cannot be constructed from the provided `Config`.
+    /// - The database URL is invalid.
+    /// - The connection to the database fails.
+    ///
+    /// # Arguments
+    ///
+    /// * `secure_config` - A reference to a `Config` object that contains the necessary
+    ///   information to construct the database URL.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `MysqlDb`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use secure_string::SecureString;
+    /// use prono_db::{Config, MysqlDb};
+    ///
+    /// let config = Config {
+    ///     user: SecureString::from("user"),
+    ///     pass: SecureString::from("pass"),
+    ///     host: SecureString::from("host"),
+    ///     port: SecureString::from("1234"),
+    ///     db_name: String::from("database"),
+    /// };
+    ///
+    /// # std::thread::spawn(move || {
+    /// let db = MysqlDb::new(&config);
+    /// #     std::process::exit(0);
+    /// # });
+    /// ```
+    #[must_use]
+    pub fn new(secure_config: &Config) -> Self {
         let database_url = secure_config.construct_url();
         let database_url = database_url.unsecure();
         let pool = mysql_async::Pool::new(Opts::from_url(database_url).expect("catch this error"));
@@ -35,7 +73,7 @@ impl MysqlDb {
     }
 }
 
-impl api::PronoApi for MysqlDb {
+impl api::Surveys for MysqlDb {
     fn answer(&self, user: &str, question_id: u64) -> api::Answer {
         info!("DB: user {user} asks for answer for question id={question_id})");
         todo!()

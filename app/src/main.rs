@@ -23,7 +23,7 @@ fn build_app<'a>(prono: impl prono::Prono + 'static) -> AppCreator<'a> {
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
     let db_config: prono_db::Config = ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db.into();
-    let db: Box<dyn api::PronoApi> = Box::new(prono_db::MysqlDb::new(db_config));
+    let db: Box<dyn api::Surveys> = Box::new(prono_db::MysqlDb::new(&db_config));
 
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
@@ -47,7 +47,7 @@ fn main() {
     struct ApiThroughRest();
     let _config = ConfigRead {}.read(Path::new(CONFIG_FILENAME));
 
-    impl api::PronoApi for ApiThroughRest {
+    impl api::Surveys for ApiThroughRest {
         fn answer(&self, _user: &str, _question_id: u64) -> api::Answer {
             todo!()
         }

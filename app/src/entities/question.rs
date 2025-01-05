@@ -6,7 +6,7 @@ use prono::api;
 #[derive(Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Question {
     pub id: String,
-    pub question: String,
+    pub text: String,
     pub answer: Answer,
 }
 
@@ -20,7 +20,7 @@ impl From<api::Question> for Question {
     fn from(proto_question: api::Question) -> Self {
         Question {
             id: proto_question.id,
-            question: proto_question.question,
+            text: proto_question.text,
             answer: proto_question.answer.into(),
         }
     }
@@ -39,6 +39,6 @@ mod tests {
 
         question.clear();
 
-        assert_eq!(question, Default::default());
+        assert_eq!(question, Question::default());
     }
 }

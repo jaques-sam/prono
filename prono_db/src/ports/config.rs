@@ -9,6 +9,7 @@ pub struct Config {
 }
 
 impl Config {
+    #[must_use]
     pub fn construct_url(&self) -> SecureString {
         static DB_PROTOCOL: &str = "mysql";
 

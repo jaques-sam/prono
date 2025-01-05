@@ -6,9 +6,9 @@ use crate::{Answer, Survey};
 static INIT_ANSWER_HINT: &str = "give your expected date";
 
 fn survey_ui(ui: &mut egui::Ui, survey: &mut Survey) {
-    for question in survey.questions.iter_mut() {
+    for question in &mut survey.questions {
         ui.horizontal(|ui| {
-            ui.label(&question.question);
+            ui.label(&question.text);
             match &mut question.answer {
                 Answer::Text(answer) => {
                     ui.add(TextEdit::singleline(answer).hint_text(INIT_ANSWER_HINT));

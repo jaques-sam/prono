@@ -74,7 +74,7 @@ impl MysqlDb {
 }
 
 impl api::Surveys for MysqlDb {
-    fn answer(&self, user: &str, question_id: u64) -> api::Answer {
+    fn answer(&self, user: &str, question_id: u64) -> Option<api::Answer> {
         info!("DB: user {user} asks for answer for question id={question_id})");
         todo!()
     }

@@ -36,7 +36,7 @@ impl PronoLib {
 }
 
 impl api::Surveys for PronoLib {
-    fn answer(&self, user: &str, id: u64) -> api::Answer {
+    fn answer(&self, user: &str, id: u64) -> Option<api::Answer> {
         self.api.as_ref().expect("prono api adapter not set").answer(user, id)
     }
 

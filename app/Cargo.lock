@@ -848,9 +848,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.14"
+version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06ba6d68e24814cb8de6bb986db8222d3a027d15872cabc0d18817bc3c0e4471"
+checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -1379,6 +1379,13 @@ dependencies = [
  "pin-project-lite",
  "pin-utils",
  "slab",
+]
+
+[[package]]
+name = "generic"
+version = "0.1.0"
+dependencies = [
+ "log",
 ]
 
 [[package]]
@@ -2536,22 +2543,41 @@ dependencies = [
 name = "prono"
 version = "0.1.0"
 dependencies = [
- "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "prono-app"
+version = "0.1.0"
+dependencies = [
  "chrono",
  "eframe",
  "egui",
  "env_logger",
+ "generic",
  "log",
- "mysql_async",
+ "prono",
+ "prono_db",
  "rstest",
  "secure-string",
  "serde",
- "serde_json",
- "tokio",
  "toml",
- "uuid",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "prono_db"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "mysql_async",
+ "prono",
+ "secure-string",
+ "tokio",
 ]
 
 [[package]]
@@ -3074,9 +3100,7 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
- "parking_lot",
  "pin-project-lite",
- "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.52.0",

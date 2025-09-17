@@ -13,6 +13,21 @@ impl From<crate::Answer> for Answer {
     }
 }
 
+impl From<Answer> for crate::Answer {
+    fn from(answer: Answer) -> Self {
+        match answer {
+            Answer::Text(text) => crate::Answer::Text(text),
+            Answer::PredictionDate { day, month, year } => crate::Answer::PredictionDate { day, month, year },
+        }
+    }
+}
+
+impl From<String> for Answer {
+    fn from(text: String) -> Self {
+        Answer::Text(text)
+    }
+}
+
 impl std::fmt::Display for Answer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -40,7 +40,7 @@ impl From<Question> for crate::Question {
 
         Self {
             id,
-            text: question.question,
+            text: Some(question.question),
             answer: match question.answer_type {
                 AnswerType::Text => crate::Answer::new_text(),
                 AnswerType::PredictionDate => crate::Answer::new_prediction_date(),
@@ -120,7 +120,7 @@ mod tests {
         };
 
         let question: crate::Question = config_question.into();
-        assert_eq!(question.text, "What is your name?");
+        assert_eq!(question.text.unwrap(), "What is your name?");
         assert_eq!(question.answer, crate::Answer::new_text());
     }
 

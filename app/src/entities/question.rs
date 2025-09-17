@@ -6,8 +6,8 @@ use prono::api;
 #[derive(Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Question {
     pub id: String,
-    pub text: String,
     pub answer: Answer,
+    pub text: String,
 }
 
 impl Clear for Question {
@@ -16,13 +16,10 @@ impl Clear for Question {
     }
 }
 
-impl From<api::Question> for Question {
-    fn from(proto_question: api::Question) -> Self {
-        Question {
-            id: proto_question.id,
-            text: proto_question.text,
-            answer: proto_question.answer.into(),
-        }
+impl Question {
+    pub fn update(&mut self, proto_question: api::Question) -> &mut Self {
+        self.answer = proto_question.answer.into();
+        self
     }
 }
 

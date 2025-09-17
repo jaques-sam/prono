@@ -4,16 +4,27 @@ use super::Question;
 #[cfg_attr(test, derive(Default))]
 pub struct Survey {
     pub id: u64,
-    pub description: String,
     pub questions: Vec<Question>,
+    pub description: Option<String>,
 }
 
-impl From<&crate::Survey> for Survey {
-    fn from(survey: &crate::Survey) -> Self {
+impl From<crate::Survey> for Survey {
+    fn from(survey: crate::Survey) -> Self {
         Self {
             id: survey.id,
-            description: survey.description.clone(),
-            questions: survey.questions.clone().into_iter().map(Into::into).collect(),
+            questions: survey.questions.into_iter().map(Into::into).collect(),
+            description: Some(survey.description),
+        }
+    }
+}
+
+
+impl From<Survey> for crate::Survey {
+    fn from(survey: Survey) -> Self {
+        Self {
+            id: survey.id,
+            description: survey.description.unwrap_or_default(),
+            questions: survey.questions.into_iter().map(Into::into).collect(),
         }
     }
 }

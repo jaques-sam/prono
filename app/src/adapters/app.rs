@@ -1,12 +1,12 @@
 use egui::TextEdit;
 use serde::{Deserialize, Serialize};
 
-use crate::{Answer, Survey};
+use crate::{Answer, Question, Survey};
 
 static INIT_ANSWER_HINT: &str = "give your expected date";
 
-fn survey_ui(ui: &mut egui::Ui, survey: &mut Survey) {
-    for question in &mut survey.questions {
+fn update_questions(ui: &mut egui::Ui, questions: &mut Vec<Question>) {
+    for question in questions {
         ui.horizontal(|ui| {
             ui.label(&question.text);
             match &mut question.answer {
@@ -58,6 +58,18 @@ impl App {
             survey.clear();
         }
     }
+
+    fn update_survey(&mut self, ui: &mut egui::Ui) {
+        if let Some(survey) = &mut self.survey {
+            ui.heading(&survey.description);
+            ui.spacing();
+            ui.hyperlink_to("SpaceX Starship", "http://www.spacex.com"); // TODO [4]: move to survey
+            update_questions(ui, &mut survey.questions);
+            // TODO [5]: update survey to api
+        } else if ui.button("Start survey").clicked() {
+            self.survey = Some(self.prono.as_ref().expect("no prono API adapter set").empty_survey());
+        }
+    }
 }
 
 impl eframe::App for App {
@@ -92,34 +104,13 @@ impl eframe::App for App {
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("Prono");
-            ui.heading("Guess SpaceX Starship achievements");
-
-            ui.spacing();
-
-            ui.hyperlink_to("SpaceX Starship", "http://www.spacex.com");
 
             ui.horizontal(|ui| {
-                ui.label("Name:");
+                ui.label("Username:");
                 ui.add(TextEdit::singleline(&mut self.user_name).hint_text("Please fill in your name"));
             });
 
-            if let Some(survey) = &mut self.survey {
-                if let Some(db_survey) = self
-                    .prono
-                    .as_ref()
-                    .expect("no prono API adapter set")
-                    .response(&self.user_name, survey.id)
-                {
-                    let db_survey = db_survey.into();
-                    if survey != &db_survey {
-                        *survey = db_survey;
-                    }
-                }
-                survey_ui(ui, survey);
-                // TODO: update survey to api
-            } else if ui.button("Start survey").clicked() {
-                self.survey = Some(self.prono.as_ref().expect("no prono API adapter set").survey().into());
-            }
+            self.update_survey(ui);
 
             ui.horizontal(|ui| {
                 if ui.button("Reset").clicked() {

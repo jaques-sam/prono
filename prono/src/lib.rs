@@ -13,14 +13,12 @@ static SURVEY_CONFIG: &str = include_str!("./surveys/survey_spacex_starship.json
 
 pub struct PronoLib {
     api: Option<Box<dyn api::Surveys>>,
-    survey: Survey,
 }
 
 impl Default for PronoLib {
     fn default() -> Self {
         Self {
             api: None,
-            survey: FileSurvey::create_from_file(SURVEY_CONFIG).into(),
         }
     }
 }
@@ -35,25 +33,24 @@ impl PronoLib {
     }
 }
 
-impl api::Surveys for PronoLib {
-    fn answer(&self, user: &str, id: u64) -> Option<api::Answer> {
-        self.api.as_ref().expect("prono api adapter not set").answer(user, id)
+impl Prono for PronoLib {
+    fn empty_survey(&self) -> Survey {
+            FileSurvey::create_from_file(SURVEY_CONFIG).into()
     }
 
-    fn response(&self, user: &str, id: u64) -> Option<api::Survey> {
-        self.api.as_ref().expect("prono api adapter not set").response(user, id)
+    fn filled_survey(&self, user: &str, survey_id: u64) -> Option<Survey> {
+        self.api.as_ref().expect("prono api adapter not set").response(user, survey_id).map(|s| s.into())
     }
 
-    fn add_answer(&mut self, user: &str, question_id: String, answer: api::Answer) {
+    fn add_answer(&mut self, user: &str, question_id: String, answer: Answer) {
         self.api
             .as_mut()
             .expect("prono api adapter not set")
-            .add_answer(user, question_id, answer);
+            .add_answer(user, question_id, answer.into());
     }
-}
 
-impl Prono for PronoLib {
-    fn survey(&self) -> api::Survey {
-        (&self.survey).into()
+    fn response(&self, user: &str, id: u64) -> Option<Survey> {
+        self.api.as_ref().expect("prono api adapter not set").response(user, id).map(|s| s.into())
     }
+
 }

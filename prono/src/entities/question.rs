@@ -3,8 +3,8 @@ use super::{Answer, Clear};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Question {
     pub id: String,
-    pub text: String,
     pub answer: Answer,
+    pub text: Option<String>,
 }
 
 impl Clear for Question {

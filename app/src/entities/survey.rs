@@ -17,12 +17,12 @@ impl Survey {
     }
 }
 
-impl From<api::Survey> for Survey {
-    fn from(proto_survey: api::Survey) -> Self {
-        Survey {
-            id: proto_survey.id,
-            description: proto_survey.description,
-            questions: proto_survey.questions.into_iter().map(Into::into).collect(),
+impl Survey {
+    pub fn update_questions(&mut self, new_questions: Vec<api::Question>) {
+        for (i, new_question) in new_questions.into_iter().enumerate() {
+            if let Some(question) = self.questions.get_mut(i) {
+                question.update(new_question);
+            }
         }
     }
 }

@@ -67,7 +67,13 @@ impl App {
             update_questions(ui, &mut survey.questions);
             // TODO [5]: update survey to api
         } else if ui.button("Start survey").clicked() {
-            self.survey = Some(self.prono.as_ref().expect("no prono API adapter set").empty_survey());
+            self.survey = Some(
+                self.prono
+                    .as_ref()
+                    .expect("no prono API adapter set")
+                    .empty_survey()
+                    .into(),
+            );
         }
     }
 }
@@ -122,7 +128,7 @@ impl eframe::App for App {
                         self.prono.as_mut().expect("no prono API adapter set").add_answer(
                             &self.user_name,
                             question.id,
-                            (&question.answer).into(),
+                            question.answer.into(),
                         );
                     }
                 }

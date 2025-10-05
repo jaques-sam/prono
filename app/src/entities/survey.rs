@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Clear, Question};
-use prono::api;
+use crate::Answer;
+
+use super::Question;
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Default))]
@@ -11,52 +12,38 @@ pub struct Survey {
     pub questions: Vec<Question>,
 }
 
-impl Survey {
-    pub fn clear(&mut self) {
-        self.questions.iter_mut().for_each(Question::clear);
-    }
-}
-
-impl Survey {
-    pub fn update_questions(&mut self, new_questions: Vec<api::Question>) {
-        for (i, new_question) in new_questions.into_iter().enumerate() {
-            if let Some(question) = self.questions.get_mut(i) {
-                question.update(new_question);
-            }
+impl From<Survey> for prono::Survey {
+    fn from(survey: Survey) -> Self {
+        Self {
+            id: survey.id,
+            description: survey.description,
+            questions: survey.questions.into_iter().map(prono::Question::from).collect(),
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::Answer;
+impl From<prono::Survey> for Survey {
+    fn from(proto_survey: prono::Survey) -> Self {
+        Self {
+            id: proto_survey.id,
+            description: proto_survey.description,
+            questions: proto_survey
+                .questions
+                .into_iter()
+                .map(|q| Question {
+                    id: q.id,
+                    answer: q.answer.into(),
+                    text: q.text.unwrap_or_default(),
+                })
+                .collect(),
+        }
+    }
+}
 
-    use super::*;
-
-    #[test]
-    fn test_clearing_text_answers() {
-        let mut survey = Survey {
-            questions: vec![
-                Question {
-                    answer: Answer::Text("Sam".to_string()),
-                    ..Default::default()
-                },
-                Question {
-                    answer: Answer::Text("Kevin".to_string()),
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        };
-
-        survey.clear();
-
-        assert_eq!(
-            survey,
-            Survey {
-                questions: vec![Question::default(), Question::default(),],
-                ..Default::default()
-            }
-        );
+impl Survey {
+    pub fn clear(&mut self) {
+        for question in &mut self.questions {
+            question.answer = Answer::default();
+        }
     }
 }

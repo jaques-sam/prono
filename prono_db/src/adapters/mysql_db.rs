@@ -118,7 +118,7 @@ impl api::Surveys for MysqlDb {
             for row in rows {
                 questions.push(api::Question {
                     id: row.0,
-                    answer: Answer::from(row.1).into(),
+                    answer: Answer::from(row.1),
                     text: None,
                 });
             }

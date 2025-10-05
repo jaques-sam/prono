@@ -18,7 +18,6 @@ impl From<crate::Survey> for Survey {
     }
 }
 
-
 impl From<Survey> for crate::Survey {
     fn from(survey: Survey) -> Self {
         Self {

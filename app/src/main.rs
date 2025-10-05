@@ -48,7 +48,7 @@ fn main() {
     let _config = ConfigRead {}.read(Path::new(CONFIG_FILENAME));
 
     impl api::Surveys for ApiThroughRest {
-        fn answer(&self, _user: &str, _question_id: u64) -> api::Answer {
+        fn answer(&self, _user: &str, _question_id: u64) -> Option<prono::api::Answer> {
             todo!()
         }
 
@@ -62,7 +62,19 @@ fn main() {
     }
 
     impl prono::Prono for ApiThroughRest {
-        fn survey(&self) -> api::Survey {
+        fn empty_survey(&self) -> prono::Survey {
+            todo!()
+        }
+
+        fn filled_survey(&self, _user: &str, _survey_id: u64) -> Option<prono::Survey> {
+            todo!()
+        }
+
+        fn add_answer(&mut self, _user: &str, _question_id: String, _answer: prono::Answer) {
+            todo!()
+        }
+
+        fn response(&self, _user: &str, _id: u64) -> Option<prono::Survey> {
             todo!()
         }
     }

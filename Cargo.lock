@@ -2565,7 +2565,6 @@ dependencies = [
 name = "prono-app"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "eframe",
  "egui",
  "env_logger",

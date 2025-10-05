@@ -13,6 +13,14 @@ impl Clear for Question {
     }
 }
 
+impl Question {
+    pub fn update(&mut self, proto_question: Question) -> &mut Self {
+        self.answer = proto_question.answer;
+        self.text = proto_question.text;
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

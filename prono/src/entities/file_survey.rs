@@ -11,6 +11,11 @@ pub struct FileSurvey {
 }
 
 impl FileSurvey {
+    /// # Panics
+    ///
+    /// Panics if the provided JSON string cannot be parsed into a `FileSurvey`.
+    /// TODO: have proper error handling instead of panicking.
+    #[must_use]
     pub fn create_from_file(json_body: &str) -> Self {
         serde_json::from_str(json_body)
             .unwrap_or_else(|err| panic!("Unable to parse survey configuration (err: {err})"))
@@ -109,7 +114,7 @@ mod tests {
         }
         "#;
 
-        FileSurvey::create_from_file(invalid_json_data);
+        let _ = FileSurvey::create_from_file(invalid_json_data);
     }
 
     #[test]

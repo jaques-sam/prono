@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Answer, Clear};
-use prono::api;
+use super::Answer;
 
 #[derive(Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Question {
@@ -10,16 +9,20 @@ pub struct Question {
     pub text: String,
 }
 
-impl Clear for Question {
-    fn clear(&mut self) {
-        self.answer.clear();
+impl Question {
+    pub fn update(&mut self, proto_question: prono::Question) -> &mut Self {
+        self.answer = proto_question.answer.into();
+        self
     }
 }
 
-impl Question {
-    pub fn update(&mut self, proto_question: api::Question) -> &mut Self {
-        self.answer = proto_question.answer.into();
-        self
+impl From<Question> for prono::Question {
+    fn from(question: Question) -> Self {
+        Self {
+            id: question.id,
+            answer: question.answer.into(),
+            text: Some(question.text),
+        }
     }
 }
 
@@ -28,14 +31,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_clear() {
+    fn test_update() {
+        // Arrange
         let mut question = Question {
-            answer: Answer::Text("John".to_string()),
+            id: "1".to_string(),
+            answer: Answer::default(),
+            text: "What is your favorite color?".to_string(),
+        };
+
+        let proto_question = prono::Question {
+            answer: prono::Answer::default(),
             ..Default::default()
         };
 
-        question.clear();
+        // Act
+        question.update(proto_question);
 
-        assert_eq!(question, Question::default());
+        // Assert
+        assert_eq!(question.answer, Answer::default());
     }
 }

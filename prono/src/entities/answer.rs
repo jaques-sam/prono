@@ -18,11 +18,17 @@ pub enum Answer {
 }
 
 impl Answer {
+    #[must_use]
     pub fn new_text() -> Answer {
         Answer::Text(String::default())
     }
 
+    /// # Panics
+    ///
+    /// Panics if the current month or year cannot be converted to u8 or u16 respectively.
+    #[must_use]
     pub fn new_prediction_date() -> Answer {
+        // TODO: use time provider
         let dt = datetime();
         Answer::PredictionDate {
             day: None,

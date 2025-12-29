@@ -13,6 +13,6 @@ pub fn add_panic_hook() {
             "Panic occurred"
         };
 
-        error!("{}", msg);
+        error!("{msg}");
     }));
 }

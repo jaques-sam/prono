@@ -7,4 +7,4 @@ description = "A Rust coverage generator"
 keywords = ["coverage, generator", "grcov"]
 
 [dev-dependencies]
-serde_json = "1.0"
+serde_json = "1"

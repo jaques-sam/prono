@@ -12,13 +12,13 @@ The official egui docs are at <https://docs.rs/egui>. If you prefer watching a v
 
 ## Testing locally
 
-The first time you cloned the repo, ask the pub GPG key from @jaques-sam and import it using `gpg --import <KEY_FILENAME>`. Then decrypt the secure file(s) with `git-crypt unlock` executed in the repo.
+The first time you clone the repo, ask the pub GPG key from @jaques-sam and import it using `gpg --import <KEY_FILENAME>`. Then decrypt the secure file(s) with `git-crypt unlock` executed in the repo.
 
 ### Pre-requisites
 
 Make sure you are using the latest version of stable rust by running `rustup update`.
 
-`cargo run --release --bin prono-app`
+`RUST_LOG=debug cargo run --release --bin prono-app`
 
 Install necessary cargo tools:
 

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Answer, Question, Survey};
 
-static INIT_ANSWER_HINT: &str = "give your expected date";
+static INIT_ANSWER_HINT: &str = "your answer here";
 
 fn update_questions(ui: &mut egui::Ui, questions: &mut Vec<Question>) {
     for question in questions {
@@ -119,6 +119,9 @@ impl eframe::App for App {
             self.update_survey(ui);
 
             ui.horizontal(|ui| {
+                if self.survey.is_none() {
+                    return;
+                }
                 if ui.button("Reset").clicked() {
                     self.clear();
                 }

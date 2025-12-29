@@ -8,7 +8,7 @@ pub(crate) use adapters::*;
 pub(crate) use entities::*;
 
 use eframe::AppCreator;
-use prono::{api, ReadConfig};
+use prono::{ReadConfig, api};
 use std::path::Path;
 
 static CONFIG_FILENAME: &str = "secure_config.toml";

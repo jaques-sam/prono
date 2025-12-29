@@ -1,5 +1,5 @@
 use log::info;
-use mysql_async::{prelude::*, Opts};
+use mysql_async::{Opts, prelude::*};
 use std::sync::Arc;
 
 use prono::api::{self, Answer};

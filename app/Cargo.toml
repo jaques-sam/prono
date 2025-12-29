@@ -38,4 +38,4 @@ web-sys = "0.3.70"           # to access the DOM (to hide the loading text)
 [dev-dependencies]
 generic = { path = "../generic" }
 
-rstest = "0.23.0"
+rstest = "0"

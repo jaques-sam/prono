@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::Answer;
-
 use super::Question;
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -43,7 +41,7 @@ impl From<prono::Survey> for Survey {
 impl Survey {
     pub fn clear(&mut self) {
         for question in &mut self.questions {
-            question.answer = Answer::default();
+            question.answer.empty();
         }
     }
 }

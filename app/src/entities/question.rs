@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use super::Answer;
 
-#[derive(Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[cfg_attr(test, derive(Default))]
 pub struct Question {
     pub id: String,
     pub answer: Answer,

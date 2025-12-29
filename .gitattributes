@@ -1,1 +1,2 @@
 *secure_config.toml filter=git-crypt diff=git-crypt
+Cargo.lock -diff

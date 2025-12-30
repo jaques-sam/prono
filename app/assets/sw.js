@@ -2,8 +2,8 @@ var cacheName = 'egui-template-pwa';
 var filesToCache = [
   './',
   './index.html',
-  './prono.js',
-  './prono_bg.wasm',
+  './prono-app.js',
+  './prono-app_bg.wasm',
 ];
 
 /* Start the service worker and cache all of the app's content */

@@ -1,0 +1,7 @@
+[advisories]
+ignore = []
+severity_threshold = "high" # CVSS severity ("none", "low", "medium", "high", "critical")
+
+[output]
+format = "terminal" # "terminal" (human readable report) or "json"
+quiet = true # Only print information on error

@@ -1,14 +1,15 @@
-use log::info;
-use mysql_async::{Opts, prelude::*};
+use log::{error, info};
+use sqlx::mysql::MySqlPoolOptions;
+use sqlx::{MySqlPool, Row};
 use std::sync::Arc;
+use std::time::Duration;
 
+use crate::{AnswerResponse, Config, User};
 use prono::api::{self, Answer};
 use tokio::{runtime, sync::Mutex};
 
-use crate::{AnswerResponse, Config};
-
 struct State {
-    connection: mysql_async::Conn,
+    pool: MySqlPool,
 }
 
 pub struct MysqlDb {
@@ -58,67 +59,71 @@ impl MysqlDb {
     pub fn new(secure_config: &Config) -> Self {
         let database_url = secure_config.construct_url();
         let database_url = database_url.unsecure();
-        let pool = mysql_async::Pool::new(Opts::from_url(database_url).expect("catch this error"));
 
         let rt = runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let state: Arc<Mutex<Option<State>>> = Arc::new(Mutex::new(None));
         let state_clone = state.clone();
 
         rt.block_on(async move {
-            let connection = pool.get_conn().await.expect("catch this error");
-            *state_clone.lock().await = Some(State { connection });
-        });
+            let pool = MySqlPoolOptions::new()
+                .max_connections(5)
+                .connect(database_url)
+                .await
+                .expect("failed to connect to db");
 
+            *state_clone.lock().await = Some(State { pool });
+        });
         Self { rt, state }
     }
 }
 
 impl api::Surveys for MysqlDb {
     fn answer(&self, user: &str, question_id: u64) -> Option<api::Answer> {
-        info!("DB: user {user} asks for answer for question id={question_id})");
+        info!("DB: user {user} asks for answer for question id={question_id}");
         let state = self.state.clone();
         let user = user.to_string();
-        let question_id = question_id.to_string();
+        let qid = question_id.to_string();
+
         self.rt.block_on(async move {
             let mut lock = state.lock().await;
             let state = lock.as_mut().expect("catch this error");
+            let pool = &state.pool;
+            let row = sqlx::query("SELECT answer FROM AnswerResponse WHERE user = ? AND question_id = ?")
+                .bind(user)
+                .bind(qid)
+                .fetch_optional(pool)
+                .await
+                .ok()?;
 
-            let row: Option<(String, String)> =
-                r"SELECT question_id, answer FROM AnswerResponse WHERE user = :user AND question_id = :question_id"
-                    .with(params! { "user" => user, "question_id" => question_id })
-                    .first(&mut state.connection)
-                    .await
-                    .expect("catch this error");
-
-            if let Some(row) = row {
-                return Some(Answer::from(row.1));
-            }
-
-            None
+            let row = row?;
+            let answer: String = row.get("answer");
+            Some(Answer::from(answer))
         })
     }
 
     fn response(&self, user: &str, survey_id: u64) -> Option<api::Survey> {
-        info!("DB: user {user} asks for response for survey id={survey_id})");
+        info!("DB: user {user} asks for response for survey id={survey_id}");
         let state = self.state.clone();
         let user = user.to_string();
 
         self.rt.block_on(async move {
             let mut lock = state.lock().await;
             let state = lock.as_mut().expect("catch this error");
-
-            let rows: Vec<(String, String)> =
-                r"SELECT question_id, answer FROM AnswerResponse WHERE user = :user AND survey_id = :survey_id"
-                    .with(params! { "user" => user, "survey_id" => survey_id })
-                    .fetch(&mut state.connection)
-                    .await
-                    .expect("catch this error");
+            let pool = &state.pool;
+            let rows = sqlx::query("SELECT question_id, answer FROM AnswerResponse WHERE user = ? AND survey_id = ?")
+                .bind(user)
+                .bind(survey_id)
+                .fetch_all(pool)
+                .await
+                .ok()?;
 
             let mut questions = Vec::new();
             for row in rows {
+                let qid: String = row.get("question_id");
+                let ans: String = row.get("answer");
                 questions.push(api::Question {
-                    id: row.0,
-                    answer: Answer::from(row.1),
+                    id: qid,
+                    answer: Answer::from(ans),
                     text: None,
                 });
             }
@@ -132,21 +137,21 @@ impl api::Surveys for MysqlDb {
     }
 
     fn add_answer(&mut self, user: &str, question_id: String, answer: api::Answer) {
-        info!("DB: user {user} adds answer for question id={question_id})");
+        info!("DB: user {user} adds answer for question id={question_id}");
         let state = self.state.clone();
         let user = user.to_string();
+        let ans = answer.to_string();
 
         self.rt.block_on(async move {
             let mut lock = state.lock().await;
             let state = lock.as_mut().expect("catch this error");
-            let answer = answer.to_string();
-
-            r"INSERT INTO AnswerResponse (user, question_id, answer)
-              VALUES (:user, :question_id, :answer )"
-                .with(params! { "user" => user, "question_id" => question_id, "answer" => answer })
-                .ignore(&mut state.connection)
-                .await
-                .expect("catch this error");
+            let pool = &state.pool;
+            let _ = sqlx::query("INSERT INTO AnswerResponse (user, question_id, answer) VALUES (?, ?, ?)")
+                .bind(user)
+                .bind(question_id)
+                .bind(ans)
+                .execute(pool)
+                .await;
         });
     }
 }

@@ -22,10 +22,10 @@ fn build_app<'a>(prono: impl prono::Prono + 'static) -> AppCreator<'a> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
+    env_logger::init(); // Log to stdout iso stderr (if you run with e.g. `RUST_LOG=debug`).
+
     let db_config: prono_db::Config = ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db.into();
     let db: Box<dyn api::Surveys> = Box::new(prono_db::MysqlDb::new(&db_config));
-
-    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -111,5 +111,7 @@ fn main() {
                 }
             }
         }
+
+        // TODO [13] Implement client here
     });
 }

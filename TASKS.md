@@ -13,7 +13,9 @@
 9. [ ] Show all answers
 10. [ ] In table as output
 11. [ ] In time graph
-12. [ ] ...
+12. [ ] Implement MQTT server in ./server
+13. [ ] Implement MQTT client
+14. [ ] ...
 
 
 ## Technical Dept

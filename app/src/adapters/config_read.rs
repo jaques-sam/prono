@@ -4,7 +4,6 @@ use log::debug;
 use prono::ReadConfig;
 
 use crate::SecureConfig;
-// use mysql_async::prelude::*;
 
 static HOST_OVERRIDE_ENV_VAR: &str = "DB_HOST_OVERRIDE";
 static PORT_OVERRIDE_ENV_VAR: &str = "DB_PORT_OVERRIDE";

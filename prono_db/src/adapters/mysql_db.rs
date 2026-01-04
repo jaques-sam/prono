@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::{AnswerResponse, Config, User};
-use prono::api::{self, Answer};
+use prono::repo::{self, Answer};
 use tokio::{runtime, sync::Mutex};
 
 struct State {
@@ -77,8 +77,8 @@ impl MysqlDb {
     }
 }
 
-impl api::Surveys for MysqlDb {
-    fn answer(&self, user: &str, question_id: u64) -> Option<api::Answer> {
+impl repo::Surveys for MysqlDb {
+    fn answer(&self, user: &str, question_id: u64) -> Option<repo::Answer> {
         info!("DB: user {user} asks for answer for question id={question_id}");
         let state = self.state.clone();
         let user = user.to_string();
@@ -101,7 +101,7 @@ impl api::Surveys for MysqlDb {
         })
     }
 
-    fn response(&self, user: &str, survey_id: u64) -> Option<api::Survey> {
+    fn response(&self, user: &str, survey_id: u64) -> Option<repo::Survey> {
         info!("DB: user {user} asks for response for survey id={survey_id}");
         let state = self.state.clone();
         let user = user.to_string();
@@ -121,14 +121,14 @@ impl api::Surveys for MysqlDb {
             for row in rows {
                 let qid: String = row.get("question_id");
                 let ans: String = row.get("answer");
-                questions.push(api::Question {
+                questions.push(repo::Question {
                     id: qid,
                     answer: Answer::from(ans),
                     text: None,
                 });
             }
 
-            Some(api::Survey {
+            Some(repo::Survey {
                 id: survey_id,
                 description: None,
                 questions,
@@ -136,7 +136,7 @@ impl api::Surveys for MysqlDb {
         })
     }
 
-    fn add_answer(&mut self, user: &str, question_id: String, answer: api::Answer) {
+    fn add_answer(&mut self, user: &str, question_id: String, answer: repo::Answer) {
         info!("DB: user {user} adds answer for question id={question_id}");
         let state = self.state.clone();
         let user = user.to_string();

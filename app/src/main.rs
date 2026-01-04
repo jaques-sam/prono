@@ -66,10 +66,6 @@ fn main() {
             todo!()
         }
 
-        fn filled_survey(&self, _user: &str, _survey_id: u64) -> Option<prono::Survey> {
-            todo!()
-        }
-
         fn add_answer(&mut self, _user: &str, _question_id: String, _answer: prono::Answer) {
             todo!()
         }

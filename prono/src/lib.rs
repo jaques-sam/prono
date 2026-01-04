@@ -12,12 +12,12 @@ static SURVEY_CONFIG: &str = include_str!("./surveys/survey_spacex_starship.json
 
 #[derive(Default)]
 pub struct PronoLib {
-    api: Option<Box<dyn api::Surveys>>,
+    api: Option<Box<dyn repo::Surveys>>,
 }
 
 impl PronoLib {
     #[must_use]
-    pub fn new(api: Option<Box<dyn api::Surveys>>) -> Self {
+    pub fn new(api: Option<Box<dyn repo::Surveys>>) -> Self {
         Self { api }
     }
 }

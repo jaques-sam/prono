@@ -8,7 +8,7 @@ pub(crate) use adapters::*;
 pub(crate) use entities::*;
 
 use eframe::AppCreator;
-use prono::{ReadConfig, api};
+use prono::{ReadConfig, repo};
 use std::path::Path;
 
 static CONFIG_FILENAME: &str = "secure_config.toml";
@@ -25,7 +25,7 @@ fn main() -> eframe::Result {
     env_logger::init(); // Log to stdout iso stderr (if you run with e.g. `RUST_LOG=debug`).
 
     let db_config: prono_db::Config = ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db.into();
-    let db: Box<dyn api::Surveys> = Box::new(prono_db::MysqlDb::new(&db_config));
+    let db: Box<dyn repo::Surveys> = Box::new(prono_db::MysqlDb::new(&db_config));
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -47,7 +47,7 @@ fn main() {
     struct ApiThroughRest();
     let _config = ConfigRead {}.read(Path::new(CONFIG_FILENAME));
 
-    impl api::Surveys for ApiThroughRest {
+    impl repo::Surveys for ApiThroughRest {
         fn answer(&self, _user: &str, _question_id: u64) -> Option<prono::api::Answer> {
             todo!()
         }

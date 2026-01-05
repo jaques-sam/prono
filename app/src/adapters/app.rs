@@ -33,12 +33,12 @@ pub struct App {
     user_name: String,
     survey: Option<Survey>,
     #[serde(skip)]
-    prono: Option<Box<dyn prono::Prono>>,
+    prono: Option<Box<dyn prono_api::Surveys>>,
 }
 
 impl App {
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>, prono: impl prono::Prono + 'static) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, prono: impl prono_api::Surveys + 'static) -> Self {
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 

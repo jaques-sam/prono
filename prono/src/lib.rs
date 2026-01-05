@@ -22,23 +22,29 @@ impl PronoLib {
     }
 }
 
-impl Surveys for PronoLib {
-    fn empty_survey(&self) -> Survey {
-        FileSurvey::create_from_file(SURVEY_CONFIG).into()
+impl prono_api::Surveys for PronoLib {
+    fn empty_survey(&self) -> prono_api::Survey {
+        let survey: Survey = FileSurvey::create_from_file(SURVEY_CONFIG).into();
+
+        survey.into()
     }
 
-    fn add_answer(&mut self, user: &str, question_id: String, answer: Answer) {
+    fn add_answer(&mut self, user: &str, question_id: String, answer: prono_api::Answer) {
+        let answer: Answer = answer.into();
         self.api
             .as_mut()
             .expect("prono api adapter not set")
             .add_answer(user, question_id, answer.into());
     }
 
-    fn response(&self, user: &str, survey_id: u64) -> Option<Survey> {
+    fn response(&self, user: &str, survey_id: u64) -> Option<prono_api::Survey> {
         self.api
             .as_ref()
             .expect("prono api adapter not set")
             .response(user, survey_id)
-            .map(Into::into)
+            .map(|survey| {
+                let survey: Survey = survey.into();
+                survey.into()
+            })
     }
 }

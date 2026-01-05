@@ -36,7 +36,6 @@ impl Config {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl From<Config> for prono_db::Config {
     fn from(db_config: Config) -> Self {
         Self {
@@ -44,7 +43,7 @@ impl From<Config> for prono_db::Config {
             port: db_config.port,
             user: db_config.user,
             pass: db_config.pass,
-            db_name: crate::DB_NAME.to_string(),
+            db_name: crate::main_native::DB_NAME.to_string(),
         }
     }
 }

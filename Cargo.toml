@@ -1,5 +1,5 @@
 [workspace]
-members = ["app", "backend", "coverage", "generic", "prono"]
+members = ["app", "backend", "coverage", "generic", "prono", "prono_api"]
 
 [profile.release]
 opt-level = 2 # fast and small wasm

@@ -58,6 +58,24 @@ impl Clear for Answer {
     }
 }
 
+impl From<prono_api::Answer> for Answer {
+    fn from(answer: prono_api::Answer) -> Self {
+        match answer {
+            prono_api::Answer::Text(text) => Answer::Text(text),
+            prono_api::Answer::PredictionDate { day, month, year } => Answer::PredictionDate { day, month, year },
+        }
+    }
+}
+
+impl From<Answer> for prono_api::Answer {
+    fn from(answer: Answer) -> Self {
+        match answer {
+            Answer::Text(text) => prono_api::Answer::Text(text),
+            Answer::PredictionDate { day, month, year } => prono_api::Answer::PredictionDate { day, month, year },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

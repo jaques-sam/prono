@@ -12,6 +12,7 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
 prono = { path = "../prono" }
+prono_api = { path = "../prono_api" }
 
 egui = "0.33.3"
 eframe = { version = "0.33.3", default-features = false, features = [
@@ -29,8 +30,9 @@ chrono = "0.4.42"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-env_logger = "0.11.8"
 prono_db = { path = "../prono_db" }
+
+env_logger = "0.11.8"
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -45,5 +47,6 @@ opt-level = 2 # fast and small wasm
 
 [dev-dependencies]
 generic = { path = "../generic" }
+prono_api = { path = "../prono_api", features = ["test-utils"] }
 
 rstest = "0"

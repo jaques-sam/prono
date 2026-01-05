@@ -2805,6 +2805,7 @@ name = "prono"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "prono_api",
  "rstest",
  "serde",
  "serde_json",
@@ -2824,6 +2825,7 @@ dependencies = [
  "getrandom 0.3.4",
  "log",
  "prono",
+ "prono_api",
  "prono_db",
  "rstest",
  "secure-string",
@@ -2832,6 +2834,10 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
 ]
+
+[[package]]
+name = "prono_api"
+version = "0.1.0"
 
 [[package]]
 name = "prono_db"

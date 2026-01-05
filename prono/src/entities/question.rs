@@ -21,6 +21,25 @@ impl Question {
     }
 }
 
+impl From<prono_api::Question> for Question {
+    fn from(question: prono_api::Question) -> Self {
+        Self {
+            id: question.id,
+            text: question.text,
+            answer: question.answer.into(),
+        }
+    }
+}
+
+impl From<Question> for prono_api::Question {
+    fn from(question: Question) -> Self {
+        Self {
+            id: question.id,
+            text: question.text,
+            answer: question.answer.into(),
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

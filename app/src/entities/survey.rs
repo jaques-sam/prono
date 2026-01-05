@@ -10,18 +10,18 @@ pub struct Survey {
     pub questions: Vec<Question>,
 }
 
-impl From<Survey> for prono::Survey {
+impl From<Survey> for prono_api::Survey {
     fn from(survey: Survey) -> Self {
         Self {
             id: survey.id,
             description: survey.description,
-            questions: survey.questions.into_iter().map(prono::Question::from).collect(),
+            questions: survey.questions.into_iter().map(prono_api::Question::from).collect(),
         }
     }
 }
 
-impl From<prono::Survey> for Survey {
-    fn from(proto_survey: prono::Survey) -> Self {
+impl From<prono_api::Survey> for Survey {
+    fn from(proto_survey: prono_api::Survey) -> Self {
         Self {
             id: proto_survey.id,
             description: proto_survey.description,

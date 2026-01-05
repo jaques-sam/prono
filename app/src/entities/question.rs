@@ -11,13 +11,13 @@ pub struct Question {
 }
 
 impl Question {
-    pub fn update(&mut self, proto_question: prono::Question) -> &mut Self {
+    pub fn update(&mut self, proto_question: prono_api::Question) -> &mut Self {
         self.answer = proto_question.answer.into();
         self
     }
 }
 
-impl From<Question> for prono::Question {
+impl From<Question> for prono_api::Question {
     fn from(question: Question) -> Self {
         Self {
             id: question.id,
@@ -40,8 +40,8 @@ mod tests {
             text: "What is your favorite color?".to_string(),
         };
 
-        let proto_question = prono::Question {
-            answer: prono::Answer::default(),
+        let proto_question = prono_api::Question {
+            answer: prono_api::Answer::default(),
             ..Default::default()
         };
 

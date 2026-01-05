@@ -27,20 +27,20 @@ impl Default for Answer {
     }
 }
 
-impl From<prono::Answer> for Answer {
-    fn from(proto_answer: prono::Answer) -> Self {
+impl From<prono_api::Answer> for Answer {
+    fn from(proto_answer: prono_api::Answer) -> Self {
         match proto_answer {
-            prono::Answer::Text(text) => Answer::Text(text),
-            prono::Answer::PredictionDate { day, month, year } => Answer::PredictionDate { day, month, year },
+            prono_api::Answer::Text(text) => Answer::Text(text),
+            prono_api::Answer::PredictionDate { day, month, year } => Answer::PredictionDate { day, month, year },
         }
     }
 }
 
-impl From<Answer> for prono::Answer {
+impl From<Answer> for prono_api::Answer {
     fn from(proto_answer: Answer) -> Self {
         match proto_answer {
-            Answer::Text(text) => prono::Answer::Text(text),
-            Answer::PredictionDate { day, month, year } => prono::Answer::PredictionDate { day, month, year },
+            Answer::Text(text) => prono_api::Answer::Text(text),
+            Answer::PredictionDate { day, month, year } => prono_api::Answer::PredictionDate { day, month, year },
         }
     }
 }

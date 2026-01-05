@@ -24,6 +24,26 @@ impl Survey {
     }
 }
 
+impl From<prono_api::Survey> for Survey {
+    fn from(survey: prono_api::Survey) -> Self {
+        Self {
+            id: survey.id,
+            description: survey.description,
+            questions: survey.questions.into_iter().map(Question::from).collect(),
+        }
+    }
+}
+
+impl From<Survey> for prono_api::Survey {
+    fn from(survey: Survey) -> Self {
+        Self {
+            id: survey.id,
+            description: survey.description,
+            questions: survey.questions.into_iter().map(prono_api::Question::from).collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::Answer;

@@ -22,11 +22,12 @@
 1. [x] Move prono-api to shared lib prono
 2. [x] Make shared prono-db library
 3. [x] Solve clippy pedantics, add `-Dclippy::pedantic`
-4. [ ] Make db thread async
+4. [x] Make db thread async
 5. [ ] Add coverage checker
 6. [ ] Add unit tests (especially for operations right before db)
 7. [ ] (*) Avoid asking survey responses on cursor movement etc.
 8. [ ] Use Uuid for question IDs directly
 9. [ ] Use TLS for db traffic
 10. [ ] Read config from default location(s) so app can run from any machine
-11. [ ] ...
+11. [ ] Listen onblocked on recv from db thread, update UI async
+12. [ ] ...

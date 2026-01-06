@@ -10,19 +10,106 @@ pub use ports::*;
 
 static SURVEY_CONFIG: &str = include_str!("./surveys/survey_spacex_starship.json");
 
-#[derive(Default)]
-pub struct PronoLib {
-    api: Option<Box<dyn repo::Surveys>>,
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
+
+/// A small sync adapter that exposes the old sync `Prono`-style behaviour while
+/// performing async work on a background thread. Requests are sent to the
+/// background thread via `std::sync::mpsc::Sender` and per-request response
+/// channels are used to deliver results. Callers can `try_recv` on the
+/// returned receiver to avoid blocking the GUI thread.
+pub struct SyncPronoAdapter {
+    req_tx: Sender<Request>,
 }
 
-impl PronoLib {
+enum Request {
+    AddAnswer {
+        user: String,
+        question_id: String,
+        answer: Answer,
+        resp: Sender<PronoResult<()>>,
+    },
+    Response {
+        user: String,
+        survey_id: u64,
+        resp: Sender<Option<Survey>>,
+    },
+}
+
+impl SyncPronoAdapter {
+    /// Create the adapter and spawn a background thread which drives the async API.
+    /// Returns the adapter which can be used from synchronous code. Each call
+    /// that needs a result returns a `Receiver` the caller can `try_recv` on.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the Tokio runtime cannot be created.
     #[must_use]
-    pub fn new(api: Option<Box<dyn repo::Surveys>>) -> Self {
-        Self { api }
+    pub fn new(async_api: Box<dyn repo::Surveys + Send + Sync>) -> Self {
+        let (req_tx, req_rx) = mpsc::channel::<Request>();
+
+        thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("create tokio runtime");
+
+            for req in req_rx {
+                match req {
+                    Request::AddAnswer {
+                        user,
+                        question_id,
+                        answer,
+                        resp,
+                    } => {
+                        let fut = async_api.add_answer(&user, question_id, answer.into());
+                        rt.block_on(async {
+                            let result = fut.await;
+                            let _ = resp.send(result);
+                        });
+                    }
+                    Request::Response { user, survey_id, resp } => {
+                        let fut = async_api.response(&user, survey_id);
+                        let res = rt.block_on(fut).map(Into::into);
+                        let _ = resp.send(res);
+                    }
+                }
+            }
+        });
+
+        Self { req_tx }
+    }
+
+    /// Request response (alias); returns a receiver you can `try_recv` on.
+    #[must_use]
+    pub fn request_response(&self, user: &str, survey_id: u64) -> Receiver<Option<Survey>> {
+        let (tx, rx) = mpsc::channel();
+        let _ = self.req_tx.send(Request::Response {
+            user: user.to_string(),
+            survey_id,
+            resp: tx,
+        });
+        rx
+    }
+
+    /// Request to add an answer; returns a receiver you can `try_recv` on.
+    #[must_use]
+    pub fn request_add_answer(&self, user: &str, question_id: String, answer: Answer) -> Receiver<PronoResult<()>> {
+        let (tx, rx) = mpsc::channel();
+        let _ = self.req_tx.send(Request::AddAnswer {
+            user: user.to_string(),
+            question_id,
+            answer,
+            resp: tx,
+        });
+        rx
     }
 }
 
-impl prono_api::Surveys for PronoLib {
+// It will issue requests to the background thread and try to `try_recv` the per-call
+// response channel. If the response isn't ready yet the method returns `None`.
+// This keeps the GUI thread non-blocking while allowing callers to poll for results.
+impl prono_api::Surveys for SyncPronoAdapter {
     fn empty_survey(&self) -> prono_api::Survey {
         let survey: Survey = FileSurvey::create_from_file(SURVEY_CONFIG).into();
 
@@ -30,21 +117,17 @@ impl prono_api::Surveys for PronoLib {
     }
 
     fn add_answer(&mut self, user: &str, question_id: String, answer: prono_api::Answer) {
-        let answer: Answer = answer.into();
-        self.api
-            .as_mut()
-            .expect("prono api adapter not set")
-            .add_answer(user, question_id, answer.into());
+        let rx = self.request_add_answer(user, question_id, answer.into());
+        if let Ok(Err(e)) = rx.try_recv() {
+            log::error!("Failed to add answer: {e}");
+        }
     }
 
-    fn response(&self, user: &str, survey_id: u64) -> Option<prono_api::Survey> {
-        self.api
-            .as_ref()
-            .expect("prono api adapter not set")
-            .response(user, survey_id)
-            .map(|survey| {
-                let survey: Survey = survey.into();
-                survey.into()
-            })
+    fn response(&self, user: &str, id: u64) -> Option<prono_api::Survey> {
+        let rx = self.request_response(user, id);
+        match rx.try_recv() {
+            Ok(opt) => opt.map(Into::into),
+            _ => None,
+        }
     }
 }

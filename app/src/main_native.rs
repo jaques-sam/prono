@@ -1,8 +1,5 @@
-#![warn(clippy::all, rust_2018_idioms)]
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-
 use eframe::AppCreator;
-use prono::{ReadConfig, repo};
+use prono::ReadConfig;
 use std::path::Path;
 
 static CONFIG_FILENAME: &str = "secure_config.toml";
@@ -23,7 +20,7 @@ pub fn main() -> eframe::Result {
     env_logger::init(); // Log to stdout iso stderr (if you run with e.g. `RUST_LOG=debug`).
 
     let db_config: prono_db::Config = crate::ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db.into();
-    let db: Box<dyn repo::Surveys> = Box::new(prono_db::MysqlDb::new(&db_config));
+    let db: Box<dyn prono::repo::Surveys> = Box::new(prono_db::MysqlDb::new(&db_config));
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -36,6 +33,8 @@ pub fn main() -> eframe::Result {
             ),
         ..Default::default()
     };
-    let prono_lib = prono::PronoLib::new(Some(db));
-    eframe::run_native("eframe template", native_options, build_app(prono_lib))
+
+    let prono = prono::SyncPronoAdapter::new(db);
+
+    eframe::run_native("eframe template", native_options, build_app(prono))
 }

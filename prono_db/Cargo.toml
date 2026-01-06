@@ -6,10 +6,12 @@ edition = "2024"
 [dependencies]
 prono = { path = "../prono" }
 
-sqlx = { version = "0.8.6", features = ["mysql", "runtime-tokio-native-tls"] }
+async-trait = "0.1.89"
 log = "0.4.29"
-tokio = { version = "1.48.0", features = ["rt", "macros"] }
+sqlx = { version = "0.8.6", features = ["mysql", "runtime-tokio-native-tls"] }
 secure-string = "0.3.0"
+thiserror = "2.0.17"
+tokio = { version = "1.48.0", default-features = false, features = ["rt", "macros"] }
 
 [dev-dependencies]
 generic = { path = "../generic" }

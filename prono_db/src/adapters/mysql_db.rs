@@ -116,6 +116,16 @@ impl repo::Surveys for MysqlDb {
     }
 
     async fn add_answer(&self, user: &str, question_id: String, answer: repo::Answer) -> PronoResult<()> {
+        let existing = sqlx::query("SELECT 1 FROM AnswerResponse WHERE user = ? AND question_id = ?")
+            .bind(user)
+            .bind(&question_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DbError::from)?;
+
+        if existing.is_some() {
+            return Err(Error::AnswerExists);
+        }
         let ans = answer.to_string();
         sqlx::query("INSERT INTO AnswerResponse (user, question_id, answer) VALUES (?, ?, ?)")
             .bind(user)

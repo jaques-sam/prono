@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use log::{error, info};
-use prono::PronoResult;
+use prono::{Error, PronoResult};
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::{MySqlPool, Row};
 use std::time::Duration;
 
-use crate::{Config, DbError};
+use crate::DbError;
 use prono::repo::{self, Answer};
 
 pub struct MysqlDb {
@@ -37,6 +37,8 @@ impl MysqlDb {
     /// use secure_string::SecureString;
     /// use prono_db::{Config, MysqlDb};
     ///
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// let config = Config {
     ///     user: SecureString::from("user"),
     ///     pass: SecureString::from("pass"),
@@ -45,32 +47,43 @@ impl MysqlDb {
     ///     db_name: String::from("database"),
     /// };
     ///
-    /// # std::thread::spawn(move || {
-    /// let db = MysqlDb::new(&config);
-    /// #     std::process::exit(0);
-    /// # });
+    /// let db = MysqlDb::connect_async(&config).await.expect("Failed to connect");
+    /// # }
     /// ```
-    #[must_use]
-    pub fn new(secure_config: &Config) -> Self {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("create rt");
-        rt.block_on(async { Self::connect(secure_config).await.expect("connect") })
+    /// ```
+    /// Async constructor that connects using the caller's Tokio runtime.
+    ///
+    /// Use this from an existing runtime to ensure the DB connection is created
+    /// on the same runtime as other async work.
+    pub async fn connect_async(secure_config: &crate::Config) -> Result<Self, sqlx::Error> {
+        Self::connect(secure_config).await
     }
 
     /// # Errors
     ///
     /// This function will return an error if the database connection fails.
-    pub async fn connect(secure_config: &Config) -> Result<Self, sqlx::Error> {
+    async fn connect(secure_config: &crate::Config) -> Result<Self, sqlx::Error> {
         let database_url = secure_config.construct_url();
         let database_url = database_url.unsecure();
         let pool = MySqlPoolOptions::new()
             .max_connections(5)
-            .idle_timeout(Duration::from_secs(5))
+            .idle_timeout(Duration::from_secs(10))
             .connect(database_url)
             .await?;
+        info!("MySQL database connected.");
+
         Ok(Self { pool })
+    }
+}
+
+#[async_trait]
+impl repo::Db for MysqlDb {
+    type Config = crate::Config;
+
+    async fn init(config: Self::Config) -> PronoResult<Self> {
+        info!("Initializing MySQL database...");
+
+        Ok(Self::connect(&config).await.map_err(DbError::from)?)
     }
 }
 

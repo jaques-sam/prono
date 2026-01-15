@@ -2759,6 +2759,7 @@ dependencies = [
  "rstest",
  "secure-string",
  "serde",
+ "tokio",
  "toml",
  "wasm-bindgen-futures",
  "web-sys",

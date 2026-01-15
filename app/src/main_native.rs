@@ -16,15 +16,11 @@ fn build_app<'a>(prono: impl prono_api::Surveys + 'static) -> AppCreator<'a> {
 ///
 /// # Errors
 /// - fails if the graphics context cannot be created
-pub fn main() -> eframe::Result {
+#[tokio::main]
+pub async fn main() -> eframe::Result {
     env_logger::init(); // Log to stdout iso stderr (if you run with e.g. `RUST_LOG=debug`).
 
     let db_config: prono_db::Config = crate::ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db.into();
-
-    let db_future = async move {
-        let db = prono_db::MysqlDb::connect_async(&db_config).await.expect("connect");
-        Box::new(db) as Box<dyn prono::repo::Db + Send + Sync>
-    };
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -38,7 +34,13 @@ pub fn main() -> eframe::Result {
         ..Default::default()
     };
 
-    let prono = prono::SyncPronoAdapter::new_with_async_api_future(db_future);
+    let prono = match prono::SyncPronoAdapter::new_with_db_config::<prono_db::MysqlDb>(db_config).await {
+        Err(e) => {
+            log::error!("{e}");
+            return Ok(());
+        }
+        Ok(prono) => prono,
+    };
 
     eframe::run_native("eframe template", native_options, build_app(prono))
 }

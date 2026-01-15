@@ -7,11 +7,11 @@ mod use_cases;
 
 pub use entities::*;
 pub use ports::*;
+use tokio::spawn;
 
 static SURVEY_CONFIG: &str = include_str!("./surveys/survey_spacex_starship.json");
 
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::thread;
 
 /// A small sync adapter that exposes the old sync `Prono`-style behaviour while
 /// performing async work on a background thread. Requests are sent to the
@@ -37,42 +37,32 @@ enum Request {
 }
 
 impl SyncPronoAdapter {
-    /// Create the adapter and spawn a background thread which drives the async API.
-    /// Returns the adapter which can be used from synchronous code. Each call
-    /// that needs a result returns a `Receiver` the caller can `try_recv` on.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if the Tokio runtime cannot be created.
-    #[must_use]
-    pub fn new(async_api: Box<dyn repo::Surveys + Send + Sync>) -> Self {
-        // Delegate to the future-based constructor by wrapping the provided
-        // `async_api` in a ready future so it will be moved into the background
-        // thread and used on that thread's runtime.
-        Self::new_with_async_api_future(async move { async_api })
-    }
+    // The adapter is constructed using `new_with_db_config`, which initializes
+    // the concrete `repo::Db` implementation on the adapter's background
+    // runtime so all async work (such as DB connection setup) runs on the
+    // same runtime used to service requests.
 
-    /// Create the adapter and spawn a background thread which drives the async API.
-    /// The provided future is executed on the background thread's Tokio runtime
-    /// and must resolve to a boxed `repo::Surveys` implementation. This allows
-    /// callers to construct async resources (like DB connections) on the same
-    /// runtime that the adapter uses for handling requests.
-    #[must_use]
-    pub fn new_with_async_api_future<Fut>(api_fut: Fut) -> Self
+    /// Construct the adapter and initialize a concrete `repo::Db` implementation
+    /// on the adapter's background runtime using the provided `config`.
+    ///
+    /// Call sites supply the concrete DB implementation type as a type
+    /// parameter, e.g. `SyncPronoAdapter::new_with_db_config::<prono_db::MysqlDb>(cfg)`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the database initialization fails.
+    pub async fn new_with_db_config<D>(config: D::Config) -> PronoResult<Self>
     where
-        Fut: std::future::Future<Output = Box<dyn repo::Surveys + Send + Sync>> + Send + 'static,
+        D: repo::Db + 'static,
+        D::Config: Send + 'static,
     {
         let (req_tx, req_rx) = mpsc::channel::<Request>();
 
-        thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("create tokio runtime");
+        let db = D::init(config).await?;
 
-            // Build the async API on the background runtime so all async work
-            // (including DB connection setup) happens on the same runtime.
-            let async_api = rt.block_on(api_fut);
+        // Task not 100% needed if the app requires a database connection
+        spawn(async move {
+            let async_api: Box<dyn repo::Surveys + Send + Sync> = Box::new(db);
 
             for req in req_rx {
                 match req {
@@ -82,25 +72,21 @@ impl SyncPronoAdapter {
                         answer,
                         resp,
                     } => {
-                        let fut = async_api.add_answer(&user, question_id, answer.into());
-                        rt.block_on(async {
-                            let result = fut.await;
-                            if let Err(ref e) = result {
-                                log::error!("Failed to add answer for user {user}: {e}");
-                            }
-                            let _ = resp.send(result);
-                        });
+                        let result = async_api.add_answer(&user, question_id, answer.into()).await;
+                        if let Err(ref e) = result {
+                            log::error!("Failed to add answer for user {user}: {e}");
+                        }
+                        let _ = resp.send(result);
                     }
                     Request::Response { user, survey_id, resp } => {
-                        let fut = async_api.response(&user, survey_id);
-                        let res = rt.block_on(fut).map(Into::into);
-                        let _ = resp.send(res);
+                        let result = async_api.response(&user, survey_id).await.map(Into::into);
+                        let _ = resp.send(result);
                     }
                 }
             }
         });
 
-        Self { req_tx }
+        Ok(Self { req_tx })
     }
 
     /// Request response (alias); returns a receiver you can `try_recv` on.

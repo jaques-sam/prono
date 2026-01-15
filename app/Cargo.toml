@@ -31,6 +31,7 @@ chrono = "0.4.42"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 prono = { path = "../prono" }
 prono_db = { path = "../prono_db" }
+tokio = { version = "1.49.0", default-features = false, features = ["rt", "rt-multi-thread", "macros"] }
 
 env_logger = "0.11.8"
 

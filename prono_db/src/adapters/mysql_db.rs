@@ -13,11 +13,9 @@ pub struct MysqlDb {
 }
 
 impl MysqlDb {
-    /// Represents a mysql database connection pool and runtime.
+    /// # Errors
     ///
-    /// # Panics
-    ///
-    /// This function will panic if:
+    /// This function will return an error if:
     /// - The database URL cannot be constructed from the provided `Config`.
     /// - The database URL is invalid.
     /// - The connection to the database fails.
@@ -31,37 +29,10 @@ impl MysqlDb {
     ///
     /// A new instance of `MysqlDb`.
     ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use secure_string::SecureString;
-    /// use prono_db::{Config, MysqlDb};
-    ///
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// let config = Config {
-    ///     user: SecureString::from("user"),
-    ///     pass: SecureString::from("pass"),
-    ///     host: SecureString::from("host"),
-    ///     port: SecureString::from("1234"),
-    ///     db_name: String::from("database"),
-    /// };
-    ///
-    /// let db = MysqlDb::connect_async(&config).await.expect("Failed to connect");
-    /// # }
-    /// ```
-    /// ```
     /// Async constructor that connects using the caller's Tokio runtime.
     ///
     /// Use this from an existing runtime to ensure the DB connection is created
     /// on the same runtime as other async work.
-    pub async fn connect_async(secure_config: &crate::Config) -> Result<Self, sqlx::Error> {
-        Self::connect(secure_config).await
-    }
-
-    /// # Errors
-    ///
-    /// This function will return an error if the database connection fails.
     async fn connect(secure_config: &crate::Config) -> Result<Self, sqlx::Error> {
         let database_url = secure_config.construct_url();
         let database_url = database_url.unsecure();

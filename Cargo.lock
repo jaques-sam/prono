@@ -2780,7 +2780,6 @@ dependencies = [
  "secure-string",
  "sqlx",
  "thiserror 2.0.17",
- "tokio",
 ]
 
 [[package]]

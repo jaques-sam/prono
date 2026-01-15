@@ -46,6 +46,22 @@ impl SyncPronoAdapter {
     /// This function will panic if the Tokio runtime cannot be created.
     #[must_use]
     pub fn new(async_api: Box<dyn repo::Surveys + Send + Sync>) -> Self {
+        // Delegate to the future-based constructor by wrapping the provided
+        // `async_api` in a ready future so it will be moved into the background
+        // thread and used on that thread's runtime.
+        Self::new_with_async_api_future(async move { async_api })
+    }
+
+    /// Create the adapter and spawn a background thread which drives the async API.
+    /// The provided future is executed on the background thread's Tokio runtime
+    /// and must resolve to a boxed `repo::Surveys` implementation. This allows
+    /// callers to construct async resources (like DB connections) on the same
+    /// runtime that the adapter uses for handling requests.
+    #[must_use]
+    pub fn new_with_async_api_future<Fut>(api_fut: Fut) -> Self
+    where
+        Fut: std::future::Future<Output = Box<dyn repo::Surveys + Send + Sync>> + Send + 'static,
+    {
         let (req_tx, req_rx) = mpsc::channel::<Request>();
 
         thread::spawn(move || {
@@ -53,6 +69,10 @@ impl SyncPronoAdapter {
                 .enable_all()
                 .build()
                 .expect("create tokio runtime");
+
+            // Build the async API on the background runtime so all async work
+            // (including DB connection setup) happens on the same runtime.
+            let async_api = rt.block_on(api_fut);
 
             for req in req_rx {
                 match req {
@@ -65,6 +85,9 @@ impl SyncPronoAdapter {
                         let fut = async_api.add_answer(&user, question_id, answer.into());
                         rt.block_on(async {
                             let result = fut.await;
+                            if let Err(ref e) = result {
+                                log::error!("Failed to add answer for user {user}: {e}");
+                            }
                             let _ = resp.send(result);
                         });
                     }

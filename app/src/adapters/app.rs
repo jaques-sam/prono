@@ -1,6 +1,7 @@
 use egui::TextEdit;
 use serde::{Deserialize, Serialize};
 
+use super::timeline;
 use crate::{Answer, Question, Survey};
 
 static INIT_ANSWER_HINT: &str = "your answer here";
@@ -56,9 +57,7 @@ impl App {
     }
 
     fn clear(&mut self) {
-        if let Some(survey) = &mut self.survey {
-            survey.clear();
-        }
+        self.survey = None;
     }
 
     fn update_survey(&mut self, ui: &mut egui::Ui) {
@@ -66,7 +65,17 @@ impl App {
             ui.heading(&survey.description);
             ui.spacing();
             ui.hyperlink_to("SpaceX Starship", "http://www.spacex.com"); // TODO [4]: move to survey
+
             update_questions(ui, &mut survey.questions);
+
+            ui.group(|ui| {
+                ui.label("Timeline of predictions:");
+                let answers: Vec<Answer> = survey.questions.iter().map(|q| q.answer.clone()).collect();
+                let timeline_dates = timeline::extract_dates(vec![answers]);
+                timeline::draw(ui, &timeline_dates);
+            });
+            ui.spacing();
+
             // TODO [5]: update survey to api
         } else if ui.button("Start survey").clicked() {
             self.survey = Some(
@@ -128,13 +137,14 @@ impl eframe::App for App {
                     self.clear();
                 }
                 if ui.button("Submit").clicked() {
-                    let survey = self.survey.take().expect("survey to submit");
-                    for question in survey.questions {
-                        self.prono.as_mut().expect("no prono API adapter set").add_answer(
-                            &self.user_name,
-                            question.id,
-                            question.answer.into(),
-                        );
+                    if let Some(survey) = &self.survey {
+                        for question in &survey.questions {
+                            self.prono.as_mut().expect("no prono API adapter set").add_answer(
+                                &self.user_name,
+                                question.id.clone(),
+                                question.answer.clone().into(),
+                            );
+                        }
                     }
                 }
             });

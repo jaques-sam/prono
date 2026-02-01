@@ -1,7 +1,7 @@
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Answer {
     Text(String),
     PredictionDate { day: Option<u8>, month: u8, year: u16 },

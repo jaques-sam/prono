@@ -10,12 +10,12 @@
 6. [x] Do not allow duplicates in db
 7. [ ] Add drop down list for months or restrict number
 8. [ ] Restrict users for filling in
-9. [ ] Show all answers
+9. [x] Show all answers
 10. [ ] In table as output
-11. [ ] In time graph
+11. [x] In time graph
 12. [ ] Implement MQTT server in ./server
 13. [ ] Implement MQTT client
-14. [ ] ...
+14. [ ] In time graph of all user answers
 
 
 ## Technical Dept
@@ -23,8 +23,8 @@
 2. [x] Make shared prono-db library
 3. [x] Solve clippy pedantics, add `-Dclippy::pedantic`
 4. [x] Make db thread async
-5. [ ] Add coverage checker
-6. [ ] Add unit tests (especially for operations right before db)
+5. [ ] Add unit tests (especially for operations right before db)
+6. [ ] Add coverage checker
 7. [ ] (*) Avoid asking survey responses on cursor movement etc.
 8. [ ] Use Uuid for question IDs directly
 9. [ ] Use TLS for db traffic

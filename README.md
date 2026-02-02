@@ -3,58 +3,59 @@
 [![dependency status](https://deps.rs/repo/github/jaques-sam/prono/status.svg)](https://deps.rs/repo/github/jaques-sam/prono)
 [![Build Status](https://github.com/jaques-sam/prono/workflows/CI/badge.svg)](https://github.com/jaques-sam/prono/actions?workflow=CI)
 
-Made possible by [this template repo](https://github.com/emilk/eframe_template) for [eframe](https://github.com/emilk/egui/tree/master/crates/eframe).
+- [Prono App](#prono-app)
+  - [Summary](#summary)
+  - [Building and Running](#building-and-running)
+  - [Configuration](#configuration)
+    - [Parameters](#parameters)
+    - [Feed into the Prono App](#feed-into-the-prono-app)
 
 
-## About egui
+## Summary
 
-The official egui docs are at <https://docs.rs/egui>. If you prefer watching a video introduction, check out <https://www.youtube.com/watch?v=NtUkr_z7l84>. For inspiration, check out the [the egui web demo](https://emilk.github.io/egui/index.html) and follow the links in it to its source code.
+Prono is an application to conduct surveys and store the answers in a database.
 
-## Testing locally
+It's multi-platform (desktop and web) and written in Rust using the [egui](ehttps://github.com/emilk/egui) framework.
 
-The first time you clone the repo, ask the pub GPG key from @jaques-sam and import it using `gpg --import <KEY_FILENAME>`. Then decrypt the secure file(s) with `git-crypt unlock` executed in the repo.
+For now, the web app is deployed as github page: https://jaques-sam.github.io/prono/ [INCOMPLETE].
 
-### Pre-requisites
+To run the desktop app, see instructions below.
 
-Make sure you are using the latest version of stable rust by running `rustup update`.
+## Building and Running
 
-`RUST_LOG=debug cargo run --release --bin prono-app`
+```sh
+cargo run --bin prono-app
+```
+To see more logs, add `RUST_LOG=debug|info` in front.
 
-Install necessary cargo tools:
 
-Use binstall: `curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash`
-Cargo tools: `cargo binstall cargo-nextest grcov --secure`
+## Configuration
 
-On Linux you need to first run:
+### Parameters
 
-`sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev`
+Needed for the Prono database:
 
-On Fedora Rawhide you need to run:
+- host: hostname or IP address of the database server
+- port: port number (16 bit) of the database server
+- user: username to connect to the database
+- pass: password to connect to the database
 
-`dnf install clang clang-devel clang-tools-extra libxkbcommon-devel pkg-config openssl-devel libxcb-devel gtk3-devel atk fontconfig-devel`
 
-### Web Locally
+### Feed into the Prono App
 
-You can compile your app to [WASM](https://en.wikipedia.org/wiki/WebAssembly) and publish it as a web page.
+Either provide a `config.toml` file in `$HOME/.config/prono/` with the following contents:
 
-We use [Trunk](https://trunkrs.dev/) to build for web target.
-1. Install the required target with `rustup target add wasm32-unknown-unknown`.
-2. Install Trunk with `cargo install --locked trunk`.
-3. Run `trunk serve` to build and serve on `http://127.0.0.1:8080`. Trunk will rebuild automatically if you edit the project.
-4. Open `http://127.0.0.1:8080/index.html#dev` in a browser. See the warning below.
+```toml
+[db]
+host = "the_prono_db_host"
+port = the_prono_db_port
+user = "the_prono_db_user"
+pass = "the_prono_db_password"
+```
 
-> `assets/sw.js` script will try to cache our app, and loads the cached version when it cannot connect to server allowing your app to work offline (like PWA).
-> appending `#dev` to `index.html` will skip this caching, allowing us to load the latest builds during development.
+or set the following environment variables:
 
-### Web Deploy
-
-1. Just run `trunk build --release`.
-2. It will generate a `dist` directory as a "static html" website
-3. Upload the `dist` directory to any of the numerous free hosting websites including [GitHub Pages](https://docs.github.com/en/free-pro-team@latest/github/working-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
-4. we already provide a workflow that auto-deploys our app to GitHub pages if you enable it.
-   See [contribution doc](CONTRIBUTION.md).
-
-## Updating egui
-
-As of 2023, egui is in active development with frequent releases with breaking changes.
-When updating `egui` and `eframe` it is recommended you do so one version at the time, and read about the changes in [the egui changelog](https://github.com/emilk/egui/blob/master/CHANGELOG.md) and [eframe changelog](https://github.com/emilk/egui/blob/master/crates/eframe/CHANGELOG.md).
+- `PRONO_DB_HOST`
+- `PRONO_DB_PORT`
+- `PRONO_DB_USER`
+- `PRONO_DB_PASS`

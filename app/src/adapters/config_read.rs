@@ -1,20 +1,26 @@
-use std::path::Path;
+use std::{fs, path};
 
-use log::debug;
 use prono::ReadConfig;
 
 use crate::SecureConfig;
 
-static HOST_OVERRIDE_ENV_VAR: &str = "DB_HOST_OVERRIDE";
-static PORT_OVERRIDE_ENV_VAR: &str = "DB_PORT_OVERRIDE";
-static USER_OVERRIDE_ENV_VAR: &str = "DB_USER_OVERRIDE";
-static PASS_OVERRIDE_ENV_VAR: &str = "DB_PASS_OVERRIDE";
+static HOST_OVERRIDE_ENV_VAR: &str = "PRONO_DB_HOST";
+static PORT_OVERRIDE_ENV_VAR: &str = "PRONO_DB_PORT";
+static USER_OVERRIDE_ENV_VAR: &str = "PRONO_DB_USER";
+static PASS_OVERRIDE_ENV_VAR: &str = "PRONO_DB_PASS";
+static CONFIG_FILENAME: &str = "secure_config.toml";
 
 #[derive(Default)]
 pub struct ConfigRead {}
 
 impl ReadConfig<SecureConfig> for ConfigRead {
-    fn read(&self, config: &Path) -> SecureConfig {
+    fn default_config_path() -> path::PathBuf {
+        let path = dirs::config_dir().unwrap().join("prono").join(CONFIG_FILENAME);
+        log::debug!("Default config path: {}", path.display());
+        path
+    }
+
+    fn read<P: AsRef<path::Path>>(config: P) -> SecureConfig {
         let overrides = crate::db_config::Overrides {
             host: std::env::var(HOST_OVERRIDE_ENV_VAR).ok().map(Into::into),
             port: std::env::var(PORT_OVERRIDE_ENV_VAR).ok().map(Into::into),
@@ -22,14 +28,19 @@ impl ReadConfig<SecureConfig> for ConfigRead {
             pass: std::env::var(PASS_OVERRIDE_ENV_VAR).ok().map(Into::into),
         };
 
-        let secure_config = std::fs::read_to_string(config).expect("secure config is missing");
-        let secure_config: Option<SecureConfig> = toml::from_str(&secure_config).ok();
+        let secure_config = fs::read_to_string(config).expect("secure config is missing");
+        let secure_config: Option<SecureConfig> = toml::from_str(&secure_config)
+            .map_err(|e| {
+                log::error!("Failed to parse secure config: {e}");
+                e
+            })
+            .ok(); // TODO handle errors properly
 
         if let Some(secure_config) = secure_config {
-            debug!("Some or no secret environment vars are set. Read remaining config from secure_config.toml");
+            log::info!("Some or no secret environment vars are set. Read remaining config from secure_config.toml");
             secure_config.override_db_config(overrides)
         } else {
-            debug!("All secret environment vars are set");
+            log::info!("No/invalid secure config file, read secret environment vars...");
             SecureConfig {
                 db: overrides
                     .try_into()
@@ -43,15 +54,16 @@ impl ReadConfig<SecureConfig> for ConfigRead {
 mod tests {
     use super::*;
 
+    use std::path::Path;
+
     #[test]
     fn test_read_valid_config_file() {
-        let reader = ConfigRead {};
         let filename = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/.."))
             .join(file!())
             .parent()
             .unwrap()
             .join("test_config.toml");
-        reader.read(&filename);
+        ConfigRead::read(&filename);
     }
 
     #[test]
@@ -59,7 +71,6 @@ mod tests {
     fn test_read_without_config_file_fails() {
         generic::add_panic_hook();
 
-        let reader = ConfigRead {};
-        reader.read(Path::new("file_does_not_exist.toml"));
+        ConfigRead::read(Path::new("file_does_not_exist.toml"));
     }
 }

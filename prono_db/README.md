@@ -5,7 +5,7 @@
 When the database is empty.
 
 Login using following command.
-Find the required parameters in [secure_config](../secure_config.toml)
+Use the required parameters that you've configured in [readme section](../README.md#configuration).
 
 ```bash
 mysql -h ${HOST} -P ${PORT} -u ${USER} -p -D db_prono

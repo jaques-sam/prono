@@ -1,8 +1,6 @@
 use eframe::AppCreator;
 use prono::ReadConfig;
-use std::path::Path;
 
-static CONFIG_FILENAME: &str = "secure_config.toml";
 pub static DB_NAME: &str = "db_prono";
 
 fn build_app<'a>(prono: impl prono_api::Surveys + 'static) -> AppCreator<'a> {
@@ -20,7 +18,8 @@ fn build_app<'a>(prono: impl prono_api::Surveys + 'static) -> AppCreator<'a> {
 pub async fn main() -> eframe::Result {
     env_logger::init(); // Log to stdout iso stderr (if you run with e.g. `RUST_LOG=debug`).
 
-    let db_config: prono_db::Config = crate::ConfigRead {}.read(Path::new(CONFIG_FILENAME)).db.into();
+    let default_config_path = crate::ConfigRead::default_config_path();
+    let db_config: prono_db::Config = crate::ConfigRead::read(default_config_path).db.into();
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

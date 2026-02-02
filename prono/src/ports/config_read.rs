@@ -1,5 +1,4 @@
-use std::path::Path;
-
 pub trait ReadConfig<T> {
-    fn read(&self, config: &Path) -> T;
+    fn default_config_path() -> std::path::PathBuf;
+    fn read<P: AsRef<std::path::Path>>(config: P) -> T;
 }

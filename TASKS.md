@@ -28,6 +28,6 @@
 7. [ ] (*) Avoid asking survey responses on cursor movement etc.
 8. [ ] Use Uuid for question IDs directly
 9. [ ] Use TLS for db traffic
-10. [ ] Read config from default location(s) so app can run from any machine
+10. [x] Read config from default location(s) so app can run from any machine
 11. [ ] Listen onblocked on recv from db thread, update UI async
 12. [ ] ...

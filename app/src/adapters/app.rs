@@ -136,15 +136,15 @@ impl eframe::App for App {
                 if ui.button("Reset").clicked() {
                     self.clear();
                 }
-                if ui.button("Submit").clicked() {
-                    if let Some(survey) = &self.survey {
-                        for question in &survey.questions {
-                            self.prono.as_mut().expect("no prono API adapter set").add_answer(
-                                &self.user_name,
-                                question.id.clone(),
-                                question.answer.clone().into(),
-                            );
-                        }
+                if ui.button("Submit").clicked()
+                    && let Some(survey) = &self.survey
+                {
+                    for question in &survey.questions {
+                        self.prono.as_mut().expect("no prono API adapter set").add_answer(
+                            &self.user_name,
+                            question.id.clone(),
+                            question.answer.clone().into(),
+                        );
                     }
                 }
             });

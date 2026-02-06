@@ -36,11 +36,13 @@ impl From<prono_api::Answer> for Answer {
     }
 }
 
-impl From<Answer> for prono_api::Answer {
-    fn from(proto_answer: Answer) -> Self {
-        match proto_answer {
-            Answer::Text(text) => prono_api::Answer::Text(text),
-            Answer::PredictionDate { day, month, year } => prono_api::Answer::PredictionDate { day, month, year },
+impl From<crate::Answer> for prono_api::Answer {
+    fn from(a: crate::Answer) -> Self {
+        match a {
+            crate::Answer::Text(s) => prono_api::Answer::Text(s), // only inner String cloned
+            crate::Answer::PredictionDate { day, month, year } => {
+                prono_api::Answer::PredictionDate { day, month, year }
+            }
         }
     }
 }

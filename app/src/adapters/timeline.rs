@@ -33,12 +33,12 @@ struct TimelineDrawContext {
     min_months: i32,
 }
 
-pub fn extract_dates(all_answers: Vec<Vec<Answer>>) -> Vec<TimelineDate> {
+pub fn extract_dates(all_answers: Vec<Vec<&Answer>>) -> Vec<TimelineDate> {
     let mut dates: Vec<TimelineDate> = all_answers
         .into_iter()
         .flat_map(std::iter::IntoIterator::into_iter)
         .filter_map(|answer| match answer {
-            Answer::PredictionDate { day: _, month, year } => Some(TimelineDate::new(year, month)),
+            Answer::PredictionDate { day: _, month, year } => Some(TimelineDate::new(*year, *month)),
             Answer::Text(_) => None,
         })
         .collect();
@@ -221,20 +221,19 @@ mod tests {
 
     #[test]
     fn test_extract_dates_empty() {
-        let all_answers: Vec<Vec<Answer>> = vec![];
-        let dates = extract_dates(all_answers);
+        let dates = extract_dates(Vec::new());
         assert!(dates.is_empty());
     }
 
     #[test]
     fn test_extract_dates_with_predictions() {
         let all_answers = vec![vec![
-            Answer::PredictionDate {
+            &Answer::PredictionDate {
                 day: Some(15),
                 month: 5,
                 year: 2024,
             },
-            Answer::PredictionDate {
+            &Answer::PredictionDate {
                 day: Some(20),
                 month: 3,
                 year: 2023,
@@ -253,12 +252,12 @@ mod tests {
     #[test]
     fn test_extract_dates_with_optional_day() {
         let all_answers = vec![vec![
-            Answer::PredictionDate {
+            &Answer::PredictionDate {
                 day: None,
                 month: 5,
                 year: 2024,
             },
-            Answer::PredictionDate {
+            &Answer::PredictionDate {
                 day: Some(15),
                 month: 5,
                 year: 2024,
@@ -275,12 +274,12 @@ mod tests {
     #[test]
     fn test_extract_dates_deduplication() {
         let all_answers = vec![vec![
-            Answer::PredictionDate {
+            &Answer::PredictionDate {
                 day: Some(15),
                 month: 5,
                 year: 2024,
             },
-            Answer::PredictionDate {
+            &Answer::PredictionDate {
                 day: Some(20),
                 month: 5,
                 year: 2024,
@@ -295,13 +294,14 @@ mod tests {
 
     #[test]
     fn test_extract_dates_ignores_text_answers() {
+        let answer = Answer::Text(String::from("some text"));
         let all_answers = vec![vec![
-            Answer::PredictionDate {
+            &Answer::PredictionDate {
                 day: Some(15),
                 month: 5,
                 year: 2024,
             },
-            Answer::Text("some text".to_string()),
+            &answer,
         ]];
 
         let dates = extract_dates(all_answers);

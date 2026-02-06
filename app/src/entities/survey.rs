@@ -39,7 +39,7 @@ impl From<prono_api::Survey> for Survey {
 }
 
 impl Survey {
-    pub fn clear(&mut self) {
+    pub(crate) fn empty(&mut self) {
         for question in &mut self.questions {
             question.answer.empty();
         }

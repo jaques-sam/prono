@@ -9,13 +9,13 @@
 5. [ ] Descriptions of survey & questions are not part of db surveys -> busy
 6. [x] Do not allow duplicates in db
 7. [ ] Add drop down list for months or restrict number
-8. [ ] Restrict users for filling in
-9. [x] Show all answers
-10. [ ] In table as output
-11. [x] In time graph
-12. [ ] Implement MQTT server in ./server
-13. [ ] Implement MQTT client
-14. [ ] In time graph of all user answers
+8. [x] Show all answers
+9.  [ ] In table as output
+10. [x] In time graph
+11. [ ] Implement MQTT server in ./server
+12. [ ] Implement MQTT client
+13. [ ] In time graph of all user answers
+14. [ ] Restrict users for filling in
 
 
 ## Technical Dept

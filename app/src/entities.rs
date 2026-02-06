@@ -5,9 +5,11 @@ mod question;
 #[cfg(not(target_arch = "wasm32"))]
 mod secure_config;
 mod survey;
+mod survey_state;
 
 pub use answer::*;
 pub use question::*;
 #[cfg(not(target_arch = "wasm32"))]
 pub use secure_config::*;
 pub use survey::*;
+pub use survey_state::*;

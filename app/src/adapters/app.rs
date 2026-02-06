@@ -2,7 +2,7 @@ use egui::TextEdit;
 use serde::{Deserialize, Serialize};
 
 use super::timeline;
-use crate::{Answer, Question, Survey};
+use crate::{Answer, Question, SurveyState};
 
 static INIT_ANSWER_HINT: &str = "your answer here";
 
@@ -34,7 +34,7 @@ fn update_questions(ui: &mut egui::Ui, questions: &mut Vec<Question>) {
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
     user_name: String,
-    survey: Option<Survey>,
+    survey_state: SurveyState,
     #[serde(skip)]
     prono: Option<Box<dyn prono_api::Surveys>>,
 }
@@ -56,36 +56,62 @@ impl App {
         app
     }
 
-    fn clear(&mut self) {
-        self.survey = None;
+    fn draw_timeline_from_answers(&self, ui: &mut egui::Ui) {
+        ui.spacing();
+        ui.separator();
+
+        match &self.survey_state {
+            SurveyState::InProgress(survey) => {
+                ui.label("Timeline of your predictions");
+                let answers: Vec<&Answer> = survey.questions.iter().map(|q| &q.answer).collect();
+                let timeline_dates = timeline::extract_dates(vec![answers]);
+                timeline::draw(ui, &timeline_dates);
+            }
+            SurveyState::Completed => {
+                ui.label("Timeline of all predictions");
+                // let answers: Vec<&Answer> = self
+                //     .prono
+                //     .as_ref()
+                //     .expect("no prono API adapter set")
+                //     .get_answers() // TODO [13]: Show timeline of all answers
+                //     .into_iter()
+                //     .map(|a| a.answer)
+                //     .collect();
+                let timeline_dates = Vec::new(); // timeline::extract_dates(vec![answers]);
+                timeline::draw(ui, &timeline_dates);
+            }
+            SurveyState::NotStarted => {}
+        }
     }
 
     fn update_survey(&mut self, ui: &mut egui::Ui) {
-        if let Some(survey) = &mut self.survey {
-            ui.heading(&survey.description);
-            ui.spacing();
-            ui.hyperlink_to("SpaceX Starship", "http://www.spacex.com"); // TODO [4]: move to survey
+        match &mut self.survey_state {
+            SurveyState::InProgress(survey) => {
+                ui.heading(&survey.description);
+                ui.spacing();
+                ui.hyperlink_to("SpaceX Starship", "http://www.spacex.com"); // TODO [4]: move to survey
 
-            update_questions(ui, &mut survey.questions);
+                update_questions(ui, &mut survey.questions);
 
-            ui.group(|ui| {
-                ui.label("Timeline of predictions:");
-                let answers: Vec<Answer> = survey.questions.iter().map(|q| q.answer.clone()).collect();
-                let timeline_dates = timeline::extract_dates(vec![answers]);
-                timeline::draw(ui, &timeline_dates);
-            });
-            ui.spacing();
-
-            // TODO [5]: update survey to api
-        } else if ui.button("Start survey").clicked() {
-            self.survey = Some(
-                self.prono
-                    .as_ref()
-                    .expect("no prono API adapter set")
-                    .empty_survey()
-                    .into(),
-            );
+                ui.spacing();
+            }
+            SurveyState::Completed => {
+                ui.label("Survey completed.");
+                // TODO [13]: Show timeline of all answers
+            }
+            SurveyState::NotStarted => {
+                if ui.button("Start survey").clicked() {
+                    self.survey_state = SurveyState::InProgress(
+                        self.prono
+                            .as_ref()
+                            .expect("no prono API adapter set")
+                            .empty_survey()
+                            .into(),
+                    );
+                }
+            }
         }
+        self.draw_timeline_from_answers(ui);
     }
 }
 
@@ -122,32 +148,34 @@ impl eframe::App for App {
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("Prono");
 
-            ui.horizontal(|ui| {
-                ui.label("Username:");
-                ui.add(TextEdit::singleline(&mut self.user_name).hint_text("Please fill in your name"));
-            });
-
-            self.update_survey(ui);
-
-            ui.horizontal(|ui| {
-                if self.survey.is_none() {
-                    return;
+            ui.horizontal(|ui| match &mut self.survey_state {
+                SurveyState::NotStarted => {
+                    ui.label("Username:");
+                    ui.add(TextEdit::singleline(&mut self.user_name).hint_text("Please fill in your name"));
                 }
-                if ui.button("Reset").clicked() {
-                    self.clear();
+                SurveyState::InProgress(results) => {
+                    if ui.button("Reset").clicked() {
+                        results.empty();
+                    } else if ui.button("Submit").clicked() {
+                        for question in results.questions.drain(..) {
+                            self.prono.as_mut().expect("no prono API adapter set").add_answer(
+                                &self.user_name,
+                                question.id,
+                                question.answer.into(),
+                            );
+                        }
+                        self.survey_state = SurveyState::Completed;
+                    }
                 }
-                if ui.button("Submit").clicked()
-                    && let Some(survey) = &self.survey
-                {
-                    for question in &survey.questions {
-                        self.prono.as_mut().expect("no prono API adapter set").add_answer(
-                            &self.user_name,
-                            question.id.clone(),
-                            question.answer.clone().into(),
-                        );
+                SurveyState::Completed => {
+                    if cfg!(debug_assertions) && ui.button("Survey again").clicked() {
+                        self.user_name.clear();
+                        self.survey_state = SurveyState::NotStarted;
                     }
                 }
             });
+
+            self.update_survey(ui);
 
             ui.separator();
 

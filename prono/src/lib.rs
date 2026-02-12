@@ -1,11 +1,10 @@
-#![warn(clippy::all, rust_2018_idioms)]
-
 // CLEAN ARCHITECTURE
 mod entities;
 mod ports;
 mod use_cases;
 
 pub use entities::*;
+use log::error;
 pub use ports::*;
 use tokio::spawn;
 
@@ -74,7 +73,7 @@ impl SyncPronoAdapter {
                     } => {
                         let result = async_api.add_answer(&user, question_id, answer.into()).await;
                         if let Err(ref e) = result {
-                            log::error!("Failed to add answer for user {user}: {e}");
+                            error!("Failed to add answer for user {user}: {e}");
                         }
                         let _ = resp.send(result);
                     }
@@ -128,7 +127,7 @@ impl prono_api::Surveys for SyncPronoAdapter {
     fn add_answer(&mut self, user: &str, question_id: String, answer: prono_api::Answer) {
         let rx = self.request_add_answer(user, question_id, answer.into());
         if let Ok(Err(e)) = rx.try_recv() {
-            log::error!("Failed to add answer: {e}");
+            error!("Failed to add answer: {e}");
         }
     }
 

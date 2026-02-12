@@ -1,5 +1,6 @@
 use std::{fs, path};
 
+use log::{debug, error, info};
 use prono::ReadConfig;
 
 use crate::SecureConfig;
@@ -16,7 +17,7 @@ pub struct ConfigRead {}
 impl ReadConfig<SecureConfig> for ConfigRead {
     fn default_config_path() -> path::PathBuf {
         let path = dirs::config_dir().unwrap().join("prono").join(CONFIG_FILENAME);
-        log::debug!("Default config path: {}", path.display());
+        debug!("Default config path: {}", path.display());
         path
     }
 
@@ -31,16 +32,16 @@ impl ReadConfig<SecureConfig> for ConfigRead {
         let secure_config = fs::read_to_string(config).expect("secure config is missing");
         let secure_config: Option<SecureConfig> = toml::from_str(&secure_config)
             .map_err(|e| {
-                log::error!("Failed to parse secure config: {e}");
+                error!("Failed to parse secure config: {e}");
                 e
             })
             .ok(); // TODO handle errors properly
 
         if let Some(secure_config) = secure_config {
-            log::info!("Some or no secret environment vars are set. Read remaining config from secure_config.toml");
+            info!("Some or no secret environment vars are set. Read remaining config from secure_config.toml");
             secure_config.override_db_config(overrides)
         } else {
-            log::info!("No/invalid secure config file, read secret environment vars...");
+            info!("No/invalid secure config file, read secret environment vars...");
             SecureConfig {
                 db: overrides
                     .try_into()

@@ -1,4 +1,5 @@
 use eframe::AppCreator;
+use log::error;
 use prono::ReadConfig;
 
 pub static DB_NAME: &str = "db_prono";
@@ -35,7 +36,7 @@ pub async fn main() -> eframe::Result {
 
     let prono = match prono::SyncPronoAdapter::new_with_db_config::<prono_db::MysqlDb>(db_config).await {
         Err(e) => {
-            log::error!("{e}");
+            error!("{e}");
             return Ok(());
         }
         Ok(prono) => prono,

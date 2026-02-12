@@ -1,4 +1,5 @@
 use egui::TextEdit;
+use log::error;
 use serde::{Deserialize, Serialize};
 
 use super::timeline;

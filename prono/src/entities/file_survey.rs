@@ -33,6 +33,7 @@ impl From<FileSurvey> for crate::Survey {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[cfg_attr(debug_assertions, derive(Clone))]
 struct Question {
     question: String,
     answer_type: AnswerType,
@@ -56,6 +57,7 @@ impl From<Question> for crate::Question {
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(debug_assertions, derive(Clone))]
 pub enum AnswerType {
     Text,
     PredictionDate,

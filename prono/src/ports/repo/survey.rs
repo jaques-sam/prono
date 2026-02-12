@@ -2,6 +2,7 @@ use super::Question;
 
 #[derive(Debug, PartialEq, Eq)]
 #[cfg_attr(test, derive(Default))]
+#[cfg_attr(debug_assertions, derive(Clone))]
 pub struct Survey {
     pub id: u64,
     pub questions: Vec<Question>,

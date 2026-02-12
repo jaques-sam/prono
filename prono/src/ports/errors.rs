@@ -1,4 +1,5 @@
 #[derive(Debug, thiserror::Error)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum Error {
     #[error("Repository error: {0}")]
     Repository(String),

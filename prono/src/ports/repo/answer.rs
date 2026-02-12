@@ -1,7 +1,18 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Answer {
     Text(String),
     PredictionDate { day: Option<u8>, month: u8, year: u16 },
+}
+
+#[cfg(test)]
+impl Default for Answer {
+    fn default() -> Self {
+        Answer::PredictionDate {
+            day: None,
+            month: 8,
+            year: 1986,
+        }
+    }
 }
 
 impl From<crate::Answer> for Answer {

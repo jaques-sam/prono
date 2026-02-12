@@ -60,11 +60,10 @@ impl repo::Db for MysqlDb {
 
 #[async_trait]
 impl repo::Surveys for MysqlDb {
-    async fn answer(&self, user: &str, question_id: u64) -> Option<repo::Answer> {
-        let qid = question_id.to_string();
+    async fn answer(&self, user: &str, question_id: String) -> Option<repo::Answer> {
         let row = sqlx::query("SELECT answer FROM AnswerResponse WHERE user = ? AND question_id = ?")
             .bind(user)
-            .bind(qid)
+            .bind(question_id)
             .fetch_optional(&self.pool)
             .await
             .ok()?;
@@ -88,7 +87,6 @@ impl repo::Surveys for MysqlDb {
             questions.push(repo::Question {
                 id: qid,
                 answer: Answer::from(ans),
-                text: None,
             });
         }
 
@@ -119,5 +117,21 @@ impl repo::Surveys for MysqlDb {
             .await
             .map_err(DbError::from)?;
         Ok(())
+    }
+
+    async fn all_answers(&self, question_id: String) -> Vec<(String, Answer)> {
+        let rows = sqlx::query("SELECT user, answer FROM AnswerResponse WHERE question_id = ?")
+            .bind(question_id)
+            .fetch_all(&self.pool)
+            .await
+            .unwrap_or_default();
+
+        rows.into_iter()
+            .map(|row| {
+                let user: String = row.get("user");
+                let answer: String = row.get("answer");
+                (user, Answer::from(answer))
+            })
+            .collect()
     }
 }

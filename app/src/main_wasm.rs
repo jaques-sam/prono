@@ -19,6 +19,10 @@ pub fn main() {
         fn response(&self, _user: &str, _id: u64) -> Option<prono_api::Survey> {
             todo!()
         }
+
+        fn all_answers(&self, _question_id: String) -> Vec<(String, prono_api::Answer)> {
+            todo!()
+        }
     }
 
     use eframe::wasm_bindgen::JsCast as _;

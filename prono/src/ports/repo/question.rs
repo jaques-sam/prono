@@ -4,7 +4,6 @@ use super::answer::Answer;
 pub struct Question {
     pub id: String,
     pub answer: Answer,
-    pub text: Option<String>,
 }
 
 impl From<crate::Question> for Question {
@@ -12,7 +11,6 @@ impl From<crate::Question> for Question {
         Self {
             id: question.id,
             answer: question.answer.into(),
-            text: question.text,
         }
     }
 }
@@ -22,7 +20,7 @@ impl From<Question> for crate::Question {
         Self {
             id: question.id,
             answer: question.answer.into(),
-            text: question.text,
+            text: None,
         }
     }
 }

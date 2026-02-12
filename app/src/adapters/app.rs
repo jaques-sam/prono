@@ -1,5 +1,5 @@
 use egui::TextEdit;
-use log::error;
+use log::{debug, error};
 use serde::{Deserialize, Serialize};
 
 use super::timeline;
@@ -57,6 +57,25 @@ impl App {
         app
     }
 
+    fn submit(&mut self) {
+        let survey = match std::mem::replace(&mut self.survey_state, SurveyState::NotStarted) {
+            SurveyState::InProgress(s) => s,
+            other => {
+                self.survey_state = other;
+                return;
+            }
+        };
+
+        for question in &survey.questions {
+            self.prono.as_mut().expect("no prono API adapter set").add_answer(
+                &self.user_name,
+                question.id.clone(),
+                question.answer.clone().into(),
+            );
+        }
+        self.survey_state = SurveyState::Completed(survey);
+    }
+
     fn draw_timeline_from_answers(&self, ui: &mut egui::Ui) {
         ui.spacing();
         ui.separator();
@@ -68,18 +87,32 @@ impl App {
                 let timeline_dates = timeline::extract_dates(vec![answers]);
                 timeline::draw(ui, &timeline_dates);
             }
-            SurveyState::Completed => {
-                ui.label("Timeline of all predictions");
-                // let answers: Vec<&Answer> = self
-                //     .prono
-                //     .as_ref()
-                //     .expect("no prono API adapter set")
-                //     .get_answers() // TODO [13]: Show timeline of all answers
-                //     .into_iter()
-                //     .map(|a| a.answer)
-                //     .collect();
-                let timeline_dates = Vec::new(); // timeline::extract_dates(vec![answers]);
-                timeline::draw(ui, &timeline_dates);
+            SurveyState::Completed(survey) => {
+                ui.label("All answers");
+                error!("Survey has {} questions", survey.questions.len());
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false; 2])
+                    .show(ui, |ui| {
+                        for question in &survey.questions {
+                            ui.heading(&question.text);
+                            let answers: Vec<Answer> = self
+                                .prono
+                                .as_ref()
+                                .expect("no prono API adapter set")
+                                .all_answers(question.id.clone())
+                                .into_iter()
+                                .map(|(_, answer)| answer.into())
+                                .collect();
+                            if answers.is_empty() {
+                                ui.label("No predictions for this question");
+                            } else {
+                                debug!("Number of answers for Q:{}: {}", question.id, answers.len());
+                                let timeline_dates = timeline::extract_dates(vec![answers.iter().collect()]);
+                                timeline::draw(ui, &timeline_dates);
+                            }
+                            ui.spacing();
+                        }
+                    });
             }
             SurveyState::NotStarted => {}
         }
@@ -96,7 +129,7 @@ impl App {
 
                 ui.spacing();
             }
-            SurveyState::Completed => {
+            SurveyState::Completed(_survey) => {
                 ui.label("Survey completed.");
                 // TODO [13]: Show timeline of all answers
             }
@@ -154,21 +187,16 @@ impl eframe::App for App {
                     ui.label("Username:");
                     ui.add(TextEdit::singleline(&mut self.user_name).hint_text("Please fill in your name"));
                 }
-                SurveyState::InProgress(results) => {
+                SurveyState::InProgress(_) => {
                     if ui.button("Reset").clicked() {
-                        results.empty();
-                    } else if ui.button("Submit").clicked() {
-                        for question in results.questions.drain(..) {
-                            self.prono.as_mut().expect("no prono API adapter set").add_answer(
-                                &self.user_name,
-                                question.id,
-                                question.answer.into(),
-                            );
+                        if let SurveyState::InProgress(survey) = &mut self.survey_state {
+                            survey.empty();
                         }
-                        self.survey_state = SurveyState::Completed;
+                    } else if ui.button("Submit").clicked() {
+                        self.submit();
                     }
                 }
-                SurveyState::Completed => {
+                SurveyState::Completed(_) => {
                     if cfg!(debug_assertions) && ui.button("Survey again").clicked() {
                         self.user_name.clear();
                         self.survey_state = SurveyState::NotStarted;

@@ -7,5 +7,5 @@ pub enum SurveyState {
     #[default]
     NotStarted,
     InProgress(Survey),
-    Completed,
+    Completed(Survey),
 }

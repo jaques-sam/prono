@@ -12,8 +12,8 @@
 8. [x] Show all answers
 9.  [ ] In table as output
 10. [x] In time graph
-11. [ ] Implement MQTT server in ./server
-12. [ ] Implement MQTT client
+11. [ ] Implement 0MQ server in ./server
+12. [ ] Implement 0MQ client
 13. [ ] In time graph of all user answers
 14. [ ] Restrict users for filling in
 

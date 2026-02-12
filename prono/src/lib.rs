@@ -33,6 +33,10 @@ enum Request {
         survey_id: u64,
         resp: Sender<Option<Survey>>,
     },
+    AllAnswers {
+        question_id: String,
+        resp: Sender<Vec<(String, Answer)>>,
+    },
 }
 
 impl SyncPronoAdapter {
@@ -81,6 +85,11 @@ impl SyncPronoAdapter {
                         let result = async_api.response(&user, survey_id).await.map(Into::into);
                         let _ = resp.send(result);
                     }
+                    Request::AllAnswers { question_id, resp } => {
+                        let result = async_api.all_answers(question_id).await;
+                        let converted = result.into_iter().map(|(u, a)| (u, a.into())).collect();
+                        let _ = resp.send(converted);
+                    }
                 }
             }
         });
@@ -112,6 +121,14 @@ impl SyncPronoAdapter {
         });
         rx
     }
+
+    /// Request all responses (alias); returns a receiver you can `try_recv` on.
+    #[must_use]
+    pub fn request_all_answers(&self, question_id: String) -> Receiver<Vec<(String, Answer)>> {
+        let (tx, rx) = mpsc::channel();
+        let _ = self.req_tx.send(Request::AllAnswers { question_id, resp: tx });
+        rx
+    }
 }
 
 // It will issue requests to the background thread and try to `try_recv` the per-call
@@ -136,6 +153,25 @@ impl prono_api::Surveys for SyncPronoAdapter {
         match rx.try_recv() {
             Ok(opt) => opt.map(Into::into),
             _ => None,
+        }
+    }
+
+    fn all_answers(&self, question_id: String) -> Vec<(String, prono_api::Answer)> {
+        // For simplicity, this method is implemented synchronously by blocking on the async API.
+        // In a real application, you might want to implement this more efficiently.
+        let rx = self.request_all_answers(question_id);
+        match rx.recv() {
+            Ok(answers) => answers
+                .into_iter()
+                .map(|(u, a)| {
+                    log::info!("Retrieved answer for user {u}");
+                    (u, a.into())
+                })
+                .collect(),
+            Err(e) => {
+                error!("Failed to retrieve all answers: {e}");
+                Vec::new()
+            }
         }
     }
 }

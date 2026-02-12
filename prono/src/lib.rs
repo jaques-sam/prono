@@ -12,6 +12,12 @@ static SURVEY_CONFIG: &str = include_str!("./surveys/survey_spacex_starship.json
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
+#[cfg(debug_assertions)]
+pub(crate) use use_cases::*;
+
+#[cfg(debug_assertions)]
+use crate::repo::Db;
+
 /// A small sync adapter that exposes the old sync `Prono`-style behaviour while
 /// performing async work on a background thread. Requests are sent to the
 /// background thread via `std::sync::mpsc::Sender` and per-request response
@@ -61,12 +67,19 @@ impl SyncPronoAdapter {
     {
         let (req_tx, req_rx) = mpsc::channel::<Request>();
 
-        let db = D::init(config).await?;
+        let db: Box<dyn repo::Surveys + Send + Sync> = match D::init(config).await {
+            Ok(db) => Box::new(db),
+            #[allow(unused)]
+            Err(err) => {
+                #[cfg(not(debug_assertions))]
+                return Err(err);
+                #[cfg(debug_assertions)]
+                Box::new(fake_db::FakeRepo::init(()).await?)
+            }
+        };
 
         // Task not 100% needed if the app requires a database connection
         spawn(async move {
-            let async_api: Box<dyn repo::Surveys + Send + Sync> = Box::new(db);
-
             for req in req_rx {
                 match req {
                     Request::AddAnswer {
@@ -75,18 +88,18 @@ impl SyncPronoAdapter {
                         answer,
                         resp,
                     } => {
-                        let result = async_api.add_answer(&user, question_id, answer.into()).await;
+                        let result = db.add_answer(&user, question_id, answer.into()).await;
                         if let Err(ref e) = result {
                             error!("Failed to add answer for user {user}: {e}");
                         }
                         let _ = resp.send(result);
                     }
                     Request::Response { user, survey_id, resp } => {
-                        let result = async_api.response(&user, survey_id).await.map(Into::into);
+                        let result = db.response(&user, survey_id).await.map(Into::into);
                         let _ = resp.send(result);
                     }
                     Request::AllAnswers { question_id, resp } => {
-                        let result = async_api.all_answers(question_id).await;
+                        let result = db.all_answers(question_id).await;
                         let converted = result.into_iter().map(|(u, a)| (u, a.into())).collect();
                         let _ = resp.send(converted);
                     }

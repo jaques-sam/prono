@@ -1,6 +1,8 @@
 use super::answer::Answer;
 
 #[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(any(debug_assertions, test), derive(Clone))]
+#[cfg_attr(test, derive(Default))]
 pub struct Question {
     pub id: String,
     pub answer: Answer,

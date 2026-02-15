@@ -177,7 +177,7 @@ impl prono_api::Surveys for SyncPronoAdapter {
             Ok(answers) => answers
                 .into_iter()
                 .map(|(u, a)| {
-                    log::info!("Retrieved answer for user {u}");
+                    log::debug!("Retrieved answer for user {u}: {a:?}");
                     (u, a.into())
                 })
                 .collect(),

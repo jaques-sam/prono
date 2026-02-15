@@ -1,5 +1,5 @@
 use egui::TextEdit;
-use log::{debug, error};
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 use super::timeline;
@@ -83,36 +83,34 @@ impl App {
         match &self.survey_state {
             SurveyState::InProgress(survey) => {
                 ui.label("Timeline of your predictions");
-                let answers: Vec<&Answer> = survey.questions.iter().map(|q| &q.answer).collect();
-                let timeline_dates = timeline::extract_dates(vec![answers]);
+                let answers = survey.questions.iter().map(|q| (None, q.answer.clone())).collect();
+                let timeline_dates = timeline::extract_and_sort_dates(answers);
                 timeline::draw(ui, &timeline_dates);
             }
             SurveyState::Completed(survey) => {
                 ui.label("All answers");
-                error!("Survey has {} questions", survey.questions.len());
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false; 2])
-                    .show(ui, |ui| {
-                        for question in &survey.questions {
-                            ui.heading(&question.text);
-                            let answers: Vec<Answer> = self
-                                .prono
-                                .as_ref()
-                                .expect("no prono API adapter set")
-                                .all_answers(question.id.clone())
-                                .into_iter()
-                                .map(|(_, answer)| answer.into())
-                                .collect();
-                            if answers.is_empty() {
-                                ui.label("No predictions for this question");
-                            } else {
-                                debug!("Number of answers for Q:{}: {}", question.id, answers.len());
-                                let timeline_dates = timeline::extract_dates(vec![answers.iter().collect()]);
-                                timeline::draw(ui, &timeline_dates);
-                            }
-                            ui.spacing();
+                egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
+                    for question in &survey.questions {
+                        ui.heading(&question.text);
+                        let all_answers = self
+                            .prono
+                            .as_ref()
+                            .expect("no prono API adapter set")
+                            .all_answers(question.id.clone());
+                        let all_answers: Vec<(Option<&String>, Answer)> = all_answers
+                            .iter()
+                            .map(|(user, answer)| (Some(user), answer.clone().into()))
+                            .collect();
+                        if all_answers.is_empty() {
+                            ui.label("No predictions for this question");
+                        } else {
+                            debug!("Number of answers for Q:{}: {}", question.id, all_answers.len());
+                            let timeline_dates = timeline::extract_and_sort_dates(all_answers);
+                            timeline::draw(ui, &timeline_dates);
                         }
-                    });
+                        ui.spacing();
+                    }
+                });
             }
             SurveyState::NotStarted => {}
         }
@@ -131,7 +129,6 @@ impl App {
             }
             SurveyState::Completed(_survey) => {
                 ui.label("Survey completed.");
-                // TODO [13]: Show timeline of all answers
             }
             SurveyState::NotStarted => {
                 if ui.button("Start survey").clicked() {

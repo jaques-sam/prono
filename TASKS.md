@@ -4,7 +4,7 @@
 
 1. [x] Show survey from file on "start survey" click
 2. [x] Add answers for first user into db
-3. [ ] ~~Refill survey when user logs in (see *)~~
+3. [x] Refill survey when user logs in (see *)
 4. [ ] Get survey info from file survey
 5. [ ] Descriptions of survey & questions are not part of db surveys -> busy
 6. [x] Do not allow duplicates in db
@@ -14,7 +14,7 @@
 10. [x] In time graph
 11. [ ] Implement 0MQ server in ./server
 12. [ ] Implement 0MQ client
-13. [ ] In time graph of all user answers
+13. [x] In time graph of all user answers
 14. [ ] Restrict users for filling in
 
 

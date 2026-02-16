@@ -35,6 +35,28 @@ impl From<Answer> for crate::Answer {
 
 impl From<String> for Answer {
     fn from(text: String) -> Self {
+        if let Some((first_str, rest)) = text.split_once('/') {
+            // Try DD/MM/YYYY format
+            if let Some((month_str, year_str)) = rest.split_once('/')
+                && let (Ok(day), Ok(month), Ok(year)) = (
+                    first_str.parse::<u8>(),
+                    month_str.parse::<u8>(),
+                    year_str.parse::<u16>(),
+                )
+            {
+                return Answer::PredictionDate {
+                    day: if day == 0 { None } else { Some(day) },
+                    month,
+                    year,
+                };
+            }
+            // Try MM/YYYY format
+            else if let (Ok(month), Ok(year)) = (first_str.parse::<u8>(), rest.parse::<u16>())
+                && (1..=12).contains(&month)
+            {
+                return Answer::PredictionDate { day: None, month, year };
+            }
+        }
         Answer::Text(text)
     }
 }
@@ -47,5 +69,75 @@ impl std::fmt::Display for Answer {
                 write!(f, "{:02}/{:02}/{:04}", day.unwrap_or(0), *month, *year)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_repo_answer_with_day_zero() {
+        let answer = Answer::from("00/05/2025".to_string());
+        assert_eq!(
+            answer,
+            Answer::PredictionDate {
+                day: None,
+                month: 5,
+                year: 2025
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_normal_date() {
+        let answer = Answer::from("15/05/2025".to_string());
+        assert_eq!(
+            answer,
+            Answer::PredictionDate {
+                day: Some(15),
+                month: 5,
+                year: 2025
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_month_year_only() {
+        let answer = Answer::from("05/2025".to_string());
+        assert_eq!(
+            answer,
+            Answer::PredictionDate {
+                day: None,
+                month: 5,
+                year: 2025
+            }
+        );
+    }
+
+    #[test]
+    fn test_display_format_with_no_day() {
+        let answer = Answer::PredictionDate {
+            day: None,
+            month: 5,
+            year: 2025,
+        };
+        assert_eq!(format!("{answer}"), "00/05/2025");
+    }
+
+    #[test]
+    fn test_display_format_with_day() {
+        let answer = Answer::PredictionDate {
+            day: Some(15),
+            month: 5,
+            year: 2025,
+        };
+        assert_eq!(format!("{answer}"), "15/05/2025");
+    }
+
+    #[test]
+    fn test_parse_text_answer() {
+        let answer = Answer::from("Some random text".to_string());
+        assert_eq!(answer, Answer::Text("Some random text".to_string()));
     }
 }

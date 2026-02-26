@@ -107,11 +107,44 @@ fn draw_label(ctx: &TimelineDrawContext, label: &str, x: f32, sub_label: Option<
     }));
 }
 
-fn draw_timeline_point(painter: &Painter, pos: egui::Pos2) {
-    // Draw circle at the point
-    painter.circle_filled(pos, 3.0, egui::Color32::from_rgb(100, 255, 0));
-    // Draw border
-    painter.circle_stroke(pos, 3.0, egui::Stroke::new(2.0, egui::Color32::BLACK));
+fn draw_timeline_point(painter: &Painter, pos: egui::Pos2, hovered: bool) {
+    let radius = if hovered { 5.0 } else { 3.0 };
+    painter.circle_filled(pos, radius, egui::Color32::from_rgb(100, 255, 0));
+    painter.circle_stroke(pos, radius, egui::Stroke::new(2.0, egui::Color32::BLACK));
+}
+
+fn draw_hover_tooltip(ctx: &TimelineDrawContext, label: &str, name: Option<&String>, x: f32, y: f32) {
+    let color = ctx.painter.ctx().style().visuals.strong_text_color();
+
+    // 45° diagonal going up from the bullet
+    let diag_len = 15.0;
+    let d = diag_len / std::f32::consts::SQRT_2;
+
+    let start = egui::pos2(x, y - 5.0);
+    let bend = egui::pos2(x + d, y - 5.0 - d);
+    let horiz_end = egui::pos2(bend.x + 25.0, bend.y);
+
+    let stroke = egui::Stroke::new(1.0, color);
+    ctx.painter.line_segment([start, bend], stroke);
+    ctx.painter.line_segment([bend, horiz_end], stroke);
+
+    let text = match name {
+        Some(n) => format!("{label}:\n{n}"),
+        None => label.to_string(),
+    };
+    let galley = ctx
+        .painter
+        .ctx()
+        .fonts_mut(|f| f.layout_no_wrap(text, egui::FontId::new(11.0, egui::FontFamily::Proportional), color));
+
+    let text_pos = egui::pos2(horiz_end.x + 3.0, horiz_end.y - galley.size().y / 2.0);
+    let text_rect = egui::Rect::from_min_size(text_pos, galley.size()).expand(2.0);
+
+    let bg_color = ctx.painter.ctx().style().visuals.window_fill;
+    ctx.painter.rect_filled(text_rect, 2.0, bg_color);
+    ctx.painter
+        .rect_stroke(text_rect, 2.0, egui::Stroke::new(0.5, color), egui::StrokeKind::Middle);
+    ctx.painter.galley(text_pos, galley, color);
 }
 
 pub fn draw(ui: &mut egui::Ui, dates: &[(Option<&String>, TimelineDate)]) {
@@ -125,7 +158,7 @@ pub fn draw(ui: &mut egui::Ui, dates: &[(Option<&String>, TimelineDate)]) {
     let line_y_offset = 50.0; // vertical position of the timeline line within the rect
 
     // Create the painting area
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(available_width, timeline_height), egui::Sense::hover());
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(available_width, timeline_height), egui::Sense::hover());
     let painter = ui.painter_at(rect);
 
     let months: Vec<i32> = dates.iter().map(|(_, d)| d.months_since_epoch()).collect();
@@ -133,10 +166,11 @@ pub fn draw(ui: &mut egui::Ui, dates: &[(Option<&String>, TimelineDate)]) {
     let max_month = *months.iter().max().unwrap_or(&(min_month + 1)) + 1;
     let month_range = (max_month.checked_sub(min_month).unwrap_or(0)).max(1);
 
-    let padding = 50.0;
-    let usable_width = available_width - 2.0 * padding;
-    let line_start_x = rect.left() + padding;
-    let line_end_x = rect.right() - padding;
+    let padding_left = 25.0;
+    let padding_right = 100.0;
+    let usable_width = available_width - padding_left - padding_right;
+    let line_start_x = rect.left() + padding_left;
+    let line_end_x = rect.right() - padding_right;
 
     // Draw the horizontal timeline line
     painter.line_segment(
@@ -157,25 +191,73 @@ pub fn draw(ui: &mut egui::Ui, dates: &[(Option<&String>, TimelineDate)]) {
         min_month,
     };
 
-    if dates.len() < 2 {
-        // Center a single date
-        let center_x = rect.left() + available_width / 2.0;
-        draw_timeline_point(&painter, egui::pos2(center_x, rect.top() + line_y_offset));
-        draw_label(&ctx, &dates[0].1.label, center_x, dates[0].0, true);
-        return;
+    // Compute positions for all points, spreading overlapping ones vertically
+    let y_spread = 6.0;
+    let point_positions: Vec<(f32, f32)> = dates
+        .iter()
+        .enumerate()
+        .map(|(i, date)| {
+            let month_val = date.1.months_since_epoch();
+            #[allow(clippy::cast_precision_loss)]
+            let x = if dates.len() < 2 {
+                rect.left() + available_width / 2.0
+            } else {
+                let progress = (month_val - min_month) as f32 / month_range as f32;
+                line_start_x + progress * usable_width
+            };
+
+            // Spread overlapping points vertically
+            let same_before = dates[..i]
+                .iter()
+                .filter(|d| d.1.months_since_epoch() == month_val)
+                .count();
+            let same_total = dates.iter().filter(|d| d.1.months_since_epoch() == month_val).count();
+
+            #[allow(clippy::cast_precision_loss)]
+            let y = if same_total > 1 {
+                let offset = same_before as f32 - (same_total - 1) as f32 / 2.0;
+                rect.top() + line_y_offset + offset * y_spread
+            } else {
+                rect.top() + line_y_offset
+            };
+
+            (x, y)
+        })
+        .collect();
+
+    if dates.len() >= 2 {
+        draw_month_ticks(&ctx, max_month);
     }
 
-    draw_month_ticks(&ctx, max_month);
+    // Find hovered point
+    let hovered_idx = if response.hovered() {
+        ui.ctx().input(|i| i.pointer.hover_pos()).and_then(|pointer_pos| {
+            let hover_radius = 20.0_f32;
+            let mut closest_idx = None;
+            let mut closest_dist = f32::MAX;
 
-    // Draw points and labels for each date
-    for date in dates {
-        let months_offset = date.1.months_since_epoch() - min_month;
-        #[allow(clippy::cast_precision_loss)] // month range is 23 bit, which is still millions of years
-        let progress = months_offset as f32 / month_range as f32;
-        let x = line_start_x + progress * usable_width;
+            for (i, &(x, y)) in point_positions.iter().enumerate() {
+                let dist = ((pointer_pos.x - x).powi(2) + (pointer_pos.y - y).powi(2)).sqrt();
+                if dist < closest_dist && dist < hover_radius {
+                    closest_dist = dist;
+                    closest_idx = Some(i);
+                }
+            }
+            closest_idx
+        })
+    } else {
+        None
+    };
 
-        draw_timeline_point(&painter, egui::pos2(x, rect.top() + line_y_offset));
-        draw_label(&ctx, &date.1.label, x, date.0, true);
+    // Draw all points
+    for (i, &(x, y)) in point_positions.iter().enumerate() {
+        draw_timeline_point(&painter, egui::pos2(x, y), hovered_idx == Some(i));
+    }
+
+    // Draw tooltip for hovered point
+    if let Some(idx) = hovered_idx {
+        let (x, y) = point_positions[idx];
+        draw_hover_tooltip(&ctx, &dates[idx].1.label, dates[idx].0, x, y);
     }
 }
 

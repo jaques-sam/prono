@@ -224,3 +224,44 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
         ui.label(".");
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use prono_api::MockSurveys;
+
+    use crate::Survey;
+
+    use super::*;
+
+    fn make_app(prono: impl prono_api::Surveys + 'static) -> App {
+        App {
+            prono: Some(Box::new(prono)),
+            ..App::default()
+        }
+    }
+
+    #[test]
+    fn submit_transitions_state_to_completed() {
+        let mut mock_surveys = MockSurveys::new();
+        mock_surveys
+            .expect_add_answer()
+            .withf(|_user, question_id, answer| {
+                question_id == "q1" && answer == &prono_api::Answer::Text("sometime in 2025".to_owned())
+            })
+            .return_const(());
+
+        let mut app = make_app(mock_surveys);
+        app.survey_state = SurveyState::InProgress(Survey {
+            id: 1,
+            description: "Test survey".to_string(),
+            questions: vec![Question {
+                id: "q1".to_string(),
+                text: "When will the next launch be?".to_string(),
+                answer: Answer::Text("sometime in 2025".to_string()),
+            }],
+        });
+
+        app.submit();
+        assert!(matches!(app.survey_state, SurveyState::Completed(_)));
+    }
+}

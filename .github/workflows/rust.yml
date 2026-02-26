@@ -48,7 +48,7 @@ jobs:
         run: sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
       - name: Install binstall
         run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-      - name: Install cargo tools
+      - name: Install cargo-tarpaulin
         run: cargo binstall cargo-tarpaulin --secure
       - uses: actions-rs/cargo@v1
         with:
@@ -74,10 +74,10 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-      - uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: cargo-audit
+      - name: Install binstall
+        run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+      - name: Install cargo-audit
+        run: cargo binstall cargo-audit --secure
       - uses: actions-rs/cargo@v1
         with:
           command: audit

@@ -1,5 +1,6 @@
 [workspace]
 members = ["app", "backend", "coverage", "generic", "prono", "prono_api"]
+resolver = "3"
 
 [profile.release]
 opt-level = 2

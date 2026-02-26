@@ -1,0 +1,14 @@
+[test_config]
+force-clean = false
+skip-clean = true
+line-coverage = true
+branch-coverage = false
+test-timeout = "30s"
+offline = true
+run-types = ["AllTargets"]
+
+# List of packages to exclude from testing.
+exclude = ["egui", "egui_backend", "egui_backend_glow", "egui_backend_wgpu", "egui_backend_web"]
+
+# List of file paths to exclude from testing.
+exclude-files = ["target/*"]

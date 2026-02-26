@@ -77,6 +77,7 @@ impl From<Answer> for prono_api::Answer {
 }
 
 #[cfg(test)]
+#[allow(clippy::match_wildcard_for_single_variants)]
 mod tests {
     use super::*;
 
@@ -105,5 +106,93 @@ mod tests {
                 year: u16::try_from(datetime().year()).expect("invalid year"),
             }
         );
+    }
+
+    #[test]
+    fn test_new_text_creates_empty_string() {
+        let answer = Answer::new_text();
+        assert_eq!(answer, Answer::Text(String::new()));
+    }
+
+    #[test]
+    fn test_new_prediction_date_uses_current_date() {
+        let answer = Answer::new_prediction_date();
+        let dt = datetime();
+        match answer {
+            Answer::PredictionDate { day, month, year } => {
+                assert_eq!(day, None);
+                assert_eq!(month, u8::try_from(dt.month()).unwrap());
+                assert_eq!(year, u16::try_from(dt.year()).unwrap());
+            }
+            _ => panic!("Expected PredictionDate variant"),
+        }
+    }
+
+    #[test]
+    fn test_default_is_empty_text() {
+        let answer = Answer::default();
+        assert_eq!(answer, Answer::Text(String::new()));
+    }
+
+    #[test]
+    fn test_from_prono_api_text_answer() {
+        let api_answer = prono_api::Answer::Text("test".to_string());
+        let answer: Answer = api_answer.into();
+        assert_eq!(answer, Answer::Text("test".to_string()));
+    }
+
+    #[test]
+    fn test_from_prono_api_prediction_date_answer() {
+        let api_answer = prono_api::Answer::PredictionDate {
+            day: Some(15),
+            month: 6,
+            year: 2025,
+        };
+        let answer: Answer = api_answer.into();
+        assert_eq!(
+            answer,
+            Answer::PredictionDate {
+                day: Some(15),
+                month: 6,
+                year: 2025
+            }
+        );
+    }
+
+    #[test]
+    fn test_into_prono_api_text_answer() {
+        let answer = Answer::Text("test".to_string());
+        let api_answer: prono_api::Answer = answer.into();
+        assert_eq!(api_answer, prono_api::Answer::Text("test".to_string()));
+    }
+
+    #[test]
+    fn test_into_prono_api_prediction_date_answer() {
+        let answer = Answer::PredictionDate {
+            day: Some(15),
+            month: 6,
+            year: 2025,
+        };
+        let api_answer: prono_api::Answer = answer.into();
+        assert_eq!(
+            api_answer,
+            prono_api::Answer::PredictionDate {
+                day: Some(15),
+                month: 6,
+                year: 2025
+            }
+        );
+    }
+
+    #[test]
+    fn test_answer_roundtrip_conversion() {
+        let original = Answer::PredictionDate {
+            day: None,
+            month: 12,
+            year: 2030,
+        };
+        let api: prono_api::Answer = original.clone().into();
+        let back: Answer = api.into();
+        assert_eq!(original, back);
     }
 }

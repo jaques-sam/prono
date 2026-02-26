@@ -55,4 +55,92 @@ mod tests {
 
         assert_eq!(question, Question::default());
     }
+
+    #[test]
+    fn test_update_changes_answer_and_text() {
+        let mut question = Question {
+            id: "q1".to_string(),
+            answer: Answer::Text("old".to_string()),
+            text: Some("old text".to_string()),
+        };
+
+        let proto = Question {
+            id: "ignored".to_string(),
+            answer: Answer::Text("new".to_string()),
+            text: Some("new text".to_string()),
+        };
+
+        question.update(proto);
+
+        assert_eq!(question.id, "q1"); // id unchanged
+        assert_eq!(question.answer, Answer::Text("new".to_string()));
+        assert_eq!(question.text, Some("new text".to_string()));
+    }
+
+    #[test]
+    fn test_update_returns_mutable_reference() {
+        let mut question = Question::default();
+        let proto = Question {
+            answer: Answer::Text("chained".to_string()),
+            ..Default::default()
+        };
+
+        let result = question.update(proto);
+        assert_eq!(result.answer, Answer::Text("chained".to_string()));
+    }
+
+    #[test]
+    fn test_from_prono_api_question() {
+        let api_question = prono_api::Question {
+            id: "api-q1".to_string(),
+            text: Some("API question?".to_string()),
+            answer: prono_api::Answer::Text("api answer".to_string()),
+        };
+
+        let question: Question = api_question.into();
+
+        assert_eq!(question.id, "api-q1");
+        assert_eq!(question.text, Some("API question?".to_string()));
+        assert_eq!(question.answer, Answer::Text("api answer".to_string()));
+    }
+
+    #[test]
+    fn test_into_prono_api_question() {
+        let question = Question {
+            id: "q1".to_string(),
+            text: Some("Question?".to_string()),
+            answer: Answer::PredictionDate {
+                day: Some(10),
+                month: 5,
+                year: 2025,
+            },
+        };
+
+        let api_question: prono_api::Question = question.into();
+
+        assert_eq!(api_question.id, "q1");
+        assert_eq!(api_question.text, Some("Question?".to_string()));
+        assert_eq!(
+            api_question.answer,
+            prono_api::Answer::PredictionDate {
+                day: Some(10),
+                month: 5,
+                year: 2025
+            }
+        );
+    }
+
+    #[test]
+    fn test_question_roundtrip_conversion() {
+        let original = Question {
+            id: "roundtrip".to_string(),
+            text: Some("Test?".to_string()),
+            answer: Answer::Text("test".to_string()),
+        };
+
+        let api: prono_api::Question = original.clone().into();
+        let back: Question = api.into();
+
+        assert_eq!(original, back);
+    }
 }

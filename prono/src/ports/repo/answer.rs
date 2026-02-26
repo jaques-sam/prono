@@ -140,4 +140,98 @@ mod tests {
         let answer = Answer::from("Some random text".to_string());
         assert_eq!(answer, Answer::Text("Some random text".to_string()));
     }
+
+    #[test]
+    fn test_from_domain_answer_text_to_repo_answer() {
+        let domain_answer = crate::Answer::Text("domain text".to_string());
+        let repo_answer: Answer = domain_answer.into();
+        assert_eq!(repo_answer, Answer::Text("domain text".to_string()));
+    }
+
+    #[test]
+    fn test_from_domain_answer_prediction_to_repo_answer() {
+        let domain_answer = crate::Answer::PredictionDate {
+            day: Some(10),
+            month: 3,
+            year: 2024,
+        };
+        let repo_answer: Answer = domain_answer.into();
+        assert_eq!(
+            repo_answer,
+            Answer::PredictionDate {
+                day: Some(10),
+                month: 3,
+                year: 2024
+            }
+        );
+    }
+
+    #[test]
+    fn test_from_repo_answer_text_to_domain_answer() {
+        let repo_answer = Answer::Text("repo text".to_string());
+        let domain_answer: crate::Answer = repo_answer.into();
+        assert_eq!(domain_answer, crate::Answer::Text("repo text".to_string()));
+    }
+
+    #[test]
+    fn test_from_repo_answer_prediction_to_domain_answer() {
+        let repo_answer = Answer::PredictionDate {
+            day: None,
+            month: 12,
+            year: 2030,
+        };
+        let domain_answer: crate::Answer = repo_answer.into();
+        assert_eq!(
+            domain_answer,
+            crate::Answer::PredictionDate {
+                day: None,
+                month: 12,
+                year: 2030
+            }
+        );
+    }
+
+    #[test]
+    fn test_answer_roundtrip_conversion() {
+        let original = Answer::PredictionDate {
+            day: Some(25),
+            month: 12,
+            year: 2025,
+        };
+        let domain: crate::Answer = original.clone().into();
+        let back: Answer = domain.into();
+        assert_eq!(original, back);
+    }
+
+    #[test]
+    fn test_parse_invalid_month_falls_back_to_text() {
+        // Month 13 is invalid for MM/YYYY format
+        let answer = Answer::from("13/2025".to_string());
+        assert_eq!(answer, Answer::Text("13/2025".to_string()));
+    }
+
+    #[test]
+    fn test_parse_month_zero_falls_back_to_text() {
+        let answer = Answer::from("00/2025".to_string());
+        assert_eq!(answer, Answer::Text("00/2025".to_string()));
+    }
+
+    #[test]
+    fn test_display_text_answer() {
+        let answer = Answer::Text("hello world".to_string());
+        assert_eq!(format!("{answer}"), "hello world");
+    }
+
+    #[test]
+    fn test_default_answer() {
+        let answer = Answer::default();
+        assert_eq!(
+            answer,
+            Answer::PredictionDate {
+                day: None,
+                month: 8,
+                year: 1986
+            }
+        );
+    }
 }

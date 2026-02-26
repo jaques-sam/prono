@@ -50,5 +50,4 @@ opt-level = 2 # fast and small wasm
 [dev-dependencies]
 generic = { path = "../generic" }
 prono_api = { path = "../prono_api", features = ["test-utils"] }
-
 rstest = "0.26"

@@ -48,7 +48,7 @@ impl From<Config> for prono_db::Config {
     }
 }
 
-#[cfg_attr(test, derive(Clone))]
+#[cfg_attr(test, derive(Clone, Default))]
 pub struct Overrides {
     pub host: Option<SecureString>,
     pub port: Option<SecureString>,

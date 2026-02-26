@@ -35,7 +35,7 @@ impl ReadConfig<SecureConfig> for ConfigRead {
                 error!("Failed to parse secure config: {e}");
                 e
             })
-            .ok(); // TODO handle errors properly
+            .ok();
 
         if let Some(secure_config) = secure_config {
             info!("Some or no secret environment vars are set. Read remaining config from secure_config.toml");

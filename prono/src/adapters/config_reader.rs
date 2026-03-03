@@ -1,7 +1,7 @@
 use std::{fs, path};
 
+use crate::ReadConfig;
 use log::{debug, error, info};
-use prono::ReadConfig;
 
 use crate::SecureConfig;
 
@@ -12,16 +12,16 @@ static PASS_OVERRIDE_ENV_VAR: &str = "PRONO_DB_PASS";
 static CONFIG_FILENAME: &str = "secure_config.toml";
 
 #[derive(Default)]
-pub struct ConfigRead {}
+pub struct ConfigReader {}
 
-impl ReadConfig<SecureConfig> for ConfigRead {
-    fn default_config_path() -> path::PathBuf {
+impl ReadConfig<SecureConfig> for ConfigReader {
+    fn default_config_path(&self) -> path::PathBuf {
         let path = dirs::config_dir().unwrap().join("prono").join(CONFIG_FILENAME);
         debug!("Default config path: {}", path.display());
         path
     }
 
-    fn read<P: AsRef<path::Path>>(config: P) -> SecureConfig {
+    fn read<P: AsRef<path::Path>>(&self, config: P) -> SecureConfig {
         let overrides = crate::db_config::Overrides {
             host: std::env::var(HOST_OVERRIDE_ENV_VAR).ok().map(Into::into),
             port: std::env::var(PORT_OVERRIDE_ENV_VAR).ok().map(Into::into),
@@ -64,7 +64,7 @@ mod tests {
             .parent()
             .unwrap()
             .join("test_config.toml");
-        ConfigRead::read(&filename);
+        ConfigReader {}.read(&filename);
     }
 
     #[test]
@@ -72,6 +72,6 @@ mod tests {
     fn test_read_without_config_file_fails() {
         generic::add_panic_hook();
 
-        ConfigRead::read(Path::new("file_does_not_exist.toml"));
+        ConfigReader {}.read(Path::new("file_does_not_exist.toml"));
     }
 }

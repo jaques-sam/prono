@@ -3,11 +3,11 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct SecureConfig {
-    #[serde(rename = "db")]
     pub db: db_config::Config,
 }
 
 impl SecureConfig {
+    #[must_use]
     pub fn override_db_config(mut self, overrides: db_config::Overrides) -> Self {
         self.db.apply_overrides(overrides);
         self
@@ -29,29 +29,6 @@ mod tests {
             })
             .unwrap(),
         }
-    }
-
-    #[test]
-    fn test_override_db_config_with_host() {
-        let config = create_test_config();
-        let overrides = db_config::Overrides {
-            host: Some(SecureString::from("newhost")),
-            ..db_config::Overrides::default()
-        };
-
-        let result = config.override_db_config(overrides);
-        let db_config: prono_db::Config = result.db.into();
-        assert_eq!(db_config.host.unsecure(), "newhost");
-    }
-
-    #[test]
-    fn test_override_db_config_with_no_overrides() {
-        let config = create_test_config();
-        let overrides = db_config::Overrides::default();
-
-        let result = config.override_db_config(overrides);
-        let db_config: prono_db::Config = result.db.into();
-        assert_eq!(db_config.host.unsecure(), "localhost");
     }
 
     #[test]

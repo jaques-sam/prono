@@ -1,5 +1,7 @@
 use secure_string::SecureString;
 
+pub static DB_NAME: &str = "db_prono";
+
 pub struct Config {
     pub host: SecureString,
     pub port: SecureString,
@@ -20,6 +22,18 @@ impl Config {
         let db_name = &self.db_name;
 
         format!("{DB_PROTOCOL}://{user}:{pass}@{host}:{port}/{db_name}").into()
+    }
+}
+
+impl From<prono::db_config::Config> for Config {
+    fn from(db_config: prono::db_config::Config) -> Self {
+        Self {
+            host: db_config.host,
+            port: db_config.port,
+            user: db_config.user,
+            pass: db_config.pass,
+            db_name: DB_NAME.to_string(),
+        }
     }
 }
 

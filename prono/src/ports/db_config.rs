@@ -4,11 +4,11 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(Clone))]
 pub struct Config {
-    host: SecureString,
+    pub host: SecureString,
     #[serde(deserialize_with = "deserialize_as_u16")]
-    port: SecureString,
-    user: SecureString,
-    pass: SecureString,
+    pub port: SecureString,
+    pub user: SecureString,
+    pub pass: SecureString,
 }
 
 fn deserialize_as_u16<'de, D>(deserializer: D) -> Result<SecureString, D::Error>
@@ -32,18 +32,6 @@ impl Config {
         }
         if let Some(pass) = overrides.pass {
             self.pass = pass;
-        }
-    }
-}
-
-impl From<Config> for prono_db::Config {
-    fn from(db_config: Config) -> Self {
-        Self {
-            host: db_config.host,
-            port: db_config.port,
-            user: db_config.user,
-            pass: db_config.pass,
-            db_name: crate::main_native::DB_NAME.to_string(),
         }
     }
 }

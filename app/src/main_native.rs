@@ -2,8 +2,6 @@ use eframe::AppCreator;
 use log::error;
 use prono::ReadConfig;
 
-pub static DB_NAME: &str = "db_prono";
-
 fn build_app<'a>(prono: impl prono_api::Surveys + 'static) -> AppCreator<'a> {
     Box::new(|cc: &eframe::CreationContext<'_>| Ok(Box::new(crate::App::new(cc, prono))))
 }
@@ -19,8 +17,9 @@ fn build_app<'a>(prono: impl prono_api::Surveys + 'static) -> AppCreator<'a> {
 pub async fn main() -> eframe::Result {
     env_logger::init(); // Log to stdout iso stderr (if you run with e.g. `RUST_LOG=debug`).
 
-    let default_config_path = crate::ConfigRead::default_config_path();
-    let db_config: prono_db::Config = crate::ConfigRead::read(default_config_path).db.into();
+    let config_reader = prono::factory::create_config_reader();
+    let default_config_path = config_reader.default_config_path();
+    let db_config: prono_db::Config = config_reader.read(default_config_path).db.into();
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

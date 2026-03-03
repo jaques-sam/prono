@@ -1,9 +1,11 @@
 // CLEAN ARCHITECTURE
+mod adapters;
 mod entities;
 mod ports;
 mod use_cases;
 
-pub use entities::*;
+pub(crate) use adapters::*;
+pub(crate) use entities::*;
 use log::error;
 pub use ports::*;
 use tokio::spawn;

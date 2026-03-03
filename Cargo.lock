@@ -2838,13 +2838,17 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "dirs",
+ "generic",
  "log",
  "prono_api",
  "rstest",
+ "secure-string",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+ "toml",
  "uuid",
 ]
 
@@ -2853,7 +2857,6 @@ name = "prono-app"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "dirs",
  "eframe",
  "egui",
  "env_logger",
@@ -2865,10 +2868,8 @@ dependencies = [
  "prono_api",
  "prono_db",
  "rstest",
- "secure-string",
  "serde",
  "tokio",
- "toml",
  "wasm-bindgen-futures",
  "web-sys",
 ]

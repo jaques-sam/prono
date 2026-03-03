@@ -16,3 +16,15 @@ pub fn add_panic_hook() {
         error!("{msg}");
     }));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "Boom")]
+    fn test_panic_hook_with_non_string_payload() {
+        add_panic_hook();
+        panic!("Boom");
+    }
+}

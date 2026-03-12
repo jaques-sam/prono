@@ -135,3 +135,24 @@ impl repo::Surveys for MysqlDb {
             .collect()
     }
 }
+
+#[async_trait]
+impl repo::Users for MysqlDb {
+    async fn all_users(&self) -> PronoResult<Vec<String>> {
+        let rows = sqlx::query("SELECT DISTINCT user FROM AnswerResponse")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(DbError::from)?;
+
+        Ok(rows.iter().map(|row| row.get("user")).collect())
+    }
+
+    async fn delete_user(&self, name: &str) -> PronoResult<()> {
+        sqlx::query("DELETE FROM AnswerResponse WHERE user = ?")
+            .bind(name)
+            .execute(&self.pool)
+            .await
+            .map_err(DbError::from)?;
+        Ok(())
+    }
+}

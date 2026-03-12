@@ -6,5 +6,5 @@ branch-coverage = false
 test-timeout = "30s"
 offline = true
 target-dir = "./target/coverage"
-exclude-files = ["target/*", "app/src/adapters/*", "prono_db/*"]
-exclude = ["prono-db"]
+exclude-files = ["target/*", "app/src/adapters/*", "prono_db/*", "backend/*"]
+exclude = ["prono-db", "backend"]

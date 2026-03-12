@@ -1,6 +1,7 @@
 // CLEAN ARCHITECTURE
+pub mod adapters;
 mod entities;
 mod ports;
-mod use_cases;
+pub mod use_cases;
 
 pub use ports::*;

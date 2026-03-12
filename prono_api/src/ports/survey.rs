@@ -2,6 +2,7 @@ use super::Question;
 
 #[derive(Debug, PartialEq, Eq)]
 #[cfg_attr(test, derive(Default))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Survey {
     pub id: u64,
     pub description: String,

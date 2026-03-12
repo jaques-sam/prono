@@ -17,6 +17,9 @@ fn build_app<'a>(prono: impl prono_api::Surveys + 'static) -> AppCreator<'a> {
 pub async fn main() -> eframe::Result {
     env_logger::init(); // Log to stdout iso stderr (if you run with e.g. `RUST_LOG=debug`).
 
+    // Initialize device identity (generates and persists UUID on first run)
+    let _identity = crate::adapters::identity_native::NativeIdentity::load_or_create();
+
     let config_reader = prono::factory::create_config_reader();
     let default_config_path = config_reader.default_config_path();
     let db_config: prono_db::Config = config_reader.read(default_config_path).db.into();

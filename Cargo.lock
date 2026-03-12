@@ -3353,6 +3353,7 @@ name = "prono-app"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "dirs",
  "eframe",
  "egui",
  "env_logger",
@@ -3368,6 +3369,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "uuid",
  "wasm-bindgen-futures",
  "web-sys",
 ]

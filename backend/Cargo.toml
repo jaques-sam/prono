@@ -4,3 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+prono = { path = "../prono" }
+prono_db = { path = "../prono_db" }
+prono_api = { path = "../prono_api", features = ["serde"] }
+
+actix-web = "4"
+actix-cors = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+log = "0.4"
+env_logger = "0.11"
+thiserror = "2.0.18"

@@ -12,19 +12,20 @@
 8. [x] Show all answers
 9.  [ ] In table as output
 10. [x] In time graph
-11. [ ] Implement 0MQ server in ./server
-12. [ ] Implement 0MQ client
+11. [x] Implement ~~0MQ~~ REST server in ./backend
+12. [x] Implement ~~0MQ~~ REST client
 13. [x] In time graph of all user answers
-14. [ ] Restrict users for filling in
-
+14. [ ] Restrict users for filling in --> TODO to validate!
+15. [ ] Login should be kind of popup, to show survey immediately after login if user has already filled in
+16. [ ] Show errors over the UI --> TODO not working!
 
 ## Technical Dept
 1. [x] Move prono-api to shared lib prono
 2. [x] Make shared prono-db library
 3. [x] Solve clippy pedantics, add `-Dclippy::pedantic`
 4. [x] Make db thread async
-5. [ ] Add unit tests (especially for operations right before db)
-6. [ ] Add coverage checker
+5. [x] Add unit tests (especially for operations right before db)
+6. [x] Add coverage checker
 7. [ ] (*) Avoid asking survey responses on cursor movement etc.
 8. [ ] Use Uuid for question IDs directly
 9. [ ] Use TLS for db traffic

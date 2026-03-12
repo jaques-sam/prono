@@ -11,7 +11,7 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
-prono_api = { path = "../prono_api" }
+prono_api = { path = "../prono_api", features = ["serde"] }
 
 egui = "0.33.3"
 eframe = { version = "0.33.3", default-features = false, features = [
@@ -37,6 +37,8 @@ env_logger = "0.11.8"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4.50"
 web-sys = "0.3.70"
+gloo-net = { version = "0.6", features = ["http"] }
+serde_json = "1.0"
 # fix compile error because of stepping to egui 0.33,
 getrandom_v2 = { version = "0.2", features = ["js"], package = "getrandom" }
 getrandom    = { version = "0.3", features = ["wasm_js"] }

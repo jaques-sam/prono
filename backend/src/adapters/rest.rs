@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, get, post, web};
+use actix_web::{HttpRequest, HttpResponse, get, post, web};
 use serde::Deserialize;
 
 use crate::BackendResult;
@@ -21,9 +21,17 @@ pub async fn get_survey(service: web::Data<SurveyService>) -> HttpResponse {
 pub async fn add_answer(
     service: web::Data<SurveyService>,
     body: web::Json<AddAnswerRequest>,
+    req: HttpRequest,
 ) -> BackendResult<HttpResponse> {
-    let req = body.into_inner();
-    service.add_answer(&req.user, req.question_id, req.answer).await?;
+    let device_id = req
+        .headers()
+        .get("X-Device-Id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let body = body.into_inner();
+    service
+        .add_answer(&body.user, body.question_id, body.answer, device_id)
+        .await?;
     Ok(HttpResponse::Ok().finish())
 }
 

@@ -32,6 +32,8 @@ prono_db = { path = "../prono_db" }
 tokio = { version = "1.49.0", default-features = false, features = ["rt", "rt-multi-thread", "macros"] }
 
 env_logger = "0.11.8"
+uuid = { version = "1", features = ["v4"] }
+dirs = "6.0.0"
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -39,6 +41,7 @@ wasm-bindgen-futures = "0.4.50"
 web-sys = "0.3.70"
 gloo-net = { version = "0.6", features = ["http"] }
 serde_json = "1.0"
+uuid = { version = "1", features = ["v4", "js"] }
 # fix compile error because of stepping to egui 0.33,
 getrandom_v2 = { version = "0.2", features = ["js"], package = "getrandom" }
 getrandom    = { version = "0.3", features = ["wasm_js"] }

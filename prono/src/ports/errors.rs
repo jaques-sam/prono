@@ -6,6 +6,9 @@ pub enum Error {
 
     #[error("Answer already exists")]
     AnswerExists,
+
+    #[error("Device mismatch: username is registered to a different device")]
+    DeviceMismatch,
 }
 
 pub type PronoResult<T> = std::result::Result<T, Error>;
@@ -27,8 +30,15 @@ mod tests {
     }
 
     #[test]
+    fn test_device_mismatch_error_display() {
+        let error = Error::DeviceMismatch;
+        assert!(format!("{error}").contains("Device mismatch"));
+    }
+
+    #[test]
     fn test_error_equality() {
         assert_eq!(Error::AnswerExists, Error::AnswerExists);
+        assert_eq!(Error::DeviceMismatch, Error::DeviceMismatch);
         assert_eq!(
             Error::Repository("test".to_string()),
             Error::Repository("test".to_string())

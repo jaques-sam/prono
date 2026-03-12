@@ -6,8 +6,7 @@ use std::rc::Rc;
 
 use log::error;
 
-// TODO: make this configurable
-static BACKEND_URL: &str = "http://127.0.0.1:8081";
+static BACKEND_URL: &str = "https://prono.samagali.myds.me";
 
 struct ApiThroughRest {
     base_url: String,

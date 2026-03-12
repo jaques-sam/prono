@@ -12,14 +12,16 @@ static BACKEND_URL: &str = "http://127.0.0.1:8081";
 struct ApiThroughRest {
     base_url: String,
     survey: prono_api::Survey,
+    device_id: String,
     cached_all_answers: Rc<RefCell<HashMap<String, Vec<(String, prono_api::Answer)>>>>,
 }
 
 impl ApiThroughRest {
-    fn new(base_url: String, survey: prono_api::Survey) -> Self {
+    fn new(base_url: String, survey: prono_api::Survey, device_id: String) -> Self {
         Self {
             base_url,
             survey,
+            device_id,
             cached_all_answers: Rc::new(RefCell::new(HashMap::new())),
         }
     }
@@ -51,10 +53,12 @@ impl prono_api::Surveys for ApiThroughRest {
             "answer": answer,
         });
         let body_str = body.to_string();
+        let device_id = self.device_id.clone();
 
         wasm_bindgen_futures::spawn_local(async move {
             let result = gloo_net::http::Request::post(&url)
                 .header("Content-Type", "application/json")
+                .header("X-Device-Id", &device_id)
                 .body(body_str)
                 .expect("Failed to build request body")
                 .send()
@@ -135,7 +139,9 @@ pub fn main() {
             }
         };
 
-        let api = ApiThroughRest::new(BACKEND_URL.to_string(), survey);
+        let identity = crate::adapters::identity_wasm::WasmIdentity::load_or_create();
+        let device_id = prono_api::Identity::device_id(&identity).to_string();
+        let api = ApiThroughRest::new(BACKEND_URL.to_string(), survey, device_id);
 
         let start_result = eframe::WebRunner::new()
             .start(

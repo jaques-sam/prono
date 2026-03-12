@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 
 pub struct FakeRepo {
     surveys: Mutex<HashMap<String, Survey>>,
+    devices: Mutex<HashMap<String, String>>,
 }
 
 #[async_trait]
@@ -19,6 +20,7 @@ impl repo::Db for FakeRepo {
 
         Ok(Self {
             surveys: Mutex::new(HashMap::new()),
+            devices: Mutex::new(HashMap::new()),
         })
     }
 }
@@ -95,15 +97,36 @@ impl repo::Users for FakeRepo {
     }
 }
 
+#[async_trait]
+impl repo::DeviceRegistry for FakeRepo {
+    async fn register_device(&self, user: &str, device_id: &str) -> crate::PronoResult<()> {
+        info!("Registering device {device_id} for user {user}");
+        self.devices
+            .lock()
+            .await
+            .insert(user.to_string(), device_id.to_string());
+        Ok(())
+    }
+
+    async fn verify_device(&self, user: &str, device_id: &str) -> crate::PronoResult<bool> {
+        let devices = self.devices.lock().await;
+        match devices.get(user) {
+            Some(registered) => Ok(registered == device_id),
+            None => Ok(true), // No device registered yet, allow
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::repo::{Db, Surveys};
+    use crate::repo::{Db, DeviceRegistry, Surveys};
 
     use super::*;
 
     fn setup() -> FakeRepo {
         FakeRepo {
             surveys: Mutex::new(HashMap::new()),
+            devices: Mutex::new(HashMap::new()),
         }
     }
 
@@ -278,5 +301,25 @@ mod tests {
 
         let results = repo.all_answers(question_id).await;
         assert_eq!(results.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_register_and_verify_device() {
+        let repo = setup();
+        repo.register_device("alice", "device-123").await.unwrap();
+        assert!(repo.verify_device("alice", "device-123").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_verify_device_wrong_id() {
+        let repo = setup();
+        repo.register_device("alice", "device-123").await.unwrap();
+        assert!(!repo.verify_device("alice", "device-456").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_verify_device_no_registration() {
+        let repo = setup();
+        assert!(repo.verify_device("alice", "any-device").await.unwrap());
     }
 }

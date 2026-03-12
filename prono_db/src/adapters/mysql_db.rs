@@ -156,3 +156,34 @@ impl repo::Users for MysqlDb {
         Ok(())
     }
 }
+
+#[async_trait]
+impl repo::DeviceRegistry for MysqlDb {
+    async fn register_device(&self, user: &str, device_id: &str) -> PronoResult<()> {
+        sqlx::query(
+            "INSERT INTO Users (user_name, device_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE device_id = VALUES(device_id)",
+        )
+        .bind(user)
+        .bind(device_id)
+        .execute(&self.pool)
+        .await
+        .map_err(DbError::from)?;
+        Ok(())
+    }
+
+    async fn verify_device(&self, user: &str, device_id: &str) -> PronoResult<bool> {
+        let row = sqlx::query("SELECT device_id FROM Users WHERE user_name = ?")
+            .bind(user)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DbError::from)?;
+
+        match row {
+            Some(row) => {
+                let registered: String = row.get("device_id");
+                Ok(registered == device_id)
+            }
+            None => Ok(true),
+        }
+    }
+}

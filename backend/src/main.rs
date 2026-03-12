@@ -21,7 +21,8 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to initialize database");
 
-    let service = web::Data::new(SurveyService::new(Arc::new(db)));
+    let db = Arc::new(db);
+    let service = web::Data::new(SurveyService::new(db.clone(), db));
 
     info!("Starting backend server on 0.0.0.0:8081");
 
@@ -31,6 +32,7 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin("http://127.0.0.1:8080")
             .allowed_methods(vec!["GET", "POST"])
             .allowed_header(actix_web::http::header::CONTENT_TYPE)
+            .allowed_header("X-Device-Id")
             .max_age(3600);
 
         App::new()

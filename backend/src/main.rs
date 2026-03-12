@@ -29,7 +29,10 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin("https://jaques-sam.github.io")
-            .allowed_origin("http://127.0.0.1:8080")
+            .allowed_origin("https://prono-app.samagali.myds.me")
+            .allowed_origin("http://192.168.80.*")
+            .allowed_origin("http://127.0.0.1:8000")
+            .allowed_origin("http://localhost:8000")
             .allowed_methods(vec!["GET", "POST"])
             .allowed_header(actix_web::http::header::CONTENT_TYPE)
             .allowed_header("X-Device-Id")

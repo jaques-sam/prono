@@ -38,6 +38,8 @@ pub struct App {
     survey_state: SurveyState,
     #[serde(skip)]
     prono: Option<Box<dyn prono_api::Surveys>>,
+    #[serde(skip)]
+    error_message: Option<String>,
 }
 
 impl App {
@@ -66,12 +68,13 @@ impl App {
             }
         };
 
+        let Some(prono) = self.prono.as_mut() else {
+            self.error_message = Some("No backend connection available".to_string());
+            self.survey_state = SurveyState::InProgress(survey);
+            return;
+        };
         for question in &survey.questions {
-            self.prono.as_mut().expect("no prono API adapter set").add_answer(
-                &self.user_name,
-                question.id.clone(),
-                question.answer.clone().into(),
-            );
+            prono.add_answer(&self.user_name, question.id.clone(), question.answer.clone().into());
         }
         self.survey_state = SurveyState::Completed(survey);
     }
@@ -92,11 +95,10 @@ impl App {
                 egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
                     for question in &survey.questions {
                         ui.heading(&question.text);
-                        let all_answers = self
-                            .prono
-                            .as_ref()
-                            .expect("no prono API adapter set")
-                            .all_answers(question.id.clone());
+                        let Some(prono) = self.prono.as_ref() else {
+                            return;
+                        };
+                        let all_answers = prono.all_answers(question.id.clone());
                         let all_answers: Vec<(Option<&String>, Answer)> = all_answers
                             .iter()
                             .map(|(user, answer)| (Some(user), answer.clone().into()))
@@ -132,17 +134,51 @@ impl App {
             }
             SurveyState::NotStarted => {
                 if ui.button("Start survey").clicked() {
-                    self.survey_state = SurveyState::InProgress(
-                        self.prono
-                            .as_ref()
-                            .expect("no prono API adapter set")
-                            .empty_survey()
-                            .into(),
-                    );
+                    if let Some(prono) = self.prono.as_ref() {
+                        self.survey_state = SurveyState::InProgress(prono.empty_survey().into());
+                    } else {
+                        self.error_message = Some("No backend connection available".to_string());
+                    }
                 }
             }
         }
         self.draw_timeline_from_answers(ui);
+    }
+
+    fn show_error_overlay(&mut self, ctx: &egui::Context) {
+        if let Some(ref msg) = self.error_message {
+            let screen = ctx.content_rect();
+            let msg = msg.clone();
+
+            // Semi-transparent background covering the entire screen
+            egui::Area::new(egui::Id::new("error_overlay_bg"))
+                .fixed_pos(screen.min)
+                .show(ctx, |ui| {
+                    let (rect, response) = ui.allocate_exact_size(screen.size(), egui::Sense::click());
+                    ui.painter()
+                        .rect_filled(rect, 0.0, egui::Color32::from_black_alpha(160));
+                    if response.clicked() {
+                        self.error_message = None;
+                    }
+                });
+
+            // Centered error message on top
+            egui::Area::new(egui::Id::new("error_overlay_msg"))
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.heading("Error");
+                            ui.add_space(8.0);
+                            ui.label(&msg);
+                            ui.add_space(8.0);
+                            if ui.button("OK").clicked() {
+                                self.error_message = None;
+                            }
+                        });
+                    });
+                });
+        }
     }
 }
 
@@ -210,6 +246,8 @@ impl eframe::App for App {
                 egui::warn_if_debug_build(ui);
             });
         });
+
+        self.show_error_overlay(ctx);
     }
 }
 
@@ -263,5 +301,25 @@ mod tests {
 
         app.submit();
         assert!(matches!(app.survey_state, SurveyState::Completed(_)));
+    }
+
+    #[test]
+    fn submit_without_adapter_sets_error_message() {
+        let mut app = App {
+            survey_state: SurveyState::InProgress(Survey {
+                id: 1,
+                description: "Test".to_string(),
+                questions: vec![Question {
+                    id: "q1".to_string(),
+                    text: "Q?".to_string(),
+                    answer: Answer::Text("a".to_string()),
+                }],
+            }),
+            ..App::default()
+        };
+
+        app.submit();
+        assert!(app.error_message.is_some());
+        assert!(matches!(app.survey_state, SurveyState::InProgress(_)));
     }
 }

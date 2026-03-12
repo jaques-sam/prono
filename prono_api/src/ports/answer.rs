@@ -1,4 +1,5 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Answer {
     Text(String),
     PredictionDate { day: Option<u8>, month: u8, year: u16 },

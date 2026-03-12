@@ -15,7 +15,7 @@ static SURVEY_CONFIG: &str = include_str!("./surveys/survey_spacex_starship.json
 use std::sync::mpsc::{self, Receiver, Sender};
 
 #[cfg(debug_assertions)]
-pub(crate) use use_cases::*;
+pub use use_cases::*;
 
 #[cfg(debug_assertions)]
 use crate::repo::Db;
@@ -146,6 +146,13 @@ impl SyncPronoAdapter {
     }
 }
 
+/// Returns an empty survey template parsed from the embedded survey JSON.
+#[must_use]
+pub fn empty_survey() -> prono_api::Survey {
+    let survey: Survey = FileSurvey::create_from_file(SURVEY_CONFIG).into();
+    survey.into()
+}
+
 // It will issue requests to the background thread and try to `try_recv` the per-call
 // response channel. If the response isn't ready yet the method returns `None`.
 // This keeps the GUI thread non-blocking while allowing callers to poll for results.
@@ -188,5 +195,17 @@ impl prono_api::Surveys for SyncPronoAdapter {
                 Vec::new()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_survey_returns_non_empty_survey() {
+        let survey = empty_survey();
+        assert!(!survey.description.is_empty());
+        assert!(!survey.questions.is_empty());
     }
 }

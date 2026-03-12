@@ -80,6 +80,21 @@ impl repo::Surveys for FakeRepo {
     }
 }
 
+#[async_trait]
+impl repo::Users for FakeRepo {
+    async fn all_users(&self) -> crate::PronoResult<Vec<String>> {
+        info!("Fetching all users");
+        let surveys = self.surveys.lock().await;
+        Ok(surveys.keys().cloned().collect())
+    }
+
+    async fn delete_user(&self, name: &str) -> crate::PronoResult<()> {
+        info!("Deleting user {name}");
+        self.surveys.lock().await.remove(name);
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::repo::{Db, Surveys};
@@ -201,6 +216,34 @@ mod tests {
         let answer2 = repo.answer("user1", "q2".to_string()).await;
         assert!(answer1.is_some());
         assert_eq!(answer2, Some(new_answer));
+    }
+
+    #[tokio::test]
+    async fn test_all_users_empty() {
+        let repo = setup();
+        let users = repo::Users::all_users(&repo).await.unwrap();
+        assert!(users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_all_users_returns_names() {
+        let repo = setup();
+        repo.surveys.lock().await.insert("alice".to_string(), Survey::default());
+        repo.surveys.lock().await.insert("bob".to_string(), Survey::default());
+
+        let mut users = repo::Users::all_users(&repo).await.unwrap();
+        users.sort();
+        assert_eq!(users, vec!["alice", "bob"]);
+    }
+
+    #[tokio::test]
+    async fn test_delete_user() {
+        let repo = setup();
+        repo.surveys.lock().await.insert("alice".to_string(), Survey::default());
+
+        repo::Users::delete_user(&repo, "alice").await.unwrap();
+        let users = repo::Users::all_users(&repo).await.unwrap();
+        assert!(users.is_empty());
     }
 
     #[tokio::test]

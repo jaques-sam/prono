@@ -19,6 +19,12 @@ pub trait Surveys: Send + Sync {
 }
 
 #[async_trait]
+pub trait Users: Send + Sync {
+    async fn all_users(&self) -> PronoResult<Vec<String>>;
+    async fn delete_user(&self, name: &str) -> PronoResult<()>;
+}
+
+#[async_trait]
 pub trait Db: Surveys + Sized + Send + Sync {
     /// Associated config type required to initialize this DB implementation.
     type Config: Send + 'static;

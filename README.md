@@ -17,7 +17,7 @@ Prono is an application to conduct surveys and store the answers in a database.
 
 It's multi-platform (desktop and web) and written in Rust using the [egui](ehttps://github.com/emilk/egui) framework.
 
-For now, the web app is deployed as github page: https://jaques-sam.github.io/prono/ [INCOMPLETE].
+For now, the web app is deployed as github page: https://jaques-sam.github.io/prono/app.
 
 To run the desktop app, see instructions below.
 

@@ -29,7 +29,10 @@ impl ReadConfig<SecureConfig> for ConfigReader {
             pass: std::env::var(PASS_OVERRIDE_ENV_VAR).ok().map(Into::into),
         };
 
-        let secure_config = fs::read_to_string(config).expect("secure config is missing");
+        let config_path = config.as_ref();
+        let secure_config = fs::read_to_string(config_path)
+            .unwrap_or_else(|e| panic!("secure config is missing: {config_path:?} ({e})",));
+
         let secure_config: Option<SecureConfig> = toml::from_str(&secure_config)
             .map_err(|e| {
                 error!("Failed to parse secure config: {e}");

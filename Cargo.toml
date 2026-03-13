@@ -1,5 +1,5 @@
 [workspace]
-members = ["app", "backend", "cli", "generic", "prono", "prono_db", "prono_api"]
+members = ["app", "backend", "cli", "generic", "prono", "db", "api"]
 resolver = "3"
 
 [profile.release]

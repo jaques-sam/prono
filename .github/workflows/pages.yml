@@ -1,15 +1,15 @@
 name: Github Pages
 
-# By default, runs if you push to main. keeps your deployed app in sync with main branch.
-on:
-  push:
-    branches:
-      - release
-# to only run when you do a new github release, comment out above part and uncomment the below trigger.
+# By default, runs if you push to master. keeps your deployed app in sync with master branch.
 # on:
-#   release:
-#     types:
-#       - published
+#   push:
+#     branches:
+#       - release
+# to only run when you do a new github release, comment out above part and uncomment the below trigger.
+on:
+  release:
+    types:
+      - published
 
 permissions:
   contents: write # for committing to gh-pages branch.
@@ -39,7 +39,6 @@ jobs:
         # relatively as prono/favicon.ico. if we skip public-url option, the href paths will instead request username.github.io/favicon.ico which
         # will obviously return error 404 not found.
         run: ./trunk build --release --config ./app --public-url $public_url
-
 
         env:
           public_url: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"

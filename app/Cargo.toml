@@ -11,7 +11,7 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
-prono_api = { path = "../prono_api", features = ["serde"] }
+prono_api = { path = "../api", features = ["serde"] }
 
 egui = "0.33.3"
 eframe = { version = "0.33.3", default-features = false, features = [
@@ -28,7 +28,7 @@ chrono = "0.4.42"
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 prono = { path = "../prono" }
-prono_db = { path = "../prono_db" }
+prono_db = { path = "../db" }
 tokio = { version = "1.49.0", default-features = false, features = ["rt", "rt-multi-thread", "macros"] }
 
 env_logger = "0.11.8"
@@ -48,5 +48,5 @@ getrandom    = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
 generic = { path = "../generic" }
-prono_api = { path = "../prono_api", features = ["test-utils"] }
+prono_api = { path = "../api", features = ["test-utils"] }
 rstest = "0.26"

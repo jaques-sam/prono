@@ -3369,6 +3369,7 @@ dependencies = [
  "prono",
  "prono_api",
  "prono_db",
+ "rstest",
  "serde",
  "thiserror 2.0.18",
  "tokio",

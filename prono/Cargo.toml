@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 generic = { version = "0.1.0", path = "../generic" }
-prono_api = { path = "../prono_api" }
+prono_api = { path = "../api" }
 
 chrono = "0.4.43"
 serde = { version = "1.0.228", features = ["derive"] }

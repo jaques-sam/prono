@@ -46,9 +46,6 @@ uuid = { version = "1", features = ["v4", "js"] }
 getrandom_v2 = { version = "0.2", features = ["js"], package = "getrandom" }
 getrandom    = { version = "0.3", features = ["wasm_js"] }
 
-[profile.release]
-opt-level = 2 # fast and small wasm
-
 [dev-dependencies]
 generic = { path = "../generic" }
 prono_api = { path = "../prono_api", features = ["test-utils"] }

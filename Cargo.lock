@@ -687,22 +687,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
-name = "backend"
-version = "0.1.0"
-dependencies = [
- "actix-cors",
- "actix-web",
- "env_logger",
- "log",
- "prono",
- "prono_api",
- "prono_db",
- "serde",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3372,6 +3356,22 @@ dependencies = [
  "uuid",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "prono-backend"
+version = "0.1.0"
+dependencies = [
+ "actix-cors",
+ "actix-web",
+ "env_logger",
+ "log",
+ "prono",
+ "prono_api",
+ "prono_db",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]

@@ -6,8 +6,8 @@ use log::info;
 use prono::ReadConfig;
 use prono::repo::Db;
 
-use backend::adapters::rest;
-use backend::use_cases::SurveyService;
+use prono_backend::adapters::rest;
+use prono_backend::use_cases::SurveyService;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {

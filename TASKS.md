@@ -10,14 +10,14 @@
 6. [x] Do not allow duplicates in db
 7. [ ] Add drop down list for months or restrict number
 8. [x] Show all answers
-9.  [ ] In table as output
-10. [x] In time graph
-11. [x] Implement ~~0MQ~~ REST server in ./backend
-12. [x] Implement ~~0MQ~~ REST client
-13. [x] In time graph of all user answers
-14. [ ] Restrict users for filling in --> TODO to validate!
-15. [ ] Login should be kind of popup, to show survey immediately after login if user has already filled in
-16. [ ] Show errors over the UI --> TODO not working!
+9.  [x] Time graph
+10. [x] Implement ~~0MQ~~ REST server in ./backend
+11. [x] Implement ~~0MQ~~ REST client
+12. [x] Time graph of all user answers
+13. [ ] Restrict users for filling in (twice) --> TODO to validate!
+14. [ ] Show errors over the UI --> TODO not working!
+15. [ ] Add user verification (pass phrase?/is human?)
+16. [ ] Table as output
 
 ## Technical Dept
 1. [x] Move prono-api to shared lib prono
@@ -26,9 +26,11 @@
 4. [x] Make db thread async
 5. [x] Add unit tests (especially for operations right before db)
 6. [x] Add coverage checker
-7. [ ] (*) Avoid asking survey responses on cursor movement etc.
+7. [ ] Avoid asking survey responses on cursor movement etc.
 8. [ ] Use Uuid for question IDs directly
 9. [ ] Use TLS for db traffic
-10. [x] Read config from default location(s) so app can run from any machine
-11. [ ] Listen onblocked on recv from db thread, update UI async
-12. [ ] ...
+10. [ ] Use TLS for REST traffic
+11. [x] Read config from default location(s) so app can run from any machine
+12. [ ] Listen onblocked on recv from db thread, update UI async
+13. [ ] Create backend service script (for Synology)
+14. [ ] Deploy backend automatically on release update [hard to impossible]

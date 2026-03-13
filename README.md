@@ -1,61 +1,31 @@
-# Prono App
+# Prono
 
 [![dependency status](https://deps.rs/repo/github/jaques-sam/prono/status.svg)](https://deps.rs/repo/github/jaques-sam/prono)
 [![Build Status](https://github.com/jaques-sam/prono/workflows/CI/badge.svg)](https://github.com/jaques-sam/prono/actions?workflow=CI)
 
-- [Prono App](#prono-app)
+- [Prono](#prono)
   - [Summary](#summary)
-  - [Building and Running](#building-and-running)
-  - [Configuration](#configuration)
-    - [Parameters](#parameters)
-    - [Feed into the Prono App](#feed-into-the-prono-app)
+  - [Contents](#contents)
 
 
 ## Summary
 
-Prono is an application to conduct surveys and store the answers in a database.
+This repository is a combination of applications that interact to
 
-It's multi-platform (desktop and web) and written in Rust using the [egui](ehttps://github.com/emilk/egui) framework.
+  - conduct surveys,
+  - collect them in a database
+  - and visualize the results.
 
-For now, the web app is deployed as github page: https://jaques-sam.github.io/prono/app.
-
-To run the desktop app, see instructions below.
-
-## Building and Running
-
-```sh
-cargo run --bin prono-app
-```
-To see more logs, add `RUST_LOG=debug|info` in front.
+See architecture [here](docs/architecture.drawio.png).
 
 
-## Configuration
+## Contents
 
-### Parameters
+This repository contains the following applications:
 
-Needed for the Prono database:
-
-- host: hostname or IP address of the database server
-- port: port number (16 bit) of the database server
-- user: username to connect to the database
-- pass: password to connect to the database
+- [Prono App](app/README.md)
+- [Prono Backend](backend/README.md)
+- [Prono CLI](cli/README.md)
 
 
-### Feed into the Prono App
 
-Either provide a `config.toml` file in `$HOME/.config/prono/` with the following contents:
-
-```toml
-[db]
-host = "the_prono_db_host"
-port = the_prono_db_port
-user = "the_prono_db_user"
-pass = "the_prono_db_password"
-```
-
-or set the following environment variables:
-
-- `PRONO_DB_HOST`
-- `PRONO_DB_PORT`
-- `PRONO_DB_USER`
-- `PRONO_DB_PASS`

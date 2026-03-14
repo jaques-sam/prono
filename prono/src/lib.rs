@@ -27,6 +27,7 @@ use crate::repo::Db;
 /// returned receiver to avoid blocking the GUI thread.
 pub struct SyncPronoAdapter {
     req_tx: Sender<Request>,
+    startup_warning: Option<String>,
 }
 
 enum Request {
@@ -69,14 +70,27 @@ impl SyncPronoAdapter {
     {
         let (req_tx, req_rx) = mpsc::channel::<Request>();
 
+        #[allow(unused_mut)]
+        let mut startup_warning = None;
         let db: Box<dyn repo::Surveys + Send + Sync> = match D::init(config).await {
             Ok(db) => Box::new(db),
             #[allow(unused)]
             Err(err) => {
                 #[cfg(not(debug_assertions))]
-                return Err(err);
+                {
+                    startup_warning = Some(err.to_string());
+                    return Ok(Self {
+                        req_tx,
+                        startup_warning,
+                    });
+                }
                 #[cfg(debug_assertions)]
-                Box::new(fake_db::FakeRepo::init(()).await?)
+                {
+                    let msg = format!("{err}. Using in-memory fake database.");
+                    error!("{msg}");
+                    startup_warning = Some(msg);
+                    Box::new(fake_db::FakeRepo::init(()).await?)
+                }
             }
         };
 
@@ -109,7 +123,17 @@ impl SyncPronoAdapter {
             }
         });
 
-        Ok(Self { req_tx })
+        Ok(Self {
+            req_tx,
+            startup_warning,
+        })
+    }
+
+    /// Returns a warning message if the database connection failed at startup
+    /// and a fallback was used (debug builds only).
+    #[must_use]
+    pub fn startup_warning(&self) -> Option<&str> {
+        self.startup_warning.as_deref()
     }
 
     /// Request response (alias); returns a receiver you can `try_recv` on.
@@ -207,5 +231,43 @@ mod tests {
         let survey = empty_survey();
         assert!(!survey.description.is_empty());
         assert!(!survey.questions.is_empty());
+    }
+
+    #[cfg(debug_assertions)]
+    #[tokio::test]
+    async fn test_sync_prono_adapter_with_fake_db() {
+        let adapter = SyncPronoAdapter::new_with_db_config::<fake_db::FakeRepo>(())
+            .await
+            .unwrap();
+
+        assert!(adapter.startup_warning().is_none());
+
+        let survey = prono_api::Surveys::empty_survey(&adapter);
+        assert!(!survey.questions.is_empty());
+    }
+
+    #[cfg(debug_assertions)]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sync_prono_adapter_add_and_retrieve() {
+        let mut adapter = SyncPronoAdapter::new_with_db_config::<fake_db::FakeRepo>(())
+            .await
+            .unwrap();
+
+        let survey = prono_api::Surveys::empty_survey(&adapter);
+        let qid = survey.questions[0].id.clone();
+
+        prono_api::Surveys::add_answer(
+            &mut adapter,
+            "testuser",
+            qid.clone(),
+            prono_api::Answer::Text("hello".to_string()),
+        );
+
+        // Give the background task time to process
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        let answers = prono_api::Surveys::all_answers(&adapter, qid);
+        assert_eq!(answers.len(), 1);
+        assert_eq!(answers[0].0, "testuser");
     }
 }

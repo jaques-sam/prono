@@ -159,3 +159,27 @@ jobs:
         use-cross: true
         command: build
         args: --verbose --release --target=${{ matrix.TARGET }} --package prono-app
+
+  build_backend_spk:
+    name: Build Backend Synology SPK
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        target: x86_64-unknown-linux-gnu
+        override: true
+    - name: Build backend for x86_64-unknown-linux-gnu
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --target x86_64-unknown-linux-gnu --package prono-backend
+    - name: Build Synology SPK
+      run: bash backend/install/build-spk.sh target/x86_64-unknown-linux-gnu/release/prono-backend dist/
+    - name: Upload SPK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: prono-backend-spk
+        path: dist/*.spk

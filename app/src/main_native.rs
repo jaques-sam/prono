@@ -2,8 +2,8 @@ use eframe::AppCreator;
 use log::error;
 use prono::ReadConfig;
 
-fn build_app<'a>(prono: impl prono_api::Surveys + 'static) -> AppCreator<'a> {
-    Box::new(|cc: &eframe::CreationContext<'_>| Ok(Box::new(crate::App::new(cc, prono))))
+fn build_app<'a>(prono: impl prono_api::Surveys + 'static, initial_error: Option<String>) -> AppCreator<'a> {
+    Box::new(|cc: &eframe::CreationContext<'_>| Ok(Box::new(crate::App::new(cc, prono, initial_error))))
 }
 
 /// # Panics
@@ -44,5 +44,6 @@ pub async fn main() -> eframe::Result {
         Ok(prono) => prono,
     };
 
-    eframe::run_native("eframe template", native_options, build_app(prono))
+    let startup_warning = prono.startup_warning().map(String::from);
+    eframe::run_native("eframe template", native_options, build_app(prono, startup_warning))
 }

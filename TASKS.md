@@ -14,10 +14,11 @@
 10. [x] Implement ~~0MQ~~ REST server in ./backend
 11. [x] Implement ~~0MQ~~ REST client
 12. [x] Time graph of all user answers
-13. [ ] Restrict users for filling in (twice) --> TODO to validate!
-14. [ ] Show errors over the UI --> TODO not working!
-15. [ ] Add user verification (pass phrase?/is human?)
-16. [ ] Table as output
+13. [x] Restrict users for filling in (twice)
+14. [ ] Check when typing if user already exists/filld in survey, show warning
+15. [ ] Show errors over the UI
+16. [ ] Add user verification (pass phrase?/is human?)
+17. [ ] Table as output
 
 ## Technical Dept
 1. [x] Move prono-api to shared lib prono
@@ -32,5 +33,5 @@
 10. [ ] Use TLS for REST traffic
 11. [x] Read config from default location(s) so app can run from any machine
 12. [ ] Listen onblocked on recv from db thread, update UI async
-13. [ ] Create backend service script (for Synology)
+13. [x] Create backend service package for Synology
 14. [ ] Deploy backend automatically on release update [hard to impossible]

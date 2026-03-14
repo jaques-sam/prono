@@ -146,7 +146,7 @@ pub fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(move |cc: &eframe::CreationContext<'_>| Ok(Box::new(crate::App::new(cc, api)))),
+                Box::new(move |cc: &eframe::CreationContext<'_>| Ok(Box::new(crate::App::new(cc, api, None)))),
             )
             .await;
 

@@ -44,18 +44,19 @@ pub struct App {
 
 impl App {
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>, prono: impl prono_api::Surveys + 'static) -> Self {
-        // This is also where you can customize the look and feel of egui using
-        // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
-
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        prono: impl prono_api::Surveys + 'static,
+        initial_error: Option<String>,
+    ) -> Self {
         // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
         let mut app = if let Some(storage) = cc.storage {
             eframe::get_value(storage, eframe::APP_KEY).unwrap_or(Self::default())
         } else {
             Self::default()
         };
         app.prono = Some(Box::new(prono));
+        app.error_message = initial_error;
         app
     }
 
@@ -172,8 +173,13 @@ impl App {
                             ui.add_space(8.0);
                             ui.label(&msg);
                             ui.add_space(8.0);
+                            #[cfg(debug_assertions)]
                             if ui.button("OK").clicked() {
                                 self.error_message = None;
+                            }
+                            #[cfg(not(debug_assertions))]
+                            if ui.button("exit").clicked() {
+                                std::process::exit(1);
                             }
                         });
                     });

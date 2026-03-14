@@ -1,0 +1,29 @@
+#!/bin/sh
+
+BINARY="/var/packages/prono-backend/target/prono-backend"
+PID_FILE="/var/packages/prono-backend/target/prono-backend.pid"
+
+case "$1" in
+    start)
+        if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+            echo "Already running"
+            exit 0
+        fi
+        $BINARY &
+        echo $! > "$PID_FILE"
+        ;;
+    stop)
+        if [ -f "$PID_FILE" ]; then
+            kill "$(cat "$PID_FILE")" 2>/dev/null
+            rm -f "$PID_FILE"
+        fi
+        ;;
+    status)
+        if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+            exit 0
+        fi
+        exit 3
+        ;;
+esac
+
+exit 0

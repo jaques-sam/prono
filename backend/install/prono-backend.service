@@ -1,0 +1,12 @@
+[Unit]
+Description=Run prono-backend
+After=network.target
+
+[Service]
+Type=simple
+User=sam
+ExecStart=/var/packages/prono-backend/target/prono-backend
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

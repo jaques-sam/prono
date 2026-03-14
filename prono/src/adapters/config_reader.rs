@@ -31,7 +31,7 @@ impl ReadConfig<SecureConfig> for ConfigReader {
 
         let config_path = config.as_ref();
         let secure_config = fs::read_to_string(config_path)
-            .unwrap_or_else(|e| panic!("secure config is missing: {config_path:?} ({e})",));
+            .unwrap_or_else(|e| panic!("secure config is missing: {} ({e})", config_path.display()));
 
         let secure_config: Option<SecureConfig> = toml::from_str(&secure_config)
             .map_err(|e| {

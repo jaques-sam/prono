@@ -2,9 +2,11 @@
 force-clean = false
 skip-clean = true
 line-coverage = true
-branch-coverage = false
+branch-coverage = true
 test-timeout = "30s"
 offline = true
 target-dir = "./target/coverage"
-exclude-files = ["target/*", "app/src/adapters/*", "../db/*", "backend/*", "cli/*"]
-exclude = ["prono-db", "backend", "prono-cli"]
+exclude-files = ["target/*", "*/**/adapters/*", "*/*/main*.rs"]
+
+[report]
+out = ["Html"]

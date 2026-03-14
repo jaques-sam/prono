@@ -63,4 +63,22 @@ mod tests {
 
         assert_eq!(constructed_url.unsecure(), expected_url);
     }
+
+    #[test]
+    fn test_from_prono_db_config() {
+        let prono_config = prono::db_config::Config {
+            host: SecureString::from("myhost"),
+            port: SecureString::from("3306"),
+            user: SecureString::from("root"),
+            pass: SecureString::from("secret"),
+        };
+
+        let config: Config = prono_config.into();
+
+        assert_eq!(config.host.unsecure(), "myhost");
+        assert_eq!(config.port.unsecure(), "3306");
+        assert_eq!(config.user.unsecure(), "root");
+        assert_eq!(config.pass.unsecure(), "secret");
+        assert_eq!(config.db_name, DB_NAME);
+    }
 }

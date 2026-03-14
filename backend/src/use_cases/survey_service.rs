@@ -155,4 +155,29 @@ mod tests {
         let result = service.add_answer("user1", q2, answer, "device-2").await;
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_response_after_adding_answers() {
+        let service = make_service().await;
+        let survey = service.empty_survey();
+        let question_id = survey.questions[0].id.clone();
+
+        let answer = prono_api::Answer::Text("my answer".to_string());
+        service
+            .add_answer("user1", question_id, answer, "device-1")
+            .await
+            .unwrap();
+
+        let response = service.response("user1", 0).await;
+        assert!(response.is_some());
+        let response = response.unwrap();
+        assert_eq!(response.questions.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_response_returns_none_for_unknown_user() {
+        let service = make_service().await;
+        let response = service.response("nobody", 0).await;
+        assert!(response.is_none());
+    }
 }

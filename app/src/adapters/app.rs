@@ -1,4 +1,4 @@
-use egui::TextEdit;
+use egui::{FontId, RichText, TextEdit};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
@@ -121,6 +121,15 @@ impl App {
 
     fn update_survey(&mut self, ui: &mut egui::Ui) {
         match &mut self.survey_state {
+            SurveyState::NotStarted => {
+                if ui.button("Start survey").clicked() {
+                    if let Some(prono) = self.prono.as_ref() {
+                        self.survey_state = SurveyState::InProgress(prono.empty_survey().into());
+                    } else {
+                        self.error_message = Some("No backend connection available".to_string());
+                    }
+                }
+            }
             SurveyState::InProgress(survey) => {
                 ui.heading(&survey.description);
                 ui.spacing();
@@ -132,15 +141,6 @@ impl App {
             }
             SurveyState::Completed(_survey) => {
                 ui.label("Survey completed.");
-            }
-            SurveyState::NotStarted => {
-                if ui.button("Start survey").clicked() {
-                    if let Some(prono) = self.prono.as_ref() {
-                        self.survey_state = SurveyState::InProgress(prono.empty_survey().into());
-                    } else {
-                        self.error_message = Some("No backend connection available".to_string());
-                    }
-                }
             }
         }
         self.draw_timeline_from_answers(ui);
@@ -260,11 +260,17 @@ impl eframe::App for App {
 fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label("Made by Sam Jaques. ");
-        ui.label("Powered by ");
-        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-        ui.label(" and ");
-        ui.hyperlink_to("eframe", "https://github.com/emilk/egui/tree/master/crates/eframe");
+        ui.label(RichText::new("Made by Sam Jaques. ").font(FontId::proportional(8.0)));
+        ui.label(RichText::new("Powered by ").font(FontId::proportional(8.0)));
+        ui.hyperlink_to(
+            RichText::new("egui").font(FontId::proportional(8.0)),
+            "https://github.com/emilk/egui",
+        );
+        ui.label(RichText::new(" and ").font(FontId::proportional(8.0)));
+        ui.hyperlink_to(
+            RichText::new("eframe").font(FontId::proportional(8.0)),
+            "https://github.com/emilk/egui/tree/master/crates/eframe",
+        );
         ui.label(".");
     });
 }

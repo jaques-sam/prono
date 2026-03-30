@@ -2,6 +2,8 @@
 
 BINARY="/var/packages/prono-backend/target/prono-backend"
 PID_FILE="/var/packages/prono-backend/target/prono-backend.pid"
+LOG_FILE="/var/packages/prono-backend/target/prono-backend.log"
+ENV_FILE="/var/packages/prono-backend/etc/env"
 
 case "$1" in
     start)
@@ -9,7 +11,12 @@ case "$1" in
             echo "Already running"
             exit 0
         fi
-        $BINARY &
+        while IFS='=' read -r _key _val; do
+            case "$_key" in ''|\#*) continue ;; esac
+            [ -n "$_val" ] && export "${_key}=${_val}"
+        done < "$ENV_FILE"
+        export RUST_LOG="${RUST_LOG:-info}"
+        "$BINARY" >> "$LOG_FILE" 2>&1 &
         echo $! > "$PID_FILE"
         ;;
     stop)

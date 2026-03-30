@@ -28,9 +28,9 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         let cors = Cors::default()
-            .allowed_origin("https://jaques-sam.github.io/prono/app/")
+            .allowed_origin("https://jaques-sam.github.io/prono/app")
+            .allowed_origin("https://jaques-sam.github.io/prono")
             .allowed_origin("https://prono-app.samagali.myds.me")
-            .allowed_origin("http://192.168.80.*")
             .allowed_origin("http://127.0.0.1:8080")
             .allowed_origin("http://localhost:8080")
             .allowed_methods(vec!["GET", "POST"])

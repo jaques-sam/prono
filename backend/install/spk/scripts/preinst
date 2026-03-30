@@ -1,2 +1,6 @@
 #!/bin/sh
+SVC_USER="sc-prono-backend"
+if ! id "$SVC_USER" >/dev/null 2>&1; then
+    synouser --add "$SVC_USER" "" "Prono Backend Service" 0 "" 0
+fi
 exit 0

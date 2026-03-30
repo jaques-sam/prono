@@ -1,2 +1,12 @@
 #!/bin/sh
+ETC_DIR="/var/packages/prono-backend/etc"
+ENV_FILE="$ETC_DIR/env"
+
+mkdir -p "$ETC_DIR"
+
+if [ ! -f "$ENV_FILE" ]; then
+    printf 'PRONO_DB_HOST=\nPRONO_DB_PORT=\nPRONO_DB_USER=\nPRONO_DB_PASS=\n' > "$ENV_FILE"
+fi
+
+chmod 644 "$ENV_FILE"
 exit 0

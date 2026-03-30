@@ -1,15 +1,15 @@
 name: Github Pages
 
-# By default, runs if you push to master. keeps your deployed app in sync with master branch.
-# on:
-#   push:
-#     branches:
-#       - release
-# to only run when you do a new github release, comment out above part and uncomment the below trigger.
+# By default, runs if you push to release. keeps your deployed app in sync with release branch.
 on:
-  release:
-    types:
-      - published
+  push:
+    branches:
+      - release
+# to only run when you do a new github release, comment out above part and uncomment the below trigger.
+# on:
+#   release:
+#     types:
+#       - published
 
 permissions:
   contents: write # for committing to gh-pages branch.
@@ -18,7 +18,7 @@ jobs:
   build-github-pages:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4 # repo checkout
       - name: Setup toolchain for wasm
@@ -42,14 +42,10 @@ jobs:
 
         env:
           public_url: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
-          DB_HOST_OVERRIDE: ${{ secrets.DB_PRONO_HOST_OVERRIDE }}
-          DB_PORT_OVERRIDE: ${{ secrets.DB_PRONO_PORT_OVERRIDE }}
-          DB_USER_OVERRIDE: ${{ secrets.DB_PRONO_USER_OVERRIDE }}
-          DB_PASS_OVERRIDE: ${{ secrets.DB_PRONO_PASS_OVERRIDE }}
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist
+          folder: app/dist
           # this option will not maintain any history of your previous pages deployment
           # set to false if you want all page build to be committed to your gh-pages branch history
           single-commit: true

@@ -3,12 +3,11 @@
 - [Prono App](#prono-app)
   - [Summary](#summary)
   - [Build \& Run](#build--run)
-    - [Native build](#native-build)
     - [Web app](#web-app)
     - [Web Deploy](#web-deploy)
-  - [Configuration](#configuration)
-    - [Parameters](#parameters)
-    - [Feed into the Prono App](#feed-into-the-prono-app)
+    - [Native build](#native-build)
+      - [Configuration](#configuration)
+        - [Feed into the Prono App](#feed-into-the-prono-app)
 
 
 ## Summary
@@ -17,27 +16,12 @@ Prono is an application to conduct surveys and store the answers in a database.
 
 It's multi-platform (desktop and web) and written in Rust using the [egui](ehttps://github.com/emilk/egui) framework.
 
-For now, the web app is deployed as github page: https://jaques-sam.github.io/prono/app.
+For now, the web app is deployed as github page: https://jaques-sam.github.io/prono.
 
 To run the desktop app, see instructions below.
 
 
 ## Build & Run
-
-### Native build
-
-```sh
-cargo run --bin prono-app
-```
-To see more logs, add `RUST_LOG=debug|info` in front.
-
-The debug build has some more functions than the release build.
-
-- When voted, the user can add a new vote using a different user
-- If the database connection fails, it will use the fake db with fake data
-
-They can be found by searching for the `debug_assertions` attribute.
-
 
 ### Web app
 
@@ -59,11 +43,26 @@ You can compile the app to [WASM](https://en.wikipedia.org/wiki/WebAssembly) and
 3. Upload the `dist` directory to any of the numerous free hosting websites including [GitHub Pages](https://docs.github.com/en/free-pro-team@latest/github/working-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site). The app is auto-deployed to GitHub pages on a github release, see `.github/workflows/pages.yml` for more details (there is also an option to auto-deploy on push to `master` branch).
 
 
-## Configuration
+### Native build
+
+```sh
+cargo run --bin prono-app
+```
+To see more logs, add `RUST_LOG=debug|info` in front.
+
+The debug build has some more functions than the release build.
+
+- When voted, the user can add a new vote using a different user
+- If the database connection fails, it will use the fake db with fake data
+
+They can be found by searching for the `debug_assertions` attribute.
+
+
+#### Configuration
 
 The configuration is only needed/used in the native app, to connect to the prono database.
 
-### Parameters
+Parameters:
 
 - host: hostname or IP address of the database server
 - port: port number (16 bit) of the database server
@@ -71,7 +70,7 @@ The configuration is only needed/used in the native app, to connect to the prono
 - pass: password to connect to the database
 
 
-### Feed into the Prono App
+##### Feed into the Prono App
 
 Either provide a `config.toml` file in the default configuration location:
 - MacOS: `$HOME/Library/Application Support/prono/`

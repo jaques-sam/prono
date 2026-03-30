@@ -1,7 +1,7 @@
 use std::{fs, path};
 
 use crate::ReadConfig;
-use log::{debug, error, info};
+use log::{debug, info, warn};
 
 use crate::SecureConfig;
 
@@ -22,25 +22,31 @@ impl ReadConfig<SecureConfig> for ConfigReader {
     }
 
     fn read<P: AsRef<path::Path>>(&self, config: P) -> SecureConfig {
+        let non_empty = |s: String| if s.is_empty() { None } else { Some(s.into()) };
         let overrides = crate::db_config::Overrides {
-            host: std::env::var(HOST_OVERRIDE_ENV_VAR).ok().map(Into::into),
-            port: std::env::var(PORT_OVERRIDE_ENV_VAR).ok().map(Into::into),
-            user: std::env::var(USER_OVERRIDE_ENV_VAR).ok().map(Into::into),
-            pass: std::env::var(PASS_OVERRIDE_ENV_VAR).ok().map(Into::into),
+            host: std::env::var(HOST_OVERRIDE_ENV_VAR).ok().and_then(non_empty),
+            port: std::env::var(PORT_OVERRIDE_ENV_VAR).ok().and_then(non_empty),
+            user: std::env::var(USER_OVERRIDE_ENV_VAR).ok().and_then(non_empty),
+            pass: std::env::var(PASS_OVERRIDE_ENV_VAR).ok().and_then(non_empty),
         };
 
         let config_path = config.as_ref();
-        let secure_config = fs::read_to_string(config_path)
-            .unwrap_or_else(|e| panic!("secure config is missing: {} ({e})", config_path.display()));
+        let file_content = fs::read_to_string(config_path).ok();
 
-        let secure_config: Option<SecureConfig> = toml::from_str(&secure_config)
-            .map_err(|e| {
-                error!("Failed to parse secure config: {e}");
-                e
-            })
-            .ok();
+        if file_content.is_none() {
+            info!(
+                "No config file found at {}, falling back to environment variables",
+                config_path.display()
+            );
+        }
 
-        if let Some(secure_config) = secure_config {
+        let parsed = file_content.as_deref().and_then(|s| {
+            toml::from_str::<SecureConfig>(s)
+                .map_err(|e| warn!("Failed to parse secure config: {e}"))
+                .ok()
+        });
+
+        if let Some(secure_config) = parsed {
             info!("Some or no secret environment vars are set. Read remaining config from secure_config.toml");
             secure_config.override_db_config(overrides)
         } else {
@@ -71,7 +77,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "secure config is missing")]
+    #[should_panic(expected = "expect all overrides are set through env vars")]
     fn test_read_without_config_file_fails() {
         generic::add_panic_hook();
 

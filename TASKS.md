@@ -8,7 +8,7 @@
 4. [ ] Get survey info from file survey
 5. [ ] Descriptions of survey & questions are not part of db surveys -> busy
 6. [x] Do not allow duplicates in db
-7. [x] Add drop down list for months or restrict number
+7. [x] Add ~~drop down list~~ DragValue for months & years and restrict number
 8. [x] Show all answers
 9.  [x] Time graph
 10. [x] Implement ~~0MQ~~ REST server in ./backend
@@ -27,7 +27,7 @@
 4. [x] Make db thread async
 5. [x] Add unit tests (especially for operations right before db)
 6. [x] Add coverage checker
-7. [ ] Avoid asking survey responses on cursor movement etc.
+7. [x] Avoid asking survey responses on cursor movement etc.
 8. [ ] Use Uuid for question IDs directly
 9. [ ] Use TLS for db traffic
 10. [ ] Use TLS for REST traffic

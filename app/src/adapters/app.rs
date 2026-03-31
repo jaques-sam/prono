@@ -1,31 +1,9 @@
-use egui::{FontId, RichText, TextEdit};
 use log::debug;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-use super::timeline;
-use crate::{Answer, Question, SurveyState};
-
-static INIT_ANSWER_HINT: &str = "your answer here";
-
-fn update_questions(ui: &mut egui::Ui, questions: &mut Vec<Question>) {
-    for question in questions {
-        ui.horizontal(|ui| {
-            ui.label(&question.text);
-            match &mut question.answer {
-                Answer::Text(answer) => {
-                    ui.add(TextEdit::singleline(answer)).on_hover_text(INIT_ANSWER_HINT);
-                }
-                Answer::PredictionDate { day: _, month, year } => {
-                    ui.add(egui::DragValue::new(month).range(1..=12).prefix("month "))
-                        .on_hover_text("1-12");
-
-                    ui.add(egui::DragValue::new(year).range(2024..=2100).prefix("year "))
-                        .on_hover_text("2026-2100");
-                }
-            }
-        });
-    }
-}
+use super::{error_overlay, footer, survey_ui, timeline};
+use crate::{Answer, SurveyState};
 
 #[derive(Default, Deserialize, Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -36,6 +14,9 @@ pub struct App {
     prono: Option<Box<dyn prono_api::Surveys>>,
     #[serde(skip)]
     error_message: Option<String>,
+    /// Cached answers fetched once when survey is completed.
+    #[serde(skip)]
+    cached_answers: HashMap<String /*question_id*/, Vec<(String, Answer)>>,
 }
 
 impl App {
@@ -70,10 +51,36 @@ impl App {
             self.survey_state = SurveyState::InProgress(survey);
             return;
         };
+
         for question in &survey.questions {
             prono.add_answer(&self.user_name, question.id.clone(), question.answer.clone().into());
         }
+
+        self.cached_answers.clear();
+        for question in &survey.questions {
+            let all_answers = prono.all_answers(question.id.clone());
+            let converted: Vec<(String, Answer)> = all_answers
+                .into_iter()
+                .map(|(user, answer)| (user, answer.into()))
+                .collect();
+            self.cached_answers.insert(question.id.clone(), converted);
+        }
+
         self.survey_state = SurveyState::Completed(survey);
+    }
+
+    fn reset_survey(&mut self) {
+        match &mut self.survey_state {
+            SurveyState::InProgress(survey) => {
+                survey.empty();
+            }
+            SurveyState::Completed(_) => {
+                self.user_name.clear();
+                self.survey_state = SurveyState::NotStarted;
+                self.cached_answers.clear();
+            }
+            SurveyState::NotStarted => {}
+        }
     }
 
     fn draw_timeline_from_answers(&self, ui: &mut egui::Ui) {
@@ -92,94 +99,28 @@ impl App {
                 egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
                     for question in &survey.questions {
                         ui.heading(&question.text);
-                        let Some(prono) = self.prono.as_ref() else {
-                            return;
-                        };
-                        let all_answers = prono.all_answers(question.id.clone());
-                        let all_answers: Vec<(Option<&String>, Answer)> = all_answers
-                            .iter()
-                            .map(|(user, answer)| (Some(user), answer.clone().into()))
-                            .collect();
-                        if all_answers.is_empty() {
-                            ui.label("No predictions for this question");
+
+                        // Use cached answers instead of querying database every frame
+                        if let Some(cached) = self.cached_answers.get(&question.id) {
+                            if cached.is_empty() {
+                                ui.label("No predictions for this question");
+                            } else {
+                                debug!("Number of answers for Q:{}: {}", question.id, cached.len());
+                                let all_answers: Vec<(Option<&String>, Answer)> = cached
+                                    .iter()
+                                    .map(|(user, answer)| (Some(user), answer.clone()))
+                                    .collect();
+                                let timeline_dates = timeline::extract_and_sort_dates(all_answers);
+                                timeline::draw(ui, &timeline_dates);
+                            }
                         } else {
-                            debug!("Number of answers for Q:{}: {}", question.id, all_answers.len());
-                            let timeline_dates = timeline::extract_and_sort_dates(all_answers);
-                            timeline::draw(ui, &timeline_dates);
+                            ui.label("No predictions for this question");
                         }
                         ui.spacing();
                     }
                 });
             }
             SurveyState::NotStarted => {}
-        }
-    }
-
-    fn update_survey(&mut self, ui: &mut egui::Ui) {
-        match &mut self.survey_state {
-            SurveyState::NotStarted => {
-                if ui.button("Start survey").clicked() {
-                    if let Some(prono) = self.prono.as_ref() {
-                        self.survey_state = SurveyState::InProgress(prono.empty_survey().into());
-                    } else {
-                        self.error_message = Some("No backend connection available".to_string());
-                    }
-                }
-            }
-            SurveyState::InProgress(survey) => {
-                ui.heading(&survey.description);
-                ui.spacing();
-                ui.hyperlink_to("SpaceX Starship", "http://www.spacex.com"); // TODO [4]: move to survey
-
-                update_questions(ui, &mut survey.questions);
-
-                ui.spacing();
-            }
-            SurveyState::Completed(_survey) => {
-                ui.label("Survey completed.");
-            }
-        }
-        self.draw_timeline_from_answers(ui);
-    }
-
-    fn show_error_overlay(&mut self, ctx: &egui::Context) {
-        if let Some(ref msg) = self.error_message {
-            let screen = ctx.content_rect();
-            let msg = msg.clone();
-
-            // Semi-transparent background covering the entire screen
-            egui::Area::new(egui::Id::new("error_overlay_bg"))
-                .fixed_pos(screen.min)
-                .show(ctx, |ui| {
-                    let (rect, response) = ui.allocate_exact_size(screen.size(), egui::Sense::click());
-                    ui.painter()
-                        .rect_filled(rect, 0.0, egui::Color32::from_black_alpha(160));
-                    if response.clicked() {
-                        self.error_message = None;
-                    }
-                });
-
-            // Centered error message on top
-            egui::Area::new(egui::Id::new("error_overlay_msg"))
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ctx, |ui| {
-                    egui::Frame::popup(ui.style()).show(ui, |ui| {
-                        ui.vertical_centered(|ui| {
-                            ui.heading("Error");
-                            ui.add_space(8.0);
-                            ui.label(&msg);
-                            ui.add_space(8.0);
-                            #[cfg(debug_assertions)]
-                            if ui.button("OK").clicked() {
-                                self.error_message = None;
-                            }
-                            #[cfg(not(debug_assertions))]
-                            if ui.button("exit").clicked() {
-                                std::process::exit(1);
-                            }
-                        });
-                    });
-                });
         }
     }
 }
@@ -192,12 +133,7 @@ impl eframe::App for App {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Put your widgets into a `SidePanel`, `TopBottomPanel`, `CentralPanel`, `Window` or `Area`.
-        // For inspiration and more examples, go to https://emilk.github.io/egui
-
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            // The top panel is often a good place for a menu bar:
-
             egui::MenuBar::new().ui(ui, |ui| {
                 let is_web = cfg!(target_arch = "wasm32");
                 if !is_web {
@@ -214,68 +150,52 @@ impl eframe::App for App {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("Prono");
 
-            ui.horizontal(|ui| match &mut self.survey_state {
-                SurveyState::NotStarted => {
-                    ui.label("Username:");
-                    ui.add(TextEdit::singleline(&mut self.user_name).hint_text("Please fill in your name"));
-                }
-                SurveyState::InProgress(_) => {
-                    if ui.button("Reset").clicked() {
-                        if let SurveyState::InProgress(survey) = &mut self.survey_state {
-                            survey.empty();
-                        }
-                    } else if ui.button("Submit").clicked() {
-                        self.submit();
+            let action = ui
+                .horizontal(|ui| match &self.survey_state {
+                    SurveyState::NotStarted => {
+                        survey_ui::render_username_input(ui, &mut self.user_name);
+                        survey_ui::SurveyAction::None
                     }
-                }
-                SurveyState::Completed(_) => {
-                    if cfg!(debug_assertions) && ui.button("Survey again").clicked() {
-                        self.user_name.clear();
-                        self.survey_state = SurveyState::NotStarted;
+                    SurveyState::InProgress(_) | SurveyState::Completed(_) => {
+                        survey_ui::render_survey_controls(ui, &self.survey_state)
                     }
-                }
-            });
+                })
+                .inner;
 
-            self.update_survey(ui);
+            match action {
+                survey_ui::SurveyAction::Reset => self.reset_survey(),
+                survey_ui::SurveyAction::Submit => self.submit(),
+                survey_ui::SurveyAction::None => {}
+            }
+
+            survey_ui::render_survey_content(
+                ui,
+                &mut self.survey_state,
+                self.prono.as_deref(),
+                &mut self.error_message,
+            );
+
+            self.draw_timeline_from_answers(ui);
 
             ui.separator();
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                powered_by_egui_and_eframe(ui);
+                footer::render_footer(ui);
                 egui::warn_if_debug_build(ui);
             });
         });
 
-        self.show_error_overlay(ctx);
+        error_overlay::show_error_overlay(ctx, &mut self.error_message);
     }
-}
-
-fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label(RichText::new("Made by Sam Jaques. ").font(FontId::proportional(8.0)));
-        ui.label(RichText::new("Powered by ").font(FontId::proportional(8.0)));
-        ui.hyperlink_to(
-            RichText::new("egui").font(FontId::proportional(8.0)),
-            "https://github.com/emilk/egui",
-        );
-        ui.label(RichText::new(" and ").font(FontId::proportional(8.0)));
-        ui.hyperlink_to(
-            RichText::new("eframe").font(FontId::proportional(8.0)),
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
-        );
-        ui.label(".");
-    });
 }
 
 #[cfg(test)]
 mod tests {
     use prono_api::MockSurveys;
 
-    use crate::Survey;
+    use crate::{Question, Survey};
 
     use super::*;
 
@@ -296,6 +216,13 @@ mod tests {
             })
             .return_const(());
 
+        mock_surveys.expect_all_answers().returning(|_| {
+            vec![(
+                "user1".to_string(),
+                prono_api::Answer::Text("sometime in 2025".to_owned()),
+            )]
+        });
+
         let mut app = make_app(mock_surveys);
         app.survey_state = SurveyState::InProgress(Survey {
             id: 1,
@@ -309,6 +236,7 @@ mod tests {
 
         app.submit();
         assert!(matches!(app.survey_state, SurveyState::Completed(_)));
+        assert!(app.cached_answers.contains_key("q1"));
     }
 
     #[test]

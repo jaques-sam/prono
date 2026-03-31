@@ -16,15 +16,11 @@ fn update_questions(ui: &mut egui::Ui, questions: &mut Vec<Question>) {
                     ui.add(TextEdit::singleline(answer)).on_hover_text(INIT_ANSWER_HINT);
                 }
                 Answer::PredictionDate { day: _, month, year } => {
-                    let mut month_str = month.to_string();
-                    ui.add(TextEdit::singleline(&mut month_str).char_limit(2).desired_width(15.0))
-                        .on_hover_text("month");
-                    *month = month_str.parse().unwrap_or_default();
+                    ui.add(egui::DragValue::new(month).range(1..=12).prefix("month "))
+                        .on_hover_text("1-12");
 
-                    let mut year_str = year.to_string();
-                    ui.add(TextEdit::singleline(&mut year_str).char_limit(4).desired_width(35.0))
-                        .on_hover_text("year");
-                    *year = year_str.parse().unwrap_or_default();
+                    ui.add(egui::DragValue::new(year).range(2024..=2100).prefix("year "))
+                        .on_hover_text("2026-2100");
                 }
             }
         });

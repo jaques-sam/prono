@@ -8,7 +8,7 @@
 4. [ ] Get survey info from file survey
 5. [ ] Descriptions of survey & questions are not part of db surveys -> busy
 6. [x] Do not allow duplicates in db
-7. [ ] Add drop down list for months or restrict number
+7. [x] Add drop down list for months or restrict number
 8. [x] Show all answers
 9.  [x] Time graph
 10. [x] Implement ~~0MQ~~ REST server in ./backend

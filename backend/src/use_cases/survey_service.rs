@@ -51,8 +51,22 @@ impl SurveyService {
 
     /// # Errors
     ///
-    /// Returns an error if the device verification fails, the answer already exists,
-    /// or if a repository error occurs.
+    /// Returns `Error::InvalidQuestionId` if the question ID is not found
+    pub fn validate_question_id(&self, question_id: &str) -> BackendResult<()> {
+        let survey = self.empty_survey();
+        if survey.questions.iter().any(|q| q.id == question_id) {
+            Ok(())
+        } else {
+            Err(crate::Error::InvalidQuestionId(format!(
+                "Question ID '{question_id}' not found in survey"
+            )))
+        }
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if the question ID is invalid, device verification fails,
+    /// the answer already exists, or if a repository error occurs.
     pub async fn add_answer(
         &self,
         user: &str,
@@ -60,6 +74,8 @@ impl SurveyService {
         answer: prono_api::Answer,
         device_id: &str,
     ) -> BackendResult<()> {
+        self.validate_question_id(&question_id)?;
+
         if !self.devices.verify_device(user, device_id).await? {
             return Err(crate::Error::DeviceMismatch);
         }

@@ -15,6 +15,9 @@ pub enum Error {
     #[error("Device mismatch: username is registered to a different device")]
     DeviceMismatch,
 
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
     #[error("Invalid question ID: {0}")]
     InvalidQuestionId(String),
 }
@@ -36,6 +39,8 @@ impl actix_web::ResponseError for Error {
         match self {
             Error::AnswerExists => HttpResponse::Conflict().json(self.to_string()),
             Error::DeviceMismatch => HttpResponse::Forbidden().json(self.to_string()),
+            Error::Unauthorized(msg) => HttpResponse::Unauthorized().json(msg.clone()),
+            Error::InvalidQuestionId(msg) => HttpResponse::BadRequest().json(msg.clone()),
             Error::Repository(msg) | Error::Config(msg) => HttpResponse::InternalServerError().json(msg.clone()),
         }
     }

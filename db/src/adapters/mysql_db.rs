@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use log::{error, info};
 use prono::{Error, PronoResult};
-use sqlx::mysql::MySqlPoolOptions;
 use sqlx::MySqlPool;
+use sqlx::mysql::MySqlPoolOptions;
 use std::time::Duration;
 
 use crate::DbError;
@@ -46,34 +46,28 @@ impl MysqlDb {
         Ok(Self { pool })
     }
 
-    /// Helper to get or create user_id from user_name
+    /// Helper to get or create `user_id` from `user_name`
     async fn get_or_create_user_id(&self, user_name: &str) -> PronoResult<i64> {
         // Try to get existing user
-        let existing = sqlx::query!(
-            "SELECT user_id FROM Users WHERE user_name = ?",
-            user_name
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(DbError::from)?;
+        let existing = sqlx::query!("SELECT user_id FROM Users WHERE user_name = ?", user_name)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DbError::from)?;
 
         if let Some(row) = existing {
             return Ok(row.user_id);
         }
 
         // User doesn't exist, create with empty device_id
-        let result = sqlx::query!(
-            "INSERT INTO Users (user_name, device_id) VALUES (?, '')",
-            user_name
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(DbError::from)?;
+        let result = sqlx::query!("INSERT INTO Users (user_name, device_id) VALUES (?, '')", user_name)
+            .execute(&self.pool)
+            .await
+            .map_err(DbError::from)?;
 
-        Ok(result.last_insert_id() as i64)
+        Ok(result.last_insert_id().cast_signed())
     }
 
-    /// Helper to get user_id from user_name (returns None if not found)
+    /// Helper to get `user_id` from `user_name` (returns `None` if not found)
     async fn get_user_id(&self, user_name: &str) -> Option<i64> {
         sqlx::query!("SELECT user_id FROM Users WHERE user_name = ?", user_name)
             .fetch_optional(&self.pool)
@@ -221,13 +215,10 @@ impl repo::DeviceRegistry for MysqlDb {
     }
 
     async fn verify_device(&self, user: &str, device_id: &str) -> PronoResult<bool> {
-        let row = sqlx::query!(
-            "SELECT device_id FROM Users WHERE user_name = ?",
-            user
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(DbError::from)?;
+        let row = sqlx::query!("SELECT device_id FROM Users WHERE user_name = ?", user)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DbError::from)?;
 
         match row {
             Some(row) => Ok(row.device_id == device_id),

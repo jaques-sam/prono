@@ -34,4 +34,3 @@
 11. [x] Read config from default location(s) so app can run from any machine
 12. [ ] Listen onblocked on recv from db thread, update UI async
 13. [x] Create backend service package for Synology
-14. [ ] Deploy backend automatically on release update [hard to impossible]

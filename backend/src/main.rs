@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, web};
-use log::info;
+use log::{info, warn};
 use prono::ReadConfig;
 use prono::repo::Db;
 
-use prono_backend::adapters::rest;
+use prono_backend::adapters::{auth_middleware::ApiKeyAuth, rest};
 use prono_backend::use_cases::SurveyService;
 
 #[actix_web::main]
@@ -21,11 +21,17 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to initialize database");
 
+    let api_key = std::env::var("PRONO_API_KEY").unwrap_or_else(|_| {
+        warn!("PRONO_API_KEY not set - API will be unprotected in production!");
+        "dev-insecure-key".to_string()
+    });
+
     let db = Arc::new(db);
     let service = web::Data::new(SurveyService::new(db.clone(), db));
 
     info!("Starting backend server on 0.0.0.0:8081");
 
+    let api_key_clone = api_key.clone();
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin("https://jaques-sam.github.io")
@@ -34,6 +40,7 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin("http://localhost:8080")
             .allowed_methods(vec!["GET", "POST"])
             .allowed_header(actix_web::http::header::CONTENT_TYPE)
+            .allowed_header(actix_web::http::header::AUTHORIZATION)
             .allowed_header("X-Device-Id")
             .max_age(3600);
 
@@ -41,7 +48,11 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .app_data(service.clone())
             .service(rest::get_survey)
-            .service(rest::add_answer)
+            .service(
+                web::scope("")
+                    .wrap(ApiKeyAuth::new(api_key_clone.clone()))
+                    .service(rest::add_answer)
+            )
             .service(rest::get_response)
             .service(rest::get_all_answers)
     })

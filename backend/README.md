@@ -2,6 +2,9 @@
 
 - [Prono Backend](#prono-backend)
   - [Summary](#summary)
+  - [Security](#security)
+    - [API Key Authentication](#api-key-authentication)
+    - [Question ID Validation](#question-id-validation)
   - [Build \& Run](#build--run)
   - [Deployment](#deployment)
     - [Simple testing as NAS user](#simple-testing-as-nas-user)
@@ -12,6 +15,34 @@
 
 The prono-backend is basically a REST API to access the prono database. It allows all prono-api clients to connect to the prono database.
 
+
+## Security
+
+The backend implements API key authentication to protect write endpoints:
+- **Protected endpoints**: `/api/survey/answer` (POST) - requires API key
+- **Public endpoints**: `/api/survey` (GET), `/api/survey/response/*` (GET), `/api/survey/answers/*` (GET)
+
+
+### API Key Authentication
+
+Set the `PRONO_API_KEY` environment variable to enable authentication:
+
+```sh
+export PRONO_API_KEY="your-secure-api-key-here"
+```
+
+Clients must include the API key in the `Authorization` header:
+
+```
+Authorization: Bearer your-secure-api-key-here
+```
+
+**⚠️ Warning**: If `PRONO_API_KEY` is not set, the backend will use a default insecure key for development. This is NOT suitable for production!
+
+
+### Question ID Validation
+
+All answer submissions are validated to ensure the `question_id` exists in the survey definition. Invalid question IDs will be rejected with a 400 Bad Request response.
 
 ## Build & Run
 
@@ -47,5 +78,9 @@ Note: you need a config file at `~/.config/prono-backend/config.toml` with the f
 Then install the generated `target/prono-backend.spk` file on the NAS using the Synology Package Center.
 You can then start the service from the Package Center UI.
 
-This needs an env file at `/var/packages/prono-backend/etc/env` with ENV variables defined in
-[configuration](#../app/README.md#configuration) section of the app readme.
+This needs an env file at `/var/packages/prono-backend/etc/env` with the following environment variables:
+- `PRONO_DB_HOST` - Database host
+- `PRONO_DB_PORT` - Database port
+- `PRONO_DB_USER` - Database username
+- `PRONO_DB_PASS` - Database password
+- `PRONO_API_KEY` - API key for authentication (required for production)

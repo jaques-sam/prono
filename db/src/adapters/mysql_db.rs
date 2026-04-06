@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use log::{error, info};
 use prono::{Error, PronoResult};
 use sqlx::mysql::MySqlPoolOptions;
-use sqlx::{MySqlPool, Row};
+use sqlx::MySqlPool;
 use std::time::Duration;
 
 use crate::DbError;
@@ -45,6 +45,42 @@ impl MysqlDb {
 
         Ok(Self { pool })
     }
+
+    /// Helper to get or create user_id from user_name
+    async fn get_or_create_user_id(&self, user_name: &str) -> PronoResult<i64> {
+        // Try to get existing user
+        let existing = sqlx::query!(
+            "SELECT user_id FROM Users WHERE user_name = ?",
+            user_name
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(DbError::from)?;
+
+        if let Some(row) = existing {
+            return Ok(row.user_id);
+        }
+
+        // User doesn't exist, create with empty device_id
+        let result = sqlx::query!(
+            "INSERT INTO Users (user_name, device_id) VALUES (?, '')",
+            user_name
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(DbError::from)?;
+
+        Ok(result.last_insert_id() as i64)
+    }
+
+    /// Helper to get user_id from user_name (returns None if not found)
+    async fn get_user_id(&self, user_name: &str) -> Option<i64> {
+        sqlx::query!("SELECT user_id FROM Users WHERE user_name = ?", user_name)
+            .fetch_optional(&self.pool)
+            .await
+            .ok()?
+            .map(|row| row.user_id)
+    }
 }
 
 #[async_trait]
@@ -61,34 +97,38 @@ impl repo::Db for MysqlDb {
 #[async_trait]
 impl repo::Surveys for MysqlDb {
     async fn answer(&self, user: &str, question_id: String) -> Option<repo::Answer> {
-        let row = sqlx::query("SELECT answer FROM AnswerResponse WHERE user = ? AND question_id = ?")
-            .bind(user)
-            .bind(question_id)
-            .fetch_optional(&self.pool)
-            .await
-            .ok()?;
-        let row = row?;
-        let answer: String = row.get("answer");
-        Some(Answer::from(answer))
+        let user_id = self.get_user_id(user).await?;
+
+        let row = sqlx::query!(
+            "SELECT answer FROM AnswerResponse WHERE user_id = ? AND question_id = ?",
+            user_id,
+            question_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .ok()??;
+
+        Some(Answer::from(row.answer))
     }
 
     async fn response(&self, user: &str, survey_id: u64) -> Option<repo::Survey> {
-        let rows = sqlx::query("SELECT question_id, answer FROM AnswerResponse WHERE user = ? AND survey_id = ?")
-            .bind(user)
-            .bind(survey_id)
-            .fetch_all(&self.pool)
-            .await
-            .ok()?;
+        let user_id = self.get_user_id(user).await?;
 
-        let mut questions = Vec::new();
-        for row in rows {
-            let qid: String = row.get("question_id");
-            let ans: String = row.get("answer");
-            questions.push(repo::Question {
-                id: qid,
-                answer: Answer::from(ans),
-            });
-        }
+        let rows = sqlx::query!(
+            "SELECT question_id, answer FROM AnswerResponse WHERE user_id = ?",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .ok()?;
+
+        let questions = rows
+            .into_iter()
+            .map(|row| repo::Question {
+                id: row.question_id,
+                answer: Answer::from(row.answer),
+            })
+            .collect();
 
         Some(repo::Survey {
             id: survey_id,
@@ -98,40 +138,48 @@ impl repo::Surveys for MysqlDb {
     }
 
     async fn add_answer(&self, user: &str, question_id: String, answer: repo::Answer) -> PronoResult<()> {
-        let existing = sqlx::query("SELECT 1 FROM AnswerResponse WHERE user = ? AND question_id = ?")
-            .bind(user)
-            .bind(&question_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(DbError::from)?;
+        let user_id = self.get_or_create_user_id(user).await?;
+
+        let existing = sqlx::query!(
+            "SELECT 1 as found FROM AnswerResponse WHERE user_id = ? AND question_id = ?",
+            user_id,
+            question_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(DbError::from)?;
 
         if existing.is_some() {
             return Err(Error::AnswerExists);
         }
+
         let ans = answer.to_string();
-        sqlx::query("INSERT INTO AnswerResponse (user, question_id, answer) VALUES (?, ?, ?)")
-            .bind(user)
-            .bind(question_id)
-            .bind(ans)
-            .execute(&self.pool)
-            .await
-            .map_err(DbError::from)?;
+        sqlx::query!(
+            "INSERT INTO AnswerResponse (user_id, question_id, answer) VALUES (?, ?, ?)",
+            user_id,
+            question_id,
+            ans
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(DbError::from)?;
         Ok(())
     }
 
     async fn all_answers(&self, question_id: String) -> Vec<(String, Answer)> {
-        let rows = sqlx::query("SELECT user, answer FROM AnswerResponse WHERE question_id = ?")
-            .bind(question_id)
-            .fetch_all(&self.pool)
-            .await
-            .unwrap_or_default();
+        let rows = sqlx::query!(
+            "SELECT u.user_name, ar.answer
+             FROM AnswerResponse ar
+             JOIN Users u ON ar.user_id = u.user_id
+             WHERE ar.question_id = ?",
+            question_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default();
 
         rows.into_iter()
-            .map(|row| {
-                let user: String = row.get("user");
-                let answer: String = row.get("answer");
-                (user, Answer::from(answer))
-            })
+            .map(|row| (row.user_name, Answer::from(row.answer)))
             .collect()
     }
 }
@@ -139,17 +187,17 @@ impl repo::Surveys for MysqlDb {
 #[async_trait]
 impl repo::Users for MysqlDb {
     async fn all_users(&self) -> PronoResult<Vec<String>> {
-        let rows = sqlx::query("SELECT DISTINCT user FROM AnswerResponse")
+        let rows = sqlx::query!("SELECT user_name FROM Users")
             .fetch_all(&self.pool)
             .await
             .map_err(DbError::from)?;
 
-        Ok(rows.iter().map(|row| row.get("user")).collect())
+        Ok(rows.into_iter().map(|row| row.user_name).collect())
     }
 
     async fn delete_user(&self, name: &str) -> PronoResult<()> {
-        sqlx::query("DELETE FROM AnswerResponse WHERE user = ?")
-            .bind(name)
+        // With CASCADE, this will also delete from AnswerResponse
+        sqlx::query!("DELETE FROM Users WHERE user_name = ?", name)
             .execute(&self.pool)
             .await
             .map_err(DbError::from)?;
@@ -160,11 +208,12 @@ impl repo::Users for MysqlDb {
 #[async_trait]
 impl repo::DeviceRegistry for MysqlDb {
     async fn register_device(&self, user: &str, device_id: &str) -> PronoResult<()> {
-        sqlx::query(
-            "INSERT INTO Users (user_name, device_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE device_id = VALUES(device_id)",
+        sqlx::query!(
+            "INSERT INTO Users (user_name, device_id) VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE device_id = VALUES(device_id)",
+            user,
+            device_id
         )
-        .bind(user)
-        .bind(device_id)
         .execute(&self.pool)
         .await
         .map_err(DbError::from)?;
@@ -172,17 +221,16 @@ impl repo::DeviceRegistry for MysqlDb {
     }
 
     async fn verify_device(&self, user: &str, device_id: &str) -> PronoResult<bool> {
-        let row = sqlx::query("SELECT device_id FROM Users WHERE user_name = ?")
-            .bind(user)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(DbError::from)?;
+        let row = sqlx::query!(
+            "SELECT device_id FROM Users WHERE user_name = ?",
+            user
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(DbError::from)?;
 
         match row {
-            Some(row) => {
-                let registered: String = row.get("device_id");
-                Ok(registered == device_id)
-            }
+            Some(row) => Ok(row.device_id == device_id),
             None => Ok(true),
         }
     }

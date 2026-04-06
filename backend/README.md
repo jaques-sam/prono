@@ -47,7 +47,7 @@ cargo build --release --bin prono-backend
 For simple testing,  run the backend with the following command:
 
 ```sh
-/backend/install/sync.sh  # Syncs the binary to the NAS (in ~)
+./backend/install/sync.sh  # Syncs the binary to the NAS (in ~)
 ```
 On the NAS:
 

@@ -25,19 +25,7 @@ The backend implements API key authentication to protect write endpoints:
 
 ### API Key Authentication
 
-Set the `PRONO_API_KEY` environment variable to enable authentication:
-
-```sh
-export PRONO_API_KEY="your-secure-api-key-here"
-```
-
-Clients must include the API key in the `Authorization` header:
-
-```
-Authorization: Bearer your-secure-api-key-here
-```
-
-**⚠️ Warning**: If `PRONO_API_KEY` is not set, the backend will use a default insecure key for development. This is NOT suitable for production!
+The API key is baked into both the backend and the client via `prono_api::API_KEY`. Clients include it in the `Authorization` header as `Bearer <key>`.
 
 
 ### Question ID Validation
@@ -83,4 +71,3 @@ This needs an env file at `/var/packages/prono-backend/etc/env` with the followi
 - `PRONO_DB_PORT` - Database port
 - `PRONO_DB_USER` - Database username
 - `PRONO_DB_PASS` - Database password
-- `PRONO_API_KEY` - API key for authentication (required for production)

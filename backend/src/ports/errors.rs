@@ -14,6 +14,9 @@ pub enum Error {
 
     #[error("Device mismatch: username is registered to a different device")]
     DeviceMismatch,
+
+    #[error("Invalid question ID: {0}")]
+    InvalidQuestionId(String),
 }
 
 pub type BackendResult<T> = std::result::Result<T, Error>;

@@ -14,22 +14,27 @@ Login using following command.
 Use the required parameters that you've configured in [readme section](../README.md#configuration).
 
 ```bash
-mysql -h ${HOST} -P ${PORT} -u ${USER} -p -D db_prono
+mysql db_prono -vh ${HOST} -P ${PORT} -u ${USER} -p --connect-timeout=2
 ```
 
 ## Initialize expected SQL Tables
 
 ```sql
 CREATE TABLE Users (
-    user_id int not null,
-    user_name text,
-    email text
+    user_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_name TEXT NOT NULL,
+    email TEXT,
+    device_id VARCHAR(255) NOT NULL UNIQUE,
+    INDEX idx_user_name (user_name(255))
 );
 
 CREATE TABLE AnswerResponse (
-    user text,
-    question_id text,
-    answer date
+    user_id BIGINT NOT NULL,
+    question_id TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    INDEX idx_question (question_id(255)),
+    INDEX idx_user_question (user_id, question_id(255))
 );
 ```
 

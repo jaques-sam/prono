@@ -57,6 +57,7 @@ impl prono_api::Surveys for ApiThroughRest {
         wasm_bindgen_futures::spawn_local(async move {
             let result = gloo_net::http::Request::post(&url)
                 .header("Content-Type", "application/json")
+                .header("Authorization", &format!("Bearer {}", prono_api::API_KEY))
                 .header("X-Device-Id", &device_id)
                 .body(body_str)
                 .expect("Failed to build request body")

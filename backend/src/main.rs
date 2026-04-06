@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, web};
-use log::{info, warn};
+use log::info;
 use prono::ReadConfig;
 use prono::repo::Db;
 
@@ -21,10 +21,7 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to initialize database");
 
-    let api_key = std::env::var("PRONO_API_KEY").unwrap_or_else(|_| {
-        warn!("PRONO_API_KEY not set - API will be unprotected in production!");
-        "dev-insecure-key".to_string()
-    });
+    let api_key = prono_api::API_KEY.to_string();
 
     let db = Arc::new(db);
     let service = web::Data::new(SurveyService::new(db.clone(), db));

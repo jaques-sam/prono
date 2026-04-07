@@ -52,20 +52,13 @@ impl App {
             return;
         };
 
+        prono.add_user(&self.user_name);
+
         for question in &survey.questions {
             prono.add_answer(&self.user_name, question.id.clone(), question.answer.clone().into());
         }
 
         self.cached_answers.clear();
-        for question in &survey.questions {
-            let all_answers = prono.all_answers(question.id.clone());
-            let converted: Vec<(String, Answer)> = all_answers
-                .into_iter()
-                .map(|(user, answer)| (user, answer.into()))
-                .collect();
-            self.cached_answers.insert(question.id.clone(), converted);
-        }
-
         self.survey_state = SurveyState::Completed(survey);
     }
 
@@ -80,6 +73,50 @@ impl App {
                 self.cached_answers.clear();
             }
             SurveyState::NotStarted => {}
+        }
+    }
+
+    /// Lazily populates the answer cache for completed surveys.
+    /// On WASM, `all_answers()` returns empty on first call (async fetch in progress),
+    /// so this is called each frame until all questions have cached results.
+    /// Requests a repaint while answers are still pending so the UI keeps polling.
+    fn refresh_answer_cache(&mut self, ctx: &egui::Context) {
+        // Collect question IDs that still need fetching (immutable borrow on survey_state)
+        let missing_ids: Vec<String> = match &self.survey_state {
+            SurveyState::Completed(survey) => survey
+                .questions
+                .iter()
+                .filter(|q| !self.cached_answers.contains_key(&q.id))
+                .map(|q| q.id.clone())
+                .collect(),
+            _ => return,
+        };
+
+        if missing_ids.is_empty() {
+            return;
+        }
+
+        let Some(prono) = self.prono.as_deref() else {
+            return;
+        };
+
+        let mut still_missing = false;
+        for qid in missing_ids {
+            let all_answers = prono.all_answers(qid.clone());
+            if all_answers.is_empty() {
+                still_missing = true;
+            } else {
+                let converted = all_answers
+                    .into_iter()
+                    .map(|(user, answer)| (user, answer.into()))
+                    .collect();
+                self.cached_answers.insert(qid, converted);
+            }
+        }
+
+        // Retry after a delay to give the server time to process writes
+        if still_missing {
+            ctx.request_repaint_after(std::time::Duration::from_secs(1));
         }
     }
 
@@ -177,6 +214,7 @@ impl eframe::App for App {
                 &mut self.error_message,
             );
 
+            self.refresh_answer_cache(ctx);
             self.draw_timeline_from_answers(ui);
 
             ui.separator();
@@ -209,6 +247,7 @@ mod tests {
     #[test]
     fn submit_transitions_state_to_completed() {
         let mut mock_surveys = MockSurveys::new();
+        mock_surveys.expect_add_user().return_const(());
         mock_surveys
             .expect_add_answer()
             .withf(|_user, question_id, answer| {
@@ -236,6 +275,11 @@ mod tests {
 
         app.submit();
         assert!(matches!(app.survey_state, SurveyState::Completed(_)));
+
+        // Cache is populated lazily, not during submit
+        assert!(app.cached_answers.is_empty());
+        let ctx = egui::Context::default();
+        app.refresh_answer_cache(&ctx);
         assert!(app.cached_answers.contains_key("q1"));
     }
 

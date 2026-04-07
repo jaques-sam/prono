@@ -1,13 +1,14 @@
 use actix_web::{
-    HttpMessage, HttpRequest,
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error as ActixError,
+    Error as ActixError, HttpMessage, HttpRequest,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
 };
 use std::{
-    future::{ready, Future, Ready},
+    future::{Future, Ready, ready},
     pin::Pin,
     rc::Rc,
 };
+
+use log::{info, warn};
 
 use crate::ports::Error;
 
@@ -77,10 +78,21 @@ where
 
             // Validate API key
             if provided_key.is_empty() || provided_key != expected_key.as_str() {
+                warn!(
+                    "Auth REJECTED for {} {} (key: '{}')",
+                    req.method(),
+                    req.path(),
+                    if provided_key.is_empty() {
+                        "<empty>"
+                    } else {
+                        "<invalid>"
+                    }
+                );
                 let error = Error::Unauthorized("Invalid or missing API key".to_string());
                 return Err(actix_web::error::ErrorUnauthorized(error));
             }
 
+            info!("Auth OK for {} {}", req.method(), req.path());
             // Store the authenticated flag in request extensions for later use
             req.extensions_mut().insert(Authenticated);
 

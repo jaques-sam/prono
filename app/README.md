@@ -50,9 +50,10 @@ cargo run --bin prono-app
 ```
 To see more logs, add `RUST_LOG=debug|info` in front.
 
-The debug build has some more functions than the release build.
+The debug build has some more functions than the release build:
 
 - When voted, the user can add a new vote using a different user
+- `device_id`s are stored as random and not checked when adding a new user
 - If the database connection fails, it will use the fake db with fake data
 
 They can be found by searching for the `debug_assertions` attribute.

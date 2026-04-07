@@ -45,13 +45,15 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .app_data(service.clone())
             .service(rest::get_survey)
-            .service(
-                web::scope("")
-                    .wrap(ApiKeyAuth::new(api_key_clone.clone()))
-                    .service(rest::add_answer)
-            )
             .service(rest::get_response)
             .service(rest::get_all_answers)
+            .service(
+                web::scope("")
+                    .guard(actix_web::guard::Post())
+                    .wrap(ApiKeyAuth::new(api_key_clone.clone()))
+                    .service(rest::add_user)
+                    .service(rest::add_answer),
+            )
     })
     .bind(("0.0.0.0", 8081))?
     .run()

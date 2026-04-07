@@ -46,27 +46,6 @@ impl MysqlDb {
         Ok(Self { pool })
     }
 
-    /// Helper to get or create `user_id` from `user_name`
-    async fn get_or_create_user_id(&self, user_name: &str) -> PronoResult<i64> {
-        // Try to get existing user
-        let existing = sqlx::query!("SELECT user_id FROM Users WHERE user_name = ?", user_name)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(DbError::from)?;
-
-        if let Some(row) = existing {
-            return Ok(row.user_id);
-        }
-
-        // User doesn't exist, create with empty device_id
-        let result = sqlx::query!("INSERT INTO Users (user_name, device_id) VALUES (?, '')", user_name)
-            .execute(&self.pool)
-            .await
-            .map_err(DbError::from)?;
-
-        Ok(result.last_insert_id().cast_signed())
-    }
-
     /// Helper to get `user_id` from `user_name` (returns `None` if not found)
     async fn get_user_id(&self, user_name: &str) -> Option<i64> {
         sqlx::query!("SELECT user_id FROM Users WHERE user_name = ?", user_name)
@@ -132,7 +111,11 @@ impl repo::Surveys for MysqlDb {
     }
 
     async fn add_answer(&self, user: &str, question_id: String, answer: repo::Answer) -> PronoResult<()> {
-        let user_id = self.get_or_create_user_id(user).await?;
+        info!("Adding answer for user '{user}', Q:{question_id}");
+        let user_id = self
+            .get_user_id(user)
+            .await
+            .ok_or_else(|| Error::Repository(format!("User '{user}' not found - must be registered first")))?;
 
         let existing = sqlx::query!(
             "SELECT 1 as found FROM AnswerResponse WHERE user_id = ? AND question_id = ?",
@@ -157,6 +140,7 @@ impl repo::Surveys for MysqlDb {
         .execute(&self.pool)
         .await
         .map_err(DbError::from)?;
+        info!("Added answer for user '{user}' (id={user_id}), Q:{question_id}");
         Ok(())
     }
 
@@ -195,13 +179,12 @@ impl repo::Users for MysqlDb {
             .execute(&self.pool)
             .await
             .map_err(DbError::from)?;
+        info!("Deleted user '{name}' (and cascaded answers)");
         Ok(())
     }
-}
 
-#[async_trait]
-impl repo::DeviceRegistry for MysqlDb {
-    async fn register_device(&self, user: &str, device_id: &str) -> PronoResult<()> {
+    async fn add_user(&self, user: &str, device_id: &str) -> PronoResult<()> {
+        info!("DB add_user: user='{user}', device_id='{device_id}'");
         sqlx::query!(
             "INSERT INTO Users (user_name, device_id) VALUES (?, ?)
              ON DUPLICATE KEY UPDATE device_id = VALUES(device_id)",
@@ -211,6 +194,7 @@ impl repo::DeviceRegistry for MysqlDb {
         .execute(&self.pool)
         .await
         .map_err(DbError::from)?;
+        info!("Added/updated user '{user}' with device_id '{device_id}'");
         Ok(())
     }
 

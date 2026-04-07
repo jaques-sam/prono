@@ -1,17 +1,35 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use log::error;
 
-static BACKEND_URL: &str = "https://prono.samagali.myds.me";
+static BACKEND_URL_PROD: &str = "https://prono.samagali.myds.me";
+static BACKEND_URL_DEV: &str = "http://localhost:8081";
+
+fn backend_url() -> &'static str {
+    let hash = web_sys::window()
+        .and_then(|w| w.location().hash().ok())
+        .unwrap_or_default();
+    if hash.contains("dev") {
+        BACKEND_URL_DEV
+    } else {
+        BACKEND_URL_PROD
+    }
+}
 
 struct ApiThroughRest {
     base_url: String,
     survey: prono_api::Survey,
     device_id: String,
+    /// Number of pending write operations (add_user, add_answer).
+    /// `all_answers` waits until this reaches 0 before fetching.
+    pending_writes: Rc<Cell<u32>>,
+    /// Question IDs with an in-flight GET request (prevents duplicate fetches).
+    in_flight: Rc<RefCell<HashSet<String>>>,
+    /// Cached answers returned from the server.
     cached_all_answers: Rc<RefCell<HashMap<String, Vec<(String, prono_api::Answer)>>>>,
 }
 
@@ -21,8 +39,18 @@ impl ApiThroughRest {
             base_url,
             survey,
             device_id,
+            pending_writes: Rc::new(Cell::new(0)),
+            in_flight: Rc::new(RefCell::new(HashSet::new())),
             cached_all_answers: Rc::new(RefCell::new(HashMap::new())),
         }
+    }
+
+    fn begin_write(&self) {
+        self.pending_writes.set(self.pending_writes.get() + 1);
+    }
+
+    fn end_write(pending: &Rc<Cell<u32>>) {
+        pending.set(pending.get().saturating_sub(1));
     }
 }
 
@@ -44,6 +72,34 @@ impl prono_api::Surveys for ApiThroughRest {
         }
     }
 
+    fn add_user(&mut self, user: &str) {
+        let url = format!("{}/api/user", self.base_url);
+        let body = serde_json::json!({ "user": user });
+        let body_str = body.to_string();
+        let device_id = self.device_id.clone();
+        let pending = Rc::clone(&self.pending_writes);
+        self.begin_write();
+
+        wasm_bindgen_futures::spawn_local(async move {
+            match gloo_net::http::Request::post(&url)
+                .header("Content-Type", "application/json")
+                .header("Authorization", &format!("Bearer {}", prono_api::API_KEY))
+                .header("X-Device-Id", &device_id)
+                .body(body_str)
+                .expect("Failed to build request body")
+                .send()
+                .await
+            {
+                Ok(resp) if !resp.ok() => {
+                    error!("add_user failed: HTTP {} - {}", resp.status(), resp.status_text());
+                }
+                Err(e) => error!("add_user network error: {e}"),
+                _ => {}
+            }
+            Self::end_write(&pending);
+        });
+    }
+
     fn add_answer(&mut self, user: &str, question_id: String, answer: prono_api::Answer) {
         let url = format!("{}/api/survey/answer", self.base_url);
         let body = serde_json::json!({
@@ -52,20 +108,25 @@ impl prono_api::Surveys for ApiThroughRest {
             "answer": answer,
         });
         let body_str = body.to_string();
-        let device_id = self.device_id.clone();
+        let pending = Rc::clone(&self.pending_writes);
+        self.begin_write();
 
         wasm_bindgen_futures::spawn_local(async move {
-            let result = gloo_net::http::Request::post(&url)
+            match gloo_net::http::Request::post(&url)
                 .header("Content-Type", "application/json")
                 .header("Authorization", &format!("Bearer {}", prono_api::API_KEY))
-                .header("X-Device-Id", &device_id)
                 .body(body_str)
                 .expect("Failed to build request body")
                 .send()
-                .await;
-            if let Err(e) = result {
-                error!("Failed to submit answer: {e}");
+                .await
+            {
+                Ok(resp) if !resp.ok() => {
+                    error!("add_answer failed: HTTP {} - {}", resp.status(), resp.status_text());
+                }
+                Err(e) => error!("add_answer network error: {e}"),
+                _ => {}
             }
+            Self::end_write(&pending);
         });
     }
 
@@ -79,21 +140,35 @@ impl prono_api::Surveys for ApiThroughRest {
             return cached.clone();
         }
 
-        // Spawn async fetch and cache the result
+        // Don't fetch while writes (add_user/add_answer) are still in flight
+        if self.pending_writes.get() > 0 {
+            return Vec::new();
+        }
+
+        // Don't spawn duplicate fetches for the same question
+        if !self.in_flight.borrow_mut().insert(question_id.clone()) {
+            return Vec::new();
+        }
+
         let url = format!("{}/api/survey/answers/{question_id}", self.base_url);
         let cache = Rc::clone(&self.cached_all_answers);
+        let in_flight = Rc::clone(&self.in_flight);
         let qid = question_id.clone();
 
         wasm_bindgen_futures::spawn_local(async move {
             match gloo_net::http::Request::get(&url).send().await {
                 Ok(resp) => match resp.json::<Vec<(String, prono_api::Answer)>>().await {
                     Ok(answers) => {
-                        cache.borrow_mut().insert(qid, answers);
+                        if !answers.is_empty() {
+                            cache.borrow_mut().insert(qid.clone(), answers);
+                        }
                     }
                     Err(e) => error!("Failed to parse all_answers response: {e}"),
                 },
                 Err(e) => error!("Failed to fetch all_answers: {e}"),
             }
+            // Allow retry on next repaint
+            in_flight.borrow_mut().remove(&qid);
         });
 
         Vec::new()
@@ -122,7 +197,8 @@ pub fn main() {
             .expect("the_canvas_id was not a HtmlCanvasElement");
 
         // Pre-fetch the survey from the backend before starting the app
-        let survey = match gloo_net::http::Request::get(&format!("{BACKEND_URL}/api/survey"))
+        let base_url = backend_url();
+        let survey = match gloo_net::http::Request::get(&format!("{base_url}/api/survey"))
             .send()
             .await
         {
@@ -141,7 +217,7 @@ pub fn main() {
 
         let identity = crate::adapters::identity_wasm::WasmIdentity::load_or_create();
         let device_id = prono_api::Identity::device_id(&identity).to_string();
-        let api = ApiThroughRest::new(BACKEND_URL.to_string(), survey, device_id);
+        let api = ApiThroughRest::new(base_url.to_string(), survey, device_id);
 
         let start_result = eframe::WebRunner::new()
             .start(

@@ -95,11 +95,8 @@ impl repo::Users for FakeRepo {
         self.surveys.lock().await.remove(name);
         Ok(())
     }
-}
 
-#[async_trait]
-impl repo::DeviceRegistry for FakeRepo {
-    async fn register_device(&self, user: &str, device_id: &str) -> crate::PronoResult<()> {
+    async fn add_user(&self, user: &str, device_id: &str) -> crate::PronoResult<()> {
         info!("Registering device {device_id} for user {user}");
         self.devices
             .lock()
@@ -119,7 +116,7 @@ impl repo::DeviceRegistry for FakeRepo {
 
 #[cfg(test)]
 mod tests {
-    use crate::repo::{Db, DeviceRegistry, Surveys};
+    use crate::repo::{Db, Surveys, Users};
 
     use super::*;
 
@@ -306,14 +303,14 @@ mod tests {
     #[tokio::test]
     async fn test_register_and_verify_device() {
         let repo = setup();
-        repo.register_device("alice", "device-123").await.unwrap();
+        repo.add_user("alice", "device-123").await.unwrap();
         assert!(repo.verify_device("alice", "device-123").await.unwrap());
     }
 
     #[tokio::test]
     async fn test_verify_device_wrong_id() {
         let repo = setup();
-        repo.register_device("alice", "device-123").await.unwrap();
+        repo.add_user("alice", "device-123").await.unwrap();
         assert!(!repo.verify_device("alice", "device-456").await.unwrap());
     }
 

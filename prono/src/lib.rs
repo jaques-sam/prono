@@ -20,6 +20,10 @@ pub use use_cases::*;
 #[cfg(debug_assertions)]
 use crate::repo::Db;
 
+/// Combined trait for types that implement both `Surveys` and `Users`.
+trait SurveysAndUsers: repo::Surveys + repo::Users + Send + Sync {}
+impl<T: repo::Surveys + repo::Users + Send + Sync> SurveysAndUsers for T {}
+
 /// A small sync adapter that exposes the old sync `Prono`-style behaviour while
 /// performing async work on a background thread. Requests are sent to the
 /// background thread via `std::sync::mpsc::Sender` and per-request response
@@ -27,10 +31,17 @@ use crate::repo::Db;
 /// returned receiver to avoid blocking the GUI thread.
 pub struct SyncPronoAdapter {
     req_tx: Sender<Request>,
+    #[cfg_attr(debug_assertions, allow(dead_code))]
+    device_id: String,
     startup_warning: Option<String>,
 }
 
 enum Request {
+    AddUser {
+        user: String,
+        device_id: String,
+        resp: Sender<PronoResult<()>>,
+    },
     AddAnswer {
         user: String,
         question_id: String,
@@ -63,7 +74,7 @@ impl SyncPronoAdapter {
     /// # Errors
     ///
     /// This function will return an error if the database initialization fails.
-    pub async fn new_with_db_config<D>(config: D::Config) -> PronoResult<Self>
+    pub async fn new_with_db_config<D>(config: D::Config, device_id: String) -> PronoResult<Self>
     where
         D: repo::Db + 'static,
         D::Config: Send + 'static,
@@ -72,7 +83,7 @@ impl SyncPronoAdapter {
 
         #[allow(unused_mut)]
         let mut startup_warning = None;
-        let db: Box<dyn repo::Surveys + Send + Sync> = match D::init(config).await {
+        let db: Box<dyn SurveysAndUsers> = match D::init(config).await {
             Ok(db) => Box::new(db),
             #[allow(unused)]
             Err(err) => {
@@ -81,6 +92,7 @@ impl SyncPronoAdapter {
                     startup_warning = Some(err.to_string());
                     return Ok(Self {
                         req_tx,
+                        device_id,
                         startup_warning,
                     });
                 }
@@ -98,6 +110,13 @@ impl SyncPronoAdapter {
         spawn(async move {
             for req in req_rx {
                 match req {
+                    Request::AddUser { user, device_id, resp } => {
+                        let result = db.add_user(&user, &device_id).await;
+                        if let Err(ref e) = result {
+                            error!("Failed to add user {user}: {e}");
+                        }
+                        let _ = resp.send(result);
+                    }
                     Request::AddAnswer {
                         user,
                         question_id,
@@ -125,6 +144,7 @@ impl SyncPronoAdapter {
 
         Ok(Self {
             req_tx,
+            device_id,
             startup_warning,
         })
     }
@@ -134,6 +154,26 @@ impl SyncPronoAdapter {
     #[must_use]
     pub fn startup_warning(&self) -> Option<&str> {
         self.startup_warning.as_deref()
+    }
+
+    /// Request to add a user with device registration; returns a receiver.
+    #[must_use]
+    pub fn request_add_user(&self, user: &str) -> Receiver<PronoResult<()>> {
+        let (tx, rx) = mpsc::channel();
+
+        // In debug mode, generate a unique device_id per user so "Survey again"
+        // with a different username can create a new user on the same device.
+        #[cfg(debug_assertions)]
+        let device_id = uuid::Uuid::new_v4().to_string();
+        #[cfg(not(debug_assertions))]
+        let device_id = self.device_id.clone();
+
+        let _ = self.req_tx.send(Request::AddUser {
+            user: user.to_string(),
+            device_id,
+            resp: tx,
+        });
+        rx
     }
 
     /// Request response (alias); returns a receiver you can `try_recv` on.
@@ -187,6 +227,13 @@ impl prono_api::Surveys for SyncPronoAdapter {
         survey.into()
     }
 
+    fn add_user(&mut self, user: &str) {
+        let rx = self.request_add_user(user);
+        if let Ok(Err(e)) = rx.try_recv() {
+            error!("Failed to add user: {e}");
+        }
+    }
+
     fn add_answer(&mut self, user: &str, question_id: String, answer: prono_api::Answer) {
         let rx = self.request_add_answer(user, question_id, answer.into());
         if let Ok(Err(e)) = rx.try_recv() {
@@ -236,7 +283,7 @@ mod tests {
     #[cfg(debug_assertions)]
     #[tokio::test]
     async fn test_sync_prono_adapter_with_fake_db() {
-        let adapter = SyncPronoAdapter::new_with_db_config::<fake_db::FakeRepo>(())
+        let adapter = SyncPronoAdapter::new_with_db_config::<fake_db::FakeRepo>((), "test-device".to_string())
             .await
             .unwrap();
 
@@ -249,7 +296,7 @@ mod tests {
     #[cfg(debug_assertions)]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_sync_prono_adapter_add_and_retrieve() {
-        let mut adapter = SyncPronoAdapter::new_with_db_config::<fake_db::FakeRepo>(())
+        let mut adapter = SyncPronoAdapter::new_with_db_config::<fake_db::FakeRepo>((), "test-device".to_string())
             .await
             .unwrap();
 

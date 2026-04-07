@@ -5,6 +5,7 @@
   - [Security](#security)
     - [API Key Authentication](#api-key-authentication)
     - [Question ID Validation](#question-id-validation)
+    - [Device Validation](#device-validation)
   - [Build \& Run](#build--run)
   - [Deployment](#deployment)
     - [Simple testing as NAS user](#simple-testing-as-nas-user)
@@ -31,6 +32,14 @@ The API key is baked into both the backend and the client via `prono_api::API_KE
 ### Question ID Validation
 
 All answer submissions are validated to ensure the `question_id` exists in the survey definition. Invalid question IDs will be rejected with a 400 Bad Request response.
+
+
+### Device Validation
+
+When a user is added, a unique device_id is added in the same `Users` table.
+This avoids adding the user twice.
+This is different from the debug build, in that case it's a random uuid.
+
 
 ## Build & Run
 

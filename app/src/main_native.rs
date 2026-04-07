@@ -18,7 +18,8 @@ pub async fn main() -> eframe::Result {
     env_logger::init(); // Log to stdout iso stderr (if you run with e.g. `RUST_LOG=debug`).
 
     // Initialize device identity (generates and persists UUID on first run)
-    let _identity = crate::adapters::identity_native::NativeIdentity::load_or_create();
+    let identity = crate::adapters::identity_native::NativeIdentity::load_or_create();
+    let device_id = prono_api::Identity::device_id(&identity).to_string();
 
     let config_reader = prono::factory::create_config_reader();
     let default_config_path = config_reader.default_config_path();
@@ -36,7 +37,7 @@ pub async fn main() -> eframe::Result {
         ..Default::default()
     };
 
-    let prono = match prono::SyncPronoAdapter::new_with_db_config::<prono_db::MysqlDb>(db_config).await {
+    let prono = match prono::SyncPronoAdapter::new_with_db_config::<prono_db::MysqlDb>(db_config, device_id).await {
         Err(e) => {
             error!("{e}");
             return Ok(());

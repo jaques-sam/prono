@@ -2,4 +2,4 @@
 #
 # Sync the backend binary & service file to the NAS
 
-scp -O target/release/prono-backend sam@nas:
+scp -O target/"${1:-release}"/prono-backend sam@nas:

@@ -6,7 +6,7 @@ use crate::BackendResult;
 
 pub struct SurveyService {
     db: Arc<dyn repo::Surveys + Send + Sync>,
-    devices: Arc<dyn repo::DeviceRegistry + Send + Sync>,
+    users: Arc<dyn repo::Users + Send + Sync>,
 }
 
 fn api_answer_to_repo(answer: prono_api::Answer) -> repo::Answer {
@@ -40,8 +40,8 @@ fn repo_survey_to_api(survey: repo::Survey) -> prono_api::Survey {
 }
 
 impl SurveyService {
-    pub fn new(db: Arc<dyn repo::Surveys + Send + Sync>, devices: Arc<dyn repo::DeviceRegistry + Send + Sync>) -> Self {
-        Self { db, devices }
+    pub fn new(db: Arc<dyn repo::Surveys + Send + Sync>, users: Arc<dyn repo::Users + Send + Sync>) -> Self {
+        Self { db, users }
     }
 
     #[must_use]
@@ -65,21 +65,30 @@ impl SurveyService {
 
     /// # Errors
     ///
-    /// Returns an error if the question ID is invalid, device verification fails,
-    /// the answer already exists, or if a repository error occurs.
-    pub async fn add_answer(
+    /// Returns an error if the user cannot be added or the device ID conflicts.
+    pub async fn add_user(
         &self,
         user: &str,
-        question_id: String,
-        answer: prono_api::Answer,
-        device_id: &str,
+        #[cfg_attr(debug_assertions, allow(unused_variables))] device_id: &str,
     ) -> BackendResult<()> {
-        self.validate_question_id(&question_id)?;
-
-        if !self.devices.verify_device(user, device_id).await? {
+        #[cfg(not(debug_assertions))]
+        if !self.users.verify_device(user, device_id).await? {
             return Err(crate::Error::DeviceMismatch);
         }
-        self.devices.register_device(user, device_id).await?;
+
+        #[cfg(debug_assertions)]
+        let device_id = &uuid::Uuid::new_v4().to_string();
+
+        self.users.add_user(user, device_id).await?;
+        Ok(())
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if the question ID is invalid,
+    /// the answer already exists, or if a repository error occurs.
+    pub async fn add_answer(&self, user: &str, question_id: String, answer: prono_api::Answer) -> BackendResult<()> {
+        self.validate_question_id(&question_id)?;
         self.db
             .add_answer(user, question_id, api_answer_to_repo(answer))
             .await?;
@@ -125,9 +134,10 @@ mod tests {
         let survey = service.empty_survey();
         let question_id = survey.questions[0].id.clone();
 
+        service.add_user("testuser", "device-1").await.unwrap();
         let answer = prono_api::Answer::Text("test answer".to_string());
         service
-            .add_answer("testuser", question_id.clone(), answer, "device-1")
+            .add_answer("testuser", question_id.clone(), answer)
             .await
             .unwrap();
 
@@ -142,33 +152,14 @@ mod tests {
         let survey = service.empty_survey();
         let question_id = survey.questions[0].id.clone();
 
+        service.add_user("user1", "device-1").await.unwrap();
         let answer = prono_api::Answer::Text("answer".to_string());
         service
-            .add_answer("user1", question_id.clone(), answer.clone(), "device-1")
+            .add_answer("user1", question_id.clone(), answer.clone())
             .await
             .unwrap();
 
-        let result = service.add_answer("user1", question_id, answer, "device-1").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_add_answer_device_mismatch() {
-        let service = make_service().await;
-        let survey = service.empty_survey();
-        let q1 = survey.questions[0].id.clone();
-        let q2 = survey
-            .questions
-            .get(1)
-            .map_or_else(|| "q2".to_string(), |q| q.id.clone());
-
-        let answer = prono_api::Answer::Text("answer".to_string());
-        service
-            .add_answer("user1", q1, answer.clone(), "device-1")
-            .await
-            .unwrap();
-
-        let result = service.add_answer("user1", q2, answer, "device-2").await;
+        let result = service.add_answer("user1", question_id, answer).await;
         assert!(result.is_err());
     }
 
@@ -178,11 +169,9 @@ mod tests {
         let survey = service.empty_survey();
         let question_id = survey.questions[0].id.clone();
 
+        service.add_user("user1", "device-1").await.unwrap();
         let answer = prono_api::Answer::Text("my answer".to_string());
-        service
-            .add_answer("user1", question_id, answer, "device-1")
-            .await
-            .unwrap();
+        service.add_answer("user1", question_id, answer).await.unwrap();
 
         let response = service.response("user1", 0).await;
         assert!(response.is_some());

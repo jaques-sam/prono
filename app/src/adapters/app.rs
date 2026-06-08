@@ -52,11 +52,12 @@ impl App {
             return;
         };
 
-        prono.add_user(&self.user_name);
-
-        for question in &survey.questions {
-            prono.add_answer(&self.user_name, question.id.clone(), question.answer.clone().into());
-        }
+        let answers: Vec<(String, prono_api::Answer)> = survey
+            .questions
+            .iter()
+            .map(|q| (q.id.clone(), q.answer.clone().into()))
+            .collect();
+        prono.add_answers(&self.user_name, answers);
 
         self.cached_answers.clear();
         self.survey_state = SurveyState::Completed(survey);
@@ -247,11 +248,12 @@ mod tests {
     #[test]
     fn submit_transitions_state_to_completed() {
         let mut mock_surveys = MockSurveys::new();
-        mock_surveys.expect_add_user().return_const(());
         mock_surveys
-            .expect_add_answer()
-            .withf(|_user, question_id, answer| {
-                question_id == "q1" && answer == &prono_api::Answer::Text("sometime in 2025".to_owned())
+            .expect_add_answers()
+            .withf(|_user, answers| {
+                answers.len() == 1
+                    && answers[0].0 == "q1"
+                    && answers[0].1 == prono_api::Answer::Text("sometime in 2025".to_owned())
             })
             .return_const(());
 

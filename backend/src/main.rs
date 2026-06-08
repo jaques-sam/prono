@@ -35,6 +35,8 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin("https://prono-app.samagali.myds.me")
             .allowed_origin("http://127.0.0.1:8080")
             .allowed_origin("http://localhost:8080")
+            .allowed_origin("http://127.0.0.1:8888")
+            .allowed_origin("http://localhost:8888")
             .allowed_methods(vec!["GET", "POST"])
             .allowed_header(actix_web::http::header::CONTENT_TYPE)
             .allowed_header(actix_web::http::header::AUTHORIZATION)
@@ -51,8 +53,8 @@ async fn main() -> std::io::Result<()> {
                 web::scope("")
                     .guard(actix_web::guard::Post())
                     .wrap(ApiKeyAuth::new(api_key_clone.clone()))
-                    .service(rest::add_user)
-                    .service(rest::add_answer),
+                    .service(rest::add_answer)
+                    .service(rest::add_answers),
             )
     })
     .bind(("0.0.0.0", 8081))?

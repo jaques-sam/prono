@@ -1,2 +1,3 @@
-#[cfg(debug_assertions)]
-pub mod fake_db;
+mod submit_answers;
+
+pub use submit_answers::*;

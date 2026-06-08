@@ -72,9 +72,12 @@ impl prono_api::Surveys for ApiThroughRest {
         }
     }
 
-    fn add_user(&mut self, user: &str) {
-        let url = format!("{}/api/user", self.base_url);
-        let body = serde_json::json!({ "user": user });
+    fn add_answers(&mut self, user: &str, answers: Vec<(String, prono_api::Answer)>) {
+        let url = format!("{}/api/survey/answers", self.base_url);
+        let body = serde_json::json!({
+            "user": user,
+            "answers": answers,
+        });
         let body_str = body.to_string();
         let device_id = self.device_id.clone();
         let pending = Rc::clone(&self.pending_writes);
@@ -91,39 +94,9 @@ impl prono_api::Surveys for ApiThroughRest {
                 .await
             {
                 Ok(resp) if !resp.ok() => {
-                    error!("add_user failed: HTTP {} - {}", resp.status(), resp.status_text());
+                    error!("add_answers failed: HTTP {} - {}", resp.status(), resp.status_text());
                 }
-                Err(e) => error!("add_user network error: {e}"),
-                _ => {}
-            }
-            Self::end_write(&pending);
-        });
-    }
-
-    fn add_answer(&mut self, user: &str, question_id: String, answer: prono_api::Answer) {
-        let url = format!("{}/api/survey/answer", self.base_url);
-        let body = serde_json::json!({
-            "user": user,
-            "question_id": question_id,
-            "answer": answer,
-        });
-        let body_str = body.to_string();
-        let pending = Rc::clone(&self.pending_writes);
-        self.begin_write();
-
-        wasm_bindgen_futures::spawn_local(async move {
-            match gloo_net::http::Request::post(&url)
-                .header("Content-Type", "application/json")
-                .header("Authorization", &format!("Bearer {}", prono_api::API_KEY))
-                .body(body_str)
-                .expect("Failed to build request body")
-                .send()
-                .await
-            {
-                Ok(resp) if !resp.ok() => {
-                    error!("add_answer failed: HTTP {} - {}", resp.status(), resp.status_text());
-                }
-                Err(e) => error!("add_answer network error: {e}"),
+                Err(e) => error!("add_answers network error: {e}"),
                 _ => {}
             }
             Self::end_write(&pending);

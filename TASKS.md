@@ -15,7 +15,7 @@
 11. [x] Implement ~~0MQ~~ REST client
 12. [x] Time graph of all user answers
 13. [x] Restrict users for filling in (twice)
-14. [ ] Check when typing if user already exists/filld in survey, show warning
+14. [x] Check when typing if user already exists/filld in survey, show warning
 15. [x] Show errors over the UI
 16. [ ] Add user verification (pass phrase?/is human?)
 17. [ ] Table as output

@@ -22,3 +22,25 @@ pub const DEVICE_ID_HEADER: &str = "X-Device-Id";
 pub fn answers_path(survey_id: u64) -> String {
     format!("/api/surveys/{survey_id}/answers")
 }
+
+/// REST path asking whether `user` already filled in a survey: `GET` returns
+/// a JSON `bool`. It sends the same API key and device id headers as a
+/// submission, and reveals nothing else about the user.
+#[must_use]
+pub fn user_path(user: &str) -> String {
+    format!(
+        "/api/users/{}",
+        percent_encoding::utf8_percent_encode(user, percent_encoding::NON_ALPHANUMERIC)
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_path_escapes_the_name() {
+        assert_eq!(user_path("Sam"), "/api/users/Sam");
+        assert_eq!(user_path("a/b c?é"), "/api/users/a%2Fb%20c%3F%C3%A9");
+    }
+}

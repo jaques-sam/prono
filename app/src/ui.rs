@@ -33,11 +33,12 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
             let error_action = state.error.as_deref().and_then(|error| error_banner(ui, error));
 
             let busy = state.is_busy();
+            let warning = state.name_warning();
             let survey = state.survey();
             let phase_action = match (&mut state.phase, survey) {
                 (Phase::Answering { answers, .. }, Some(survey)) => answering(ui, survey, answers, busy),
                 (Phase::Done { .. }, Some(survey)) => done(ui, survey, &state.user_name, state.results.as_ref()),
-                _ => start(ui, &mut state.user_name),
+                _ => start(ui, &mut state.user_name, warning.as_deref()),
             };
             error_action.or(phase_action)
         })
@@ -60,11 +61,14 @@ fn error_banner(ui: &mut egui::Ui, error: &str) -> Option<Action> {
         .inner
 }
 
-fn start(ui: &mut egui::Ui, user_name: &mut String) -> Option<Action> {
+fn start(ui: &mut egui::Ui, user_name: &mut String, warning: Option<&str>) -> Option<Action> {
     ui.horizontal(|ui| {
         ui.label("Your name:");
         ui.add(TextEdit::singleline(user_name).hint_text("Please fill in your name"));
     });
+    if let Some(warning) = warning {
+        ui.colored_label(ui.visuals().warn_fg_color, warning);
+    }
     ui.add_space(8.0);
     ui.label("Choose a survey:");
     let mut action = None;

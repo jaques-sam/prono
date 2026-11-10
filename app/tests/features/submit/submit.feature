@@ -32,23 +32,16 @@ Feature: Submitting answers
     Given I am answering the survey as "Sam Smith"
     And I submit my answers
     And I choose another survey
-    And I start the survey
-    When I submit my answers
-    Then I see the error "You already answered this survey"
-    And I am answering the survey
+    When I start the survey
+    Then I see everyone's answers
+    And I cannot change my answers
 
   Scenario: A name used on another device is restricted
-    Given "Alice Adams" already answered from another device, predicting month 3 of 2031
+    Given "Alice Adams" already answered "C" to "What is your background" from another device
     And I am answering the survey as "Alice Adams"
     When I submit my answers
     Then I see the error "This name is registered on another device"
     And I am answering the survey
-
-  Scenario: A name that already answered cannot answer again
-    Given "Bob Brown" already answered from this device
-    And I am answering the survey as "Bob Brown"
-    When I submit my answers
-    Then I see the error "You already answered this survey"
 
   Scenario: An unreachable server is reported over the survey
     Given I am answering the survey as "Sam Smith"

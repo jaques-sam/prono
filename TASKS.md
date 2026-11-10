@@ -4,7 +4,7 @@
 
 1. [x] Show survey from file on "start survey" click
 2. [x] Add answers for first user into db
-3. [x] Refill survey when user logs in (see *)
+3. [x] Show all results instead of the survey when a user who answered logs in again (see *)
 4. [x] Get survey info from file survey
 5. [x] Descriptions of survey & questions are not part of db surveys
 6. [x] Do not allow duplicates in db

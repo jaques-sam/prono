@@ -56,6 +56,11 @@ fn answer_course(world: &mut World, name: String) {
     world.answer_survey_as(&name, &course().description);
 }
 
+#[when("I start the course survey")]
+fn start_course(world: &mut World) {
+    world.start_survey(&course().description);
+}
+
 #[given(expr = "{string} already answered {string} to {string} from this device")]
 fn answered_here(world: &mut World, name: String, answer: String, question: String) {
     seed(world, &name, MY_DEVICE, &answer, &question);

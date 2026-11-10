@@ -65,13 +65,13 @@ pub struct State {
     /// The earlier answers of a returning participant, being fetched. Apart
     /// from `request` because it must not keep the participant from answering.
     #[serde(skip)]
-    refill: Option<Refill>,
+    earlier: Option<Earlier>,
     #[serde(skip)]
     name_check: NameCheck,
 }
 
-/// Looking up what `user` answered to a survey before.
-struct Refill {
+/// Looking up whether `user` answered a survey before.
+struct Earlier {
     user: String,
     results: Pending<Results>,
 }
@@ -162,14 +162,14 @@ impl State {
         self.phase = Phase::Start;
         self.results = None;
         self.request = None;
-        self.refill = None;
+        self.earlier = None;
         self.pass_phrase.clear();
     }
 
     /// Takes in finished requests, and fetches results when they are
     /// missing. Call it every frame.
     pub fn poll(&mut self, backend: &impl Backend) {
-        self.poll_refill();
+        self.poll_earlier();
         match self.request.take() {
             Some(Request::Submit(pending)) => match pending.take() {
                 None => self.request = Some(Request::Submit(pending)),
@@ -211,24 +211,25 @@ impl State {
         }
     }
 
-    /// Fills the questions with the earlier answers of the participant, once
-    /// they arrive. The lookup is a convenience: when it fails or finds
-    /// nothing, the participant just answers.
-    fn poll_refill(&mut self) {
-        let Some(refill) = self.refill.take() else { return };
-        let Some(found) = refill.results.take() else {
-            self.refill = Some(refill);
+    /// Shows everyone's answers instead of the questions once it turns out
+    /// the participant answered the survey before: answers are final. The
+    /// lookup is a convenience: when it fails or finds nothing, the
+    /// participant just answers (the backend refuses a second submission
+    /// anyway).
+    fn poll_earlier(&mut self) {
+        let Some(earlier) = self.earlier.take() else { return };
+        let Some(found) = earlier.results.take() else {
+            self.earlier = Some(earlier);
             return;
         };
-        let survey = self.survey();
-        let (Phase::Answering { answers, .. }, Some(survey), Ok(results)) = (&mut self.phase, survey, found) else {
+        let (Phase::Answering { survey_id, .. }, Some(survey), Ok(results)) = (&self.phase, self.survey(), found)
+        else {
             return;
         };
-        // Answers the participant has already changed are theirs to keep.
-        if *answers == survey.empty_answers()
-            && let Some(earlier) = survey.answers_of(&results, &refill.user)
-        {
-            *answers = earlier;
+        if survey.answers_of(&results, &earlier.user).is_some() {
+            self.phase = Phase::Done { survey_id: *survey_id };
+            self.results = Some(results);
+            self.pass_phrase.clear();
         }
     }
 
@@ -338,7 +339,7 @@ impl State {
         if let Some(survey) = available.into_iter().find(|survey| survey.id == survey_id) {
             // Everyone's answers are public, so a returning participant's
             // are found among them: no endpoint of their own is needed.
-            self.refill = Some(Refill {
+            self.earlier = Some(Earlier {
                 user,
                 results: backend.results(survey_id),
             });
@@ -940,65 +941,64 @@ mod tests {
         state
     }
 
+    fn blank(state: &State) -> bool {
+        answers_of(state) == prono_api::survey(SURVEY_ID).unwrap().empty_answers()
+    }
+
     #[test]
-    fn earlier_answers_refill_the_questions() {
-        let backend = FakeBackend::new(None).with_results(Some(Ok(results_of("Sam Smith", 4, 2033))));
+    fn earlier_answers_lead_to_the_results() {
+        let results = results_of("Sam Smith", 4, 2033);
+        let backend = FakeBackend::new(None).with_results(Some(Ok(results.clone())));
         let mut state = started(" Sam  Smith ", &backend);
-        assert_eq!(
-            answers_of(&state),
-            prono_api::survey(SURVEY_ID).unwrap().empty_answers()
-        );
+        assert!(blank(&state), "the questions show until the lookup is in");
 
         state.poll(&backend);
-        assert!(answers_of(&state).iter().all(|answer| *answer == date(4, 2033)));
-        assert!(!state.is_busy(), "looking them up never keeps the participant waiting");
+        assert!(matches!(state.phase, Phase::Done { survey_id: SURVEY_ID }));
+        assert_eq!(state.results, Some(results));
+        assert!(!state.is_busy(), "the results are already there");
         assert!(state.error.is_none());
     }
 
     #[test]
-    fn answers_of_other_names_do_not_refill() {
-        let backend = FakeBackend::new(None).with_results(Some(Ok(results_of("Bob Brown", 4, 2033))));
-        let mut state = started("Sam Smith", &backend);
-        state.poll(&backend);
-        assert_eq!(
-            answers_of(&state),
-            prono_api::survey(SURVEY_ID).unwrap().empty_answers()
-        );
-    }
-
-    #[test]
-    fn refill_waits_for_the_answer_and_happens_once() {
-        let backend = FakeBackend::new(None).with_results(None);
-        let mut state = started("Sam Smith", &backend);
-        state.poll(&backend);
-        state.poll(&backend);
-        assert_eq!(backend.results_requests.get(), 1);
-
-        // Whatever the participant answered meanwhile stays.
+    fn earlier_answers_win_over_what_was_typed_meanwhile() {
         let backend = FakeBackend::new(None).with_results(Some(Ok(results_of("Sam Smith", 4, 2033))));
         let mut state = started("Sam Smith", &backend);
         if let Phase::Answering { answers, .. } = &mut state.phase {
             answers[0] = date(1, 2099);
         }
         state.poll(&backend);
-        assert_eq!(answers_of(&state)[0], date(1, 2099));
-        assert_ne!(answers_of(&state)[1], date(4, 2033));
+        assert!(matches!(state.phase, Phase::Done { .. }));
     }
 
     #[test]
-    fn failed_refill_is_ignored() {
+    fn answers_of_other_names_do_not_lead_to_the_results() {
+        let backend = FakeBackend::new(None).with_results(Some(Ok(results_of("Bob Brown", 4, 2033))));
+        let mut state = started("Sam Smith", &backend);
+        state.poll(&backend);
+        assert!(blank(&state));
+    }
+
+    #[test]
+    fn lookup_waits_for_the_answer_and_happens_once() {
+        let backend = FakeBackend::new(None).with_results(None);
+        let mut state = started("Sam Smith", &backend);
+        state.poll(&backend);
+        state.poll(&backend);
+        assert_eq!(backend.results_requests.get(), 1);
+        assert!(blank(&state));
+    }
+
+    #[test]
+    fn failed_lookup_is_ignored() {
         let backend = FakeBackend::new(None).with_results(Some(Err("Cannot reach the server".into())));
         let mut state = started("Sam Smith", &backend);
         state.poll(&backend);
-        assert_eq!(
-            answers_of(&state),
-            prono_api::survey(SURVEY_ID).unwrap().empty_answers()
-        );
+        assert!(blank(&state));
         assert!(state.error.is_none());
     }
 
     #[test]
-    fn refill_does_not_outlive_the_questions() {
+    fn lookup_does_not_outlive_the_questions() {
         let backend = FakeBackend::new(None).with_results(Some(Ok(results_of("Sam Smith", 4, 2033))));
         let mut state = started("Sam Smith", &backend);
         state.apply(Action::ChangeName, &backend);

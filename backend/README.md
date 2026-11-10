@@ -2,10 +2,10 @@
 
 - [Prono Backend](#prono-backend)
   - [Summary](#summary)
-  - [Security](#security)
-    - [API Key Authentication](#api-key-authentication)
-    - [Question ID Validation](#question-id-validation)
-    - [Device Validation](#device-validation)
+  - [REST API](#rest-api)
+  - [Rules](#rules)
+  - [Configuration](#configuration)
+  - [Database](#database)
   - [Build \& Run](#build--run)
   - [Deployment](#deployment)
     - [Simple testing as NAS user](#simple-testing-as-nas-user)
@@ -14,46 +14,99 @@
 
 ## Summary
 
-The prono-backend is basically a REST API to access the prono database. It allows all prono-api clients to connect to the prono database.
+The prono-backend is a REST API in front of the prono database. Both the web and the desktop app use it.
 
 
-## Security
+## REST API
 
-The backend implements API key authentication to protect write endpoints:
-- **Protected endpoints**: `/api/survey/answer` (POST) - requires API key
-- **Public endpoints**: `/api/survey` (GET), `/api/survey/response/*` (GET), `/api/survey/answers/*` (GET)
+| Method & path | Body | Response |
+| --- | --- | --- |
+| `POST /api/surveys/{survey_id}/answers` | `{"user": "...", "answers": [["<question id>", <answer>], ...]}` | `200`, or an error |
+| `GET /api/surveys/{survey_id}/answers` | | `{"<question id>": [{"user": "...", "answer": <answer>}]}` |
+
+An `<answer>` is `{"PredictionDate": {"day": null, "month": 3, "year": 2026}}` or `{"Text": "..."}`.
+
+`POST` needs two headers:
+- `Authorization: Bearer <prono_api::API_KEY>`. The key is baked into the apps, including the public web app, so it only keeps out casual scripts.
+- `X-Device-Id: <device id>`, generated and stored by the app.
+
+Errors come back as a JSON string meant for the participant: `400` for an invalid submission, `401` for a bad API key, `403` for a device conflict, `409` when the survey was answered before, `500` otherwise (details only in the log).
 
 
-### API Key Authentication
+## Rules
 
-The API key is baked into both the backend and the client via `prono_api::API_KEY`. Clients include it in the `Authorization` header as `Bearer <key>`.
+Enforced in `prono::submit`, with the checks shared with the apps (`prono_api::Submission::validate`):
+
+- A submission answers every question of the survey exactly once, with a valid answer.
+- A name is bound to the device that first submitted for it.
+- A device can only be used by one participant.
+- A participant answers a survey once. All answers of a submission are stored in one transaction.
 
 
-### Question ID Validation
+## Configuration
 
-All answer submissions are validated to ensure the `question_id` exists in the survey definition. Invalid question IDs will be rejected with a 400 Bad Request response.
+The backend (and [the CLI](../cli/README.md)) read the database settings from `secure_config.toml` in the configuration directory:
+- MacOS: `$HOME/Library/Application Support/prono/`
+- Linux: `$HOME/.config/prono/`
+- Windows: `C:\Users\<user>\AppData\Roaming\prono`
+
+```toml
+[db]
+host = "the_prono_db_host"
+port = 3306
+user = "the_prono_db_user"
+pass = "the_prono_db_password"
+```
+
+Each setting can be overridden (or provided without a file) through `PRONO_DB_HOST`, `PRONO_DB_PORT`, `PRONO_DB_USER` and `PRONO_DB_PASS`.
 
 
-### Device Validation
+## Database
 
-When a user is added, a unique device_id is added in the same `Users` table.
-This avoids adding the user twice.
-This is different from the debug build, in that case it's a random uuid.
+A MariaDB/MySQL database named `db_prono`. Log in with:
+
+```bash
+mysql db_prono -vh ${HOST} -P ${PORT} -u ${USER} -p --connect-timeout=2
+```
+
+and create the tables once:
+
+```sql
+CREATE TABLE Users (
+    user_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_name TEXT NOT NULL,
+    email TEXT,
+    device_id VARCHAR(255) NOT NULL UNIQUE,
+    INDEX idx_user_name (user_name(255))
+);
+
+CREATE TABLE AnswerResponse (
+    user_id BIGINT NOT NULL,
+    question_id TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    INDEX idx_question (question_id(255)),
+    INDEX idx_user_question (user_id, question_id(255))
+);
+```
+
+Answers are stored as text: `DD/MM/YYYY` for dates (`00` when there is no day), the text itself otherwise.
 
 
 ## Build & Run
 
-Basically, you can build the backend with the following command:
-
 ```sh
 cargo build --release --bin prono-backend
-
 ```
+
+The queries are checked at runtime, so building does not need a database.
+
+
 ## Deployment
 
 ### Simple testing as NAS user
 
-For simple testing,  run the backend with the following command:
+For simple testing, run the backend with the following command:
 
 ```sh
 ./backend/install/sync.sh  # Syncs the binary to the NAS (in ~)
@@ -63,20 +116,15 @@ On the NAS:
 ```sh
 RUST_LOG=debug ~/prono-backend
 ```
-Note: you need a config file at `~/.config/prono-backend/config.toml` with the following content:
-[Configuration](#../app/README.md#configuration)
+This needs the [configuration](#configuration).
 
 
 ### As a Synology service
 
 ```sh
-/backend/install/build-spk.sh target/release/backend target/  # Using x86 builds
+./backend/install/build-spk.sh target/release/prono-backend target/  # Using x86 builds
 ```
 Then install the generated `target/prono-backend.spk` file on the NAS using the Synology Package Center.
 You can then start the service from the Package Center UI.
 
-This needs an env file at `/var/packages/prono-backend/etc/env` with the following environment variables:
-- `PRONO_DB_HOST` - Database host
-- `PRONO_DB_PORT` - Database port
-- `PRONO_DB_USER` - Database username
-- `PRONO_DB_PASS` - Database password
+This needs an env file at `/var/packages/prono-backend/etc/env` with the `PRONO_DB_*` environment variables from the [configuration](#configuration).

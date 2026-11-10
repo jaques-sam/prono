@@ -1,13 +1,14 @@
 //! An in-memory stand-in for the Prono backend: the real use cases from the
 //! `prono` crate running on a `MemoryRepo`, so the rules (one answer per
 //! name, names bound to devices) are the server's, without any HTTP or
-//! database.
+//! database. Which surveys a name is offered, and may answer, follows the
+//! surveys' `access` and the name lists of the repository.
 
 use std::cell::{Cell, RefCell};
 
 use futures::FutureExt as _;
-use prono::MemoryRepo;
-use prono_api::{Answer, AnswerKind, Question, Results, Submission};
+use prono::{MemoryRepo, Repo as _};
+use prono_api::{Access, Answer, AnswerKind, Question, Results, Submission, UserStatus};
 use prono_app::client::{Backend, Pending};
 
 /// The device the app under test runs on.
@@ -42,6 +43,22 @@ impl FakeBackend {
             name_checks: RefCell::default(),
             submitted_by: RefCell::default(),
         }
+    }
+
+    /// Puts `user` ("First Last") on the name list of every survey that has
+    /// one.
+    pub fn put_on_name_list(&self, user: &str) {
+        for survey in prono_api::surveys()
+            .iter()
+            .filter(|survey| survey.access == Access::NameList)
+        {
+            self.allow(survey.id, user);
+        }
+    }
+
+    fn allow(&self, survey_id: u64, user: &str) {
+        let (first, last) = user.split_once(' ').expect("a first and a last name");
+        Self::now(self.repo.allow_user(survey_id, first, last)).expect("listing succeeds");
     }
 
     /// Lets every request fail like an unreachable server.
@@ -79,6 +96,9 @@ impl FakeBackend {
         let survey = prono_api::survey(survey_id).expect("the seeded survey exists");
         let answers: Vec<_> = survey.questions.iter().map(answer_to).collect();
         let submission = Submission::new(user, survey, &answers);
+        if survey.access == Access::NameList {
+            self.allow(survey_id, user);
+        }
         Self::now(prono::submit(&self.repo, survey_id, device_id, &submission)).expect("seeding succeeds");
     }
 
@@ -110,10 +130,10 @@ impl Backend for FakeBackend {
         Self::respond(self.results.get(), || Self::now(prono::results(&self.repo, survey_id)))
     }
 
-    fn user_answered(&self, user: &str) -> Pending<bool> {
+    fn user_status(&self, user: &str) -> Pending<UserStatus> {
         self.name_checks.borrow_mut().push(user.to_string());
         Self::respond(self.results.get(), || {
-            Self::now(prono::has_answered(&self.repo, MY_DEVICE, user))
+            Self::now(prono::user_status(&self.repo, MY_DEVICE, user))
         })
     }
 }

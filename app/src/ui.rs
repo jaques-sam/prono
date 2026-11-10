@@ -2,9 +2,9 @@
 //! live in `prono_api` and [`State`]; this module only renders.
 
 use egui::{FontId, RichText, TextEdit};
-use prono_api::{Answer, AnswerKind, PREDICTION_YEARS, Question, Results, Survey};
+use prono_api::{Access, Answer, AnswerKind, PREDICTION_YEARS, Question, Results, Survey};
 
-use crate::state::{Action, Phase, State};
+use crate::state::{Action, Phase, State, SurveyList};
 use crate::{poll, timeline};
 
 pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
@@ -35,10 +35,13 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
             let busy = state.is_busy();
             let warning = state.name_warning();
             let survey = state.survey();
+            let user = prono_api::full_name(&state.first_name, &state.last_name);
             let phase_action = match (&mut state.phase, survey) {
-                (Phase::Answering { answers, .. }, Some(survey)) => answering(ui, survey, answers, busy),
-                (Phase::Done { .. }, Some(survey)) => done(ui, survey, &state.user_name, state.results.as_ref()),
-                _ => start(ui, &mut state.user_name, warning.as_deref()),
+                (Phase::Answering { answers, .. }, Some(survey)) => {
+                    answering(ui, survey, answers, &mut state.pass_phrase, busy)
+                }
+                (Phase::Done { .. }, Some(survey)) => done(ui, survey, &user, state.results.as_ref()),
+                _ => start(ui, state, warning.as_deref()),
             };
             if !matches!(state.phase, Phase::Answering { .. }) {
                 poll::forget_other(ui.ctx());
@@ -64,26 +67,59 @@ fn error_banner(ui: &mut egui::Ui, error: &str) -> Option<Action> {
         .inner
 }
 
-fn start(ui: &mut egui::Ui, user_name: &mut String, warning: Option<&str>) -> Option<Action> {
+/// A single-line text field with a `label` the screen readers know it by.
+fn labelled_text_edit(ui: &mut egui::Ui, label: &str, hint: &str, text: &mut String, password: bool) {
     ui.horizontal(|ui| {
-        ui.label("Your name:");
-        ui.add(TextEdit::singleline(user_name).hint_text("Please fill in your name"));
+        let label = ui.label(label);
+        ui.add(TextEdit::singleline(text).hint_text(hint).password(password))
+            .labelled_by(label.id);
     });
+}
+
+fn start(ui: &mut egui::Ui, state: &mut State, warning: Option<&str>) -> Option<Action> {
+    labelled_text_edit(ui, "First name:", "Your first name", &mut state.first_name, false);
+    labelled_text_edit(ui, "Last name:", "Your last name", &mut state.last_name, false);
     if let Some(warning) = warning {
         ui.colored_label(ui.visuals().warn_fg_color, warning);
     }
     ui.add_space(8.0);
-    ui.label("Choose a survey:");
-    let mut action = None;
-    for survey in prono_api::surveys() {
-        if ui.button(&survey.description).clicked() {
-            action = Some(Action::StartSurvey(survey.id));
+    match state.survey_list() {
+        SurveyList::NeedName => {
+            ui.label("Fill in your first and last name to see your surveys.");
+            None
+        }
+        SurveyList::Waiting => {
+            ui.spinner();
+            None
+        }
+        SurveyList::Failed => {
+            ui.label("Your surveys could not be loaded. Change your name to try again.");
+            None
+        }
+        SurveyList::Ready(surveys) if surveys.is_empty() => {
+            ui.label("No surveys are available for you.");
+            None
+        }
+        SurveyList::Ready(surveys) => {
+            ui.label("Choose a survey:");
+            let mut action = None;
+            for survey in surveys {
+                if ui.button(&survey.description).clicked() {
+                    action = Some(Action::StartSurvey(survey.id));
+                }
+            }
+            action
         }
     }
-    action
 }
 
-fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: bool) -> Option<Action> {
+fn answering(
+    ui: &mut egui::Ui,
+    survey: &Survey,
+    answers: &mut [Answer],
+    pass_phrase: &mut String,
+    busy: bool,
+) -> Option<Action> {
     survey_heading(ui, survey);
 
     egui::Grid::new("questions")
@@ -96,6 +132,10 @@ fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: b
                 ui.end_row();
             }
         });
+
+    if survey.access == Access::PassPhrase {
+        labelled_text_edit(ui, "Pass phrase:", "The pass phrase of this survey", pass_phrase, true);
+    }
 
     let action = ui
         .horizontal(|ui| {
@@ -148,9 +188,9 @@ fn answer_input(ui: &mut egui::Ui, question: &Question, answer: &mut Answer) {
     }
 }
 
-fn done(ui: &mut egui::Ui, survey: &Survey, user_name: &str, results: Option<&Results>) -> Option<Action> {
+fn done(ui: &mut egui::Ui, survey: &Survey, user: &str, results: Option<&Results>) -> Option<Action> {
     survey_heading(ui, survey);
-    ui.label(format!("Thanks {user_name}, your answers are saved."));
+    ui.label(format!("Thanks {user}, your answers are saved."));
     let action = ui
         .button("Choose another survey")
         .clicked()

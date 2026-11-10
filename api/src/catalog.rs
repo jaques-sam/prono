@@ -4,7 +4,7 @@ use std::sync::LazyLock;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{AnswerKind, Question, Survey};
+use crate::{Access, AnswerKind, Question, Survey};
 
 /// Every survey, compiled into each binary. To add a questionnaire, drop a
 /// JSON file in `api/surveys/` and list it here.
@@ -39,6 +39,8 @@ struct SurveyFile {
     description: String,
     #[serde(default)]
     link: Option<String>,
+    #[serde(default)]
+    access: Access,
     questions: Vec<QuestionFile>,
 }
 
@@ -88,6 +90,7 @@ fn parse(json: &str) -> serde_json::Result<Survey> {
         id: file.survey_id,
         description: file.description,
         link: file.link,
+        access: file.access,
         questions: file
             .questions
             .into_iter()
@@ -190,6 +193,27 @@ mod tests {
         ] {
             assert!(parse(&survey_json(question)).is_err(), "{question}");
         }
+    }
+
+    #[test]
+    fn access_defaults_to_open() {
+        let parse_access = |access: &str| {
+            parse(&format!(
+                r#"{{"survey_id": 1, "description": "", {access} "questions": []}}"#
+            ))
+        };
+        assert_eq!(parse_access("").unwrap().access, Access::Open);
+        assert_eq!(
+            parse_access(r#""access": "name_list","#).unwrap().access,
+            Access::NameList
+        );
+        assert_eq!(
+            parse_access(r#""access": "pass_phrase","#).unwrap().access,
+            Access::PassPhrase
+        );
+        assert!(parse_access(r#""access": "secret","#).is_err());
+        assert_eq!(survey(1).unwrap().access, Access::Open);
+        assert_eq!(survey(2).unwrap().access, Access::NameList);
     }
 
     #[test]

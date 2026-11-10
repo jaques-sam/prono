@@ -11,6 +11,8 @@ pub const DEV_URL: &str = "http://localhost:8081";
 pub trait Backend {
     fn submit(&self, survey_id: u64, submission: &Submission) -> Pending<()>;
     fn results(&self, survey_id: u64) -> Pending<Results>;
+    /// Whether `user` already filled in a survey.
+    fn user_answered(&self, user: &str) -> Pending<bool>;
 }
 
 /// The result of a request that may still be in flight. The error is a
@@ -55,8 +57,15 @@ impl HttpBackend {
         }
     }
 
-    fn url(&self, survey_id: u64) -> String {
-        format!("{}{}", self.base_url, prono_api::answers_path(survey_id))
+    fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.base_url)
+    }
+
+    /// Adds the API key and the device id that identify this app.
+    fn authorized(&self, mut request: ehttp::Request) -> ehttp::Request {
+        request.headers.insert("Authorization", format!("Bearer {API_KEY}"));
+        request.headers.insert(DEVICE_ID_HEADER, &self.device_id);
+        request
     }
 
     fn send<T: Send + 'static>(
@@ -82,23 +91,29 @@ impl HttpBackend {
 
 impl Backend for HttpBackend {
     fn submit(&self, survey_id: u64, submission: &Submission) -> Pending<()> {
-        match ehttp::Request::post_json(self.url(survey_id), submission) {
-            Ok(mut request) => {
-                request.headers.insert("Authorization", format!("Bearer {API_KEY}"));
-                request.headers.insert(DEVICE_ID_HEADER, &self.device_id);
-                self.send(request, |_| Ok(()))
-            }
+        match ehttp::Request::post_json(self.url(&prono_api::answers_path(survey_id)), submission) {
+            Ok(request) => self.send(self.authorized(request), |_| Ok(())),
             Err(err) => Pending(Arc::new(Mutex::new(Some(Err(err.to_string()))))),
         }
     }
 
     fn results(&self, survey_id: u64) -> Pending<Results> {
-        self.send(ehttp::Request::get(self.url(survey_id)), |response| {
-            response
-                .json()
-                .map_err(|err| format!("Unexpected answer from the server ({err})"))
-        })
+        self.send(
+            ehttp::Request::get(self.url(&prono_api::answers_path(survey_id))),
+            parse_json,
+        )
     }
+
+    fn user_answered(&self, user: &str) -> Pending<bool> {
+        let request = ehttp::Request::get(self.url(&prono_api::user_path(user)));
+        self.send(self.authorized(request), parse_json)
+    }
+}
+
+fn parse_json<T: serde::de::DeserializeOwned>(response: &ehttp::Response) -> Result<T, String> {
+    response
+        .json()
+        .map_err(|err| format!("Unexpected answer from the server ({err})"))
 }
 
 /// The backend sends its error message as a JSON string.

@@ -1,5 +1,5 @@
 use log::info;
-use prono_api::{Invalid, Results, Submission, Survey};
+use prono_api::{Invalid, Results, Submission, Survey, check_user_name};
 
 use crate::{Error, Repo, Result};
 
@@ -19,9 +19,7 @@ const MAX_DEVICE_ID_LEN: usize = 255;
 pub async fn submit(repo: &dyn Repo, survey_id: u64, device_id: &str, submission: &Submission) -> Result<()> {
     let survey = find_survey(survey_id)?;
     submission.validate(survey)?;
-    if device_id.trim().is_empty() || device_id.len() > MAX_DEVICE_ID_LEN {
-        return Err(Error::InvalidDeviceId);
-    }
+    check_device_id(device_id)?;
 
     let user = submission.user.as_str();
     if repo.device_of(user).await?.is_some_and(|device| device != device_id) {
@@ -39,6 +37,19 @@ pub async fn submit(repo: &dyn Repo, survey_id: u64, device_id: &str, submission
     Ok(())
 }
 
+/// Whether `user` already filled in a survey, so the app can warn while the
+/// name is typed. Only this yes/no leaves the server.
+///
+/// # Errors
+///
+/// [`Error::Invalid`] for a bad name, [`Error::InvalidDeviceId`], or a
+/// repository error.
+pub async fn has_answered(repo: &dyn Repo, device_id: &str, user: &str) -> Result<bool> {
+    check_user_name(user)?;
+    check_device_id(device_id)?;
+    Ok(repo.device_of(user).await?.is_some())
+}
+
 /// Every participant's answers to survey `survey_id`.
 ///
 /// # Errors
@@ -51,6 +62,13 @@ pub async fn results(repo: &dyn Repo, survey_id: u64) -> Result<Results> {
         results.insert(question.id, repo.answers(question.id).await?);
     }
     Ok(results)
+}
+
+fn check_device_id(device_id: &str) -> Result<()> {
+    if device_id.trim().is_empty() || device_id.len() > MAX_DEVICE_ID_LEN {
+        return Err(Error::InvalidDeviceId);
+    }
+    Ok(())
 }
 
 fn find_survey(id: u64) -> Result<&'static Survey> {
@@ -132,6 +150,27 @@ mod tests {
         assert!(matches!(err, Error::Invalid(Invalid::Answer(_))));
 
         assert_eq!(repo.users().await.unwrap(), Vec::<String>::new());
+    }
+
+    #[tokio::test]
+    async fn has_answered_tells_known_names_from_new_ones() {
+        let repo = MemoryRepo::default();
+        assert!(!has_answered(&repo, "dev-1", "alice").await.unwrap());
+
+        submit(&repo, SURVEY_ID, "dev-1", &submission("alice")).await.unwrap();
+        assert!(has_answered(&repo, "dev-1", "alice").await.unwrap());
+        // Also from another device: the name is taken.
+        assert!(has_answered(&repo, "dev-2", "alice").await.unwrap());
+        assert!(!has_answered(&repo, "dev-2", "bob").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn has_answered_rejects_bad_input() {
+        let repo = MemoryRepo::default();
+        let err = has_answered(&repo, "dev-1", " alice").await.unwrap_err();
+        assert_eq!(err, Error::Invalid(Invalid::UserName));
+        let err = has_answered(&repo, "", "alice").await.unwrap_err();
+        assert_eq!(err, Error::InvalidDeviceId);
     }
 
     #[tokio::test]

@@ -15,6 +15,11 @@ pub mod ui;
 /// what the participant asked for.
 pub fn frame(ui: &mut egui::Ui, state: &mut state::State, backend: &impl client::Backend) {
     state.poll(backend);
+    if let Some(wait) = state.check_name(backend, ui.input(|input| input.time)) {
+        // Nothing else wakes the UI when the typing pauses.
+        #[allow(clippy::cast_possible_truncation)]
+        ui.request_repaint_after_secs(wait as f32);
+    }
     if let Some(action) = ui::show(ui, state) {
         state.apply(action, backend);
     }

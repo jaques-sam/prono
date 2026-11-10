@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::client::{Backend, Pending};
 
+/// Seconds the name must stay unchanged before the backend is asked about it.
+pub const NAME_CHECK_DELAY: f64 = 0.5;
+
 /// What the participant is doing.
 #[derive(Default, Serialize, Deserialize)]
 pub enum Phase {
@@ -39,11 +42,26 @@ pub struct State {
     pub error: Option<String>,
     #[serde(skip)]
     request: Option<Request>,
+    #[serde(skip)]
+    name_check: NameCheck,
 }
 
 enum Request {
     Submit(Pending<()>),
     Results(Pending<Results>),
+}
+
+/// Finding out, while the name is typed, whether it already filled in a
+/// survey.
+#[derive(Default)]
+struct NameCheck {
+    /// The trimmed name as last seen, and when it changed (in seconds).
+    typed: String,
+    changed_at: f64,
+    /// The name being asked about, and the answer to come.
+    pending: Option<(String, Pending<bool>)>,
+    /// The last answer: a name and whether it already filled in a survey.
+    answer: Option<(String, bool)>,
 }
 
 impl State {
@@ -106,6 +124,8 @@ impl State {
                     if let Phase::Answering { survey_id, .. } = self.phase {
                         self.phase = Phase::Done { survey_id };
                         self.results = None;
+                        // The name has just filled in a survey.
+                        self.name_check.answer = None;
                     }
                 }
                 Some(Err(err)) => self.error = Some(err),
@@ -126,6 +146,60 @@ impl State {
         {
             self.request = Some(Request::Results(backend.results(survey_id)));
         }
+    }
+
+    /// Asks the backend whether the typed name already filled in a survey,
+    /// once the name stayed unchanged for [`NAME_CHECK_DELAY`] (`now` is in
+    /// seconds). It only asks for a changed, valid name, so moving the cursor
+    /// or clicking around costs nothing. Call it every frame.
+    ///
+    /// Returns how many seconds to wait before it must be called again, if
+    /// it is waiting for the typing to pause.
+    pub fn check_name(&mut self, backend: &impl Backend, now: f64) -> Option<f64> {
+        let check = &mut self.name_check;
+        if let Some((name, pending)) = check.pending.take() {
+            match pending.take() {
+                None => check.pending = Some((name, pending)),
+                Some(Ok(answered)) => check.answer = Some((name, answered)),
+                // Only a hint: a real problem shows when submitting. Do not
+                // ask again until the name changes.
+                Some(Err(_)) => check.answer = Some((name, false)),
+            }
+        }
+        if !matches!(self.phase, Phase::Start) {
+            return None;
+        }
+
+        let name = self.user_name.trim();
+        if name != check.typed {
+            check.typed = name.to_string();
+            check.changed_at = now;
+        }
+        let known = |asked: &str| asked == name;
+        if prono_api::check_user_name(name).is_err()
+            || check.answer.as_ref().is_some_and(|(asked, _)| known(asked))
+            || check.pending.as_ref().is_some_and(|(asked, _)| known(asked))
+        {
+            return None;
+        }
+
+        let wait = NAME_CHECK_DELAY - (now - check.changed_at);
+        if wait > 0.0 {
+            return Some(wait);
+        }
+        check.pending = Some((name.to_string(), backend.user_answered(name)));
+        None
+    }
+
+    /// A warning for the participant if the typed name already filled in a
+    /// survey.
+    pub fn name_warning(&self) -> Option<String> {
+        let name = self.user_name.trim();
+        self.name_check
+            .answer
+            .as_ref()
+            .is_some_and(|(asked, answered)| *answered && asked == name)
+            .then(|| format!("\"{name}\" already filled in a survey. If that was not you, please use another name."))
     }
 
     fn start(&mut self, survey_id: u64) {
@@ -171,6 +245,9 @@ mod tests {
         submit_result: Option<Result<(), String>>,
         submissions: RefCell<Vec<Submission>>,
         results_requests: Cell<usize>,
+        /// What `user_answered` returns, or never answers if `None`.
+        name_answer: Option<Result<bool, String>>,
+        name_requests: RefCell<Vec<String>>,
     }
 
     impl FakeBackend {
@@ -179,7 +256,14 @@ mod tests {
                 submit_result,
                 submissions: RefCell::default(),
                 results_requests: Cell::default(),
+                name_answer: Some(Ok(false)),
+                name_requests: RefCell::default(),
             }
+        }
+
+        fn with_name_answer(mut self, answer: Option<Result<bool, String>>) -> Self {
+            self.name_answer = answer;
+            self
         }
     }
 
@@ -192,6 +276,11 @@ mod tests {
         fn results(&self, _survey_id: u64) -> Pending<Results> {
             self.results_requests.set(self.results_requests.get() + 1);
             Pending::ready(Ok(Results::new()))
+        }
+
+        fn user_answered(&self, user: &str) -> Pending<bool> {
+            self.name_requests.borrow_mut().push(user.into());
+            self.name_answer.clone().map_or_else(Pending::never, Pending::ready)
         }
     }
 
@@ -313,5 +402,145 @@ mod tests {
 
         let valid = answering("Sam").restored();
         assert!(matches!(valid.phase, Phase::Answering { .. }));
+    }
+
+    fn typing(name: &str) -> State {
+        State {
+            user_name: name.into(),
+            ..State::default()
+        }
+    }
+
+    #[test]
+    fn name_is_checked_once_typing_pauses() {
+        let backend = FakeBackend::new(None).with_name_answer(Some(Ok(true)));
+        let mut state = typing("Sam");
+
+        let wait = state.check_name(&backend, 10.0);
+        assert_eq!(wait, Some(NAME_CHECK_DELAY));
+        assert!(backend.name_requests.borrow().is_empty());
+
+        // Still typing: the name changes, the delay starts over.
+        state.user_name.push('!');
+        assert!(state.check_name(&backend, 10.0 + NAME_CHECK_DELAY / 2.0).is_some());
+        assert!(backend.name_requests.borrow().is_empty());
+
+        // Typing paused.
+        assert_eq!(state.check_name(&backend, 10.0 + NAME_CHECK_DELAY * 2.0), None);
+        assert_eq!(*backend.name_requests.borrow(), ["Sam!"]);
+    }
+
+    #[test]
+    fn unchanged_name_is_not_asked_again() {
+        // Moving the cursor or clicking around does not change the name.
+        let backend = FakeBackend::new(None);
+        let mut state = typing(" Sam ");
+        state.check_name(&backend, 0.0);
+        for frame in 1..=20 {
+            state.check_name(&backend, f64::from(frame));
+        }
+        assert_eq!(*backend.name_requests.borrow(), ["Sam"]);
+    }
+
+    #[test]
+    fn warns_while_the_name_is_taken() {
+        let backend = FakeBackend::new(None).with_name_answer(Some(Ok(true)));
+        let mut state = typing("Sam");
+        assert!(state.name_warning().is_none());
+
+        state.check_name(&backend, 0.0);
+        state.check_name(&backend, 1.0); // asks
+        assert!(state.name_warning().is_none(), "no answer yet");
+        state.check_name(&backend, 1.1); // answer in
+        assert!(state.name_warning().is_some_and(|warning| warning.contains("already")));
+
+        state.user_name = "Sam2".into();
+        assert!(state.name_warning().is_none());
+        state.user_name = " Sam ".into();
+        assert!(state.name_warning().is_some());
+    }
+
+    #[test]
+    fn no_warning_for_a_new_name() {
+        let backend = FakeBackend::new(None).with_name_answer(Some(Ok(false)));
+        let mut state = typing("Sam");
+        state.check_name(&backend, 0.0);
+        state.check_name(&backend, 1.0);
+        state.check_name(&backend, 1.1);
+        assert!(state.name_warning().is_none());
+        assert!(state.error.is_none());
+    }
+
+    #[test]
+    fn failed_check_is_ignored() {
+        // It is only a hint: a real problem shows when submitting.
+        let backend = FakeBackend::new(None).with_name_answer(Some(Err("Cannot reach the server".into())));
+        let mut state = typing("Sam");
+        state.check_name(&backend, 0.0);
+        state.check_name(&backend, 1.0);
+        state.check_name(&backend, 1.1);
+        assert!(state.name_warning().is_none());
+        assert!(state.error.is_none());
+
+        // Not asked again every frame while the name stays the same.
+        for frame in 2..10 {
+            state.check_name(&backend, f64::from(frame));
+        }
+        assert_eq!(backend.name_requests.borrow().len(), 1);
+    }
+
+    #[test]
+    fn invalid_names_are_not_asked() {
+        let backend = FakeBackend::new(None);
+        let mut state = typing("  ");
+        state.check_name(&backend, 0.0);
+        assert_eq!(state.check_name(&backend, 5.0), None);
+        state.user_name = "x".repeat(prono_api::MAX_USER_NAME_LEN + 1);
+        state.check_name(&backend, 6.0);
+        assert_eq!(state.check_name(&backend, 11.0), None);
+        assert!(backend.name_requests.borrow().is_empty());
+    }
+
+    #[test]
+    fn answer_of_an_older_name_is_dropped() {
+        let backend = FakeBackend::new(None).with_name_answer(None);
+        let mut state = typing("Sam");
+        state.check_name(&backend, 0.0);
+        state.check_name(&backend, 1.0); // asks about "Sam", never answered
+        state.user_name = "Tom".into();
+        state.check_name(&backend, 2.0);
+        state.check_name(&backend, 3.0); // asks about "Tom"
+        assert_eq!(*backend.name_requests.borrow(), ["Sam", "Tom"]);
+    }
+
+    #[test]
+    fn name_is_only_checked_on_the_start_screen() {
+        let backend = FakeBackend::new(None);
+        let mut state = answering("Sam");
+        state.check_name(&backend, 0.0);
+        assert_eq!(state.check_name(&backend, 5.0), None);
+        assert!(backend.name_requests.borrow().is_empty());
+    }
+
+    #[test]
+    fn name_is_asked_again_after_submitting() {
+        let backend = FakeBackend::new(Some(Ok(())));
+        let mut state = typing("Sam");
+        state.check_name(&backend, 0.0);
+        state.check_name(&backend, 1.0);
+        state.check_name(&backend, 1.1);
+        assert_eq!(backend.name_requests.borrow().len(), 1);
+
+        state.apply(Action::StartSurvey(SURVEY_ID), &backend);
+        state.apply(Action::Submit, &backend);
+        state.poll(&backend); // submitted
+        state.apply(Action::ChooseAnotherSurvey, &backend);
+
+        state.check_name(&backend, 2.0);
+        assert_eq!(
+            backend.name_requests.borrow().len(),
+            2,
+            "the answer changed with the submission"
+        );
     }
 }

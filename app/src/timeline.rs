@@ -1,5 +1,12 @@
-use egui::{Painter, Vec2};
+use egui::{Color32, Painter, Vec2};
 use prono_api::Answer;
+
+/// The fill of a point: one per predicted date.
+pub const POINT: Color32 = Color32::from_rgb(100, 255, 0);
+/// The fill of the viewer's own points, so they stand out among the others.
+pub const OWN_POINT: Color32 = Color32::from_rgb(255, 140, 0);
+/// What the callout of the viewer's own point says instead of their name.
+pub const OWN_LABEL: &str = "You";
 
 #[derive(Clone, Debug)]
 pub struct TimelineDate {
@@ -100,13 +107,19 @@ fn draw_year_label(ctx: &TimelineDrawContext, label: &str, x: f32) {
     }));
 }
 
-fn draw_timeline_point(painter: &Painter, pos: egui::Pos2, hovered: bool) {
-    let radius = if hovered { 5.0 } else { 3.0 };
-    painter.circle_filled(pos, radius, egui::Color32::from_rgb(100, 255, 0));
+fn draw_timeline_point(painter: &Painter, pos: egui::Pos2, hovered: bool, own: bool) {
+    let radius = match (own, hovered) {
+        (false, false) => 3.0,
+        (false, true) | (true, false) => 5.0,
+        (true, true) => 7.0,
+    };
+    painter.circle_filled(pos, radius, if own { OWN_POINT } else { POINT });
     painter.circle_stroke(pos, radius, egui::Stroke::new(2.0_f32, egui::Color32::BLACK));
 }
 
-fn draw_hover_tooltip(ctx: &TimelineDrawContext, label: &str, name: Option<&str>, x: f32, y: f32) {
+/// A callout above the point at `x`, `y`: the date, and who predicted it if
+/// known.
+fn draw_callout(ctx: &TimelineDrawContext, label: &str, name: Option<&str>, x: f32, y: f32) {
     let color = ctx.painter.ctx().global_style().visuals.strong_text_color();
 
     // 45° diagonal going up from the bullet
@@ -144,7 +157,9 @@ fn draw_hover_tooltip(ctx: &TimelineDrawContext, label: &str, name: Option<&str>
     ctx.painter.galley(text_pos, galley, color);
 }
 
-pub fn draw(ui: &mut egui::Ui, dates: &[(Option<&str>, TimelineDate)]) {
+/// Draws the timeline of `dates`. The points of `own_name` stand out and are
+/// always labelled, so the viewer finds their own answer among the others.
+pub fn draw(ui: &mut egui::Ui, dates: &[(Option<&str>, TimelineDate)], own_name: Option<&str>) {
     if dates.is_empty() {
         ui.label("No dates entered yet");
         return;
@@ -239,13 +254,27 @@ pub fn draw(ui: &mut egui::Ui, dates: &[(Option<&str>, TimelineDate)]) {
         })
         .map(|(i, _)| i);
 
-    for (i, &(x, y)) in point_positions.iter().enumerate() {
-        draw_timeline_point(&painter, egui::pos2(x, y), hovered_idx == Some(i));
+    let is_own = |i: usize| own_name.is_some() && dates[i].0 == own_name;
+    // Own points last, so no other point hides them.
+    let draw_order = (0..dates.len())
+        .filter(|&i| !is_own(i))
+        .chain((0..dates.len()).filter(|&i| is_own(i)));
+    for i in draw_order {
+        let (x, y) = point_positions[i];
+        draw_timeline_point(&painter, egui::pos2(x, y), hovered_idx == Some(i), is_own(i));
     }
 
-    if let Some(idx) = hovered_idx {
-        let (x, y) = point_positions[idx];
-        draw_hover_tooltip(&ctx, &dates[idx].1.label, dates[idx].0, x, y);
+    // Callouts: the hovered point's, over the always shown ones of own points.
+    let callout = |i: usize| {
+        let (x, y) = point_positions[i];
+        let name = if is_own(i) { Some(OWN_LABEL) } else { dates[i].0 };
+        draw_callout(&ctx, &dates[i].1.label, name, x, y);
+    };
+    (0..dates.len())
+        .filter(|&i| is_own(i) && hovered_idx != Some(i))
+        .for_each(callout);
+    if let Some(i) = hovered_idx {
+        callout(i);
     }
 }
 

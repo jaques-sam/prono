@@ -1,0 +1,20 @@
+{
+    "survey_id": 2,
+    "description": "You were chosen to follow a splendid course...",
+    "questions": [
+        {
+            "question": "What is your background",
+            "answer_type": "poll",
+            "possible_answers": [
+              "C", "C++"
+            ]
+        },
+        {
+            "question": "I come to the course!",
+            "answer_type": "poll",
+            "possible_answers": [
+              "Of course!", "I can't make it 😪"
+            ]
+        }
+    ]
+}

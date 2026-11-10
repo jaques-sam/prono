@@ -59,7 +59,7 @@ pub async fn results(repo: &dyn Repo, survey_id: u64) -> Result<Results> {
     let survey = find_survey(survey_id)?;
     let mut results = Results::new();
     for question in &survey.questions {
-        results.insert(question.id, repo.answers(question.id).await?);
+        results.insert(question.id, repo.answers(question).await?);
     }
     Ok(results)
 }
@@ -101,6 +101,40 @@ mod tests {
             assert_eq!(results[&question.id].len(), 1);
             assert_eq!(results[&question.id][0].user, "alice");
         }
+    }
+
+    #[tokio::test]
+    async fn poll_answers_including_other_come_back_in_results() {
+        const POLL_SURVEY_ID: u64 = 2;
+        let survey = prono_api::survey(POLL_SURVEY_ID).unwrap();
+        let poll = survey.questions.first().unwrap();
+        assert_eq!(poll.kind, prono_api::AnswerKind::Poll);
+        let option = poll.possible_answers[0].clone();
+
+        let repo = MemoryRepo::default();
+        for (user, device, vote) in [("alice", "dev-1", option.as_str()), ("bob", "dev-2", "Haskell")] {
+            let mut answers = survey.empty_answers();
+            answers[0] = Answer::Poll(vote.into());
+            answers[1] = Answer::Poll(survey.questions[1].possible_answers[0].clone());
+            let submission = Submission::new(user, survey, &answers);
+            submit(&repo, POLL_SURVEY_ID, device, &submission).await.unwrap();
+        }
+
+        let results = results(&repo, POLL_SURVEY_ID).await.unwrap();
+        let votes = &results[&poll.id];
+        assert_eq!(votes.len(), 2);
+        assert!(
+            votes
+                .iter()
+                .all(|vote| vote.answer.kind() == prono_api::AnswerKind::Poll)
+        );
+        let tally = poll.poll_tally(votes);
+        assert_eq!(tally[0], (option, 1));
+        assert_eq!(tally.last().unwrap(), &("Haskell".to_string(), 1));
+
+        let blank = Submission::new("carol", survey, &survey.empty_answers());
+        let err = submit(&repo, POLL_SURVEY_ID, "dev-3", &blank).await.unwrap_err();
+        assert!(matches!(err, Error::Invalid(Invalid::Answer(_))));
     }
 
     #[tokio::test]

@@ -2,10 +2,10 @@
 //! live in `prono_api` and [`State`]; this module only renders.
 
 use egui::{FontId, RichText, TextEdit};
-use prono_api::{Answer, AnswerKind, PREDICTION_YEARS, Results, Survey};
+use prono_api::{Answer, AnswerKind, PREDICTION_YEARS, Question, Results, Survey};
 
 use crate::state::{Action, Phase, State};
-use crate::timeline;
+use crate::{poll, timeline};
 
 pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
     egui::Panel::top("top_panel").show(ui, |ui| {
@@ -40,6 +40,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
                 (Phase::Done { .. }, Some(survey)) => done(ui, survey, &state.user_name, state.results.as_ref()),
                 _ => start(ui, &mut state.user_name, warning.as_deref()),
             };
+            if !matches!(state.phase, Phase::Answering { .. }) {
+                poll::forget_other(ui.ctx());
+            }
             error_action.or(phase_action)
         })
         .inner
@@ -89,7 +92,7 @@ fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: b
         .show(ui, |ui| {
             for (question, answer) in survey.questions.iter().zip(answers.iter_mut()) {
                 ui.label(&question.text);
-                answer_input(ui, answer);
+                answer_input(ui, question, answer);
                 ui.end_row();
             }
         });
@@ -112,16 +115,25 @@ fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: b
             action
         })
         .inner;
+    if matches!(action, Some(Action::ResetAnswers)) {
+        poll::forget_other(ui.ctx());
+    }
 
-    ui.separator();
-    ui.label("Timeline of your predictions");
-    let dates = timeline::extract_and_sort_dates(answers.iter().map(|answer| (None, answer)));
-    timeline::draw(ui, &dates);
+    if survey
+        .questions
+        .iter()
+        .any(|question| question.kind == AnswerKind::PredictionDate)
+    {
+        ui.separator();
+        ui.label("Timeline of your predictions");
+        let dates = timeline::extract_and_sort_dates(answers.iter().map(|answer| (None, answer)));
+        timeline::draw(ui, &dates);
+    }
 
     action
 }
 
-fn answer_input(ui: &mut egui::Ui, answer: &mut Answer) {
+fn answer_input(ui: &mut egui::Ui, question: &Question, answer: &mut Answer) {
     match answer {
         Answer::Text(text) => {
             ui.add(TextEdit::singleline(text).hint_text("your answer here"));
@@ -132,6 +144,7 @@ fn answer_input(ui: &mut egui::Ui, answer: &mut Answer) {
                 ui.add(egui::DragValue::new(year).range(PREDICTION_YEARS).prefix("year "));
             });
         }
+        Answer::Poll(choice) => poll::input(ui, question, choice),
     }
 }
 
@@ -171,6 +184,7 @@ fn done(ui: &mut egui::Ui, survey: &Survey, user_name: &str, results: Option<&Re
                         }
                     }
                 }
+                AnswerKind::Poll => poll::draw(ui, &poll::rows(question, answers)),
             }
             ui.add_space(8.0);
         }

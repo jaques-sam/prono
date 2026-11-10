@@ -41,7 +41,7 @@ pub fn extract_and_sort_dates<'a>(
         .into_iter()
         .filter_map(|(user, answer)| match answer {
             Answer::PredictionDate { month, year, .. } => Some((user, TimelineDate::new(*year, *month))),
-            Answer::Text(_) => None,
+            Answer::Text(_) | Answer::Poll(_) => None,
         })
         .collect();
 

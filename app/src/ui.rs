@@ -7,13 +7,13 @@ use prono_api::{Answer, AnswerKind, PREDICTION_YEARS, Results, Survey};
 use crate::state::{Action, Phase, State};
 use crate::timeline;
 
-pub fn show(ctx: &egui::Context, state: &mut State) -> Option<Action> {
-    egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
+    egui::Panel::top("top_panel").show(ui, |ui| {
         egui::MenuBar::new().ui(ui, |ui| {
             if !cfg!(target_arch = "wasm32") {
                 ui.menu_button("File", |ui| {
                     if ui.button("Quit").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        ui.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
                 ui.add_space(16.0);
@@ -22,13 +22,13 @@ pub fn show(ctx: &egui::Context, state: &mut State) -> Option<Action> {
         });
     });
 
-    egui::TopBottomPanel::bottom("footer").show(ctx, |ui| {
+    egui::Panel::bottom("footer").show(ui, |ui| {
         footer(ui);
         egui::warn_if_debug_build(ui);
     });
 
     egui::CentralPanel::default()
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui.heading("Prono");
             let error_action = state.error.as_deref().and_then(|error| error_banner(ui, error));
 

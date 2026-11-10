@@ -1,4 +1,5 @@
 use cucumber::{given, then, when};
+use prono_app::timeline;
 
 use crate::fake_backend::{Health, MY_DEVICE};
 use crate::steps::common::SURVEY_ID;
@@ -53,6 +54,17 @@ fn timeline_points(world: &mut World, count: usize) {
 fn each_timeline_points(world: &mut World, count: usize) {
     let questions = world.session().state.survey().expect("a survey").questions.len();
     assert_eq!(world.timeline_points().len(), count * questions);
+}
+
+#[then(expr = "each question's timeline marks my own point with the date {string}")]
+fn own_point_marked(world: &mut World, date: String) {
+    let questions = world.session().state.survey().expect("a survey").questions.len();
+    assert_eq!(
+        world.own_timeline_points().len(),
+        questions,
+        "own points are not marked"
+    );
+    assert_painted(world, &format!("{date}:\n{}", timeline::OWN_LABEL));
 }
 
 #[then(expr = "the tooltip shows the date {string}")]

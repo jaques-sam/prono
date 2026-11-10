@@ -48,7 +48,7 @@ pub async fn results(repo: &dyn Repo, survey_id: u64) -> Result<Results> {
     let survey = find_survey(survey_id)?;
     let mut results = Results::new();
     for question in &survey.questions {
-        results.insert(question.id.clone(), repo.answers(&question.id).await?);
+        results.insert(question.id, repo.answers(question.id).await?);
     }
     Ok(results)
 }

@@ -163,6 +163,19 @@ mod tests {
         assert_eq!(body, "\"You already answered this survey\"");
     }
 
+    #[actix_web::test]
+    async fn malformed_question_id_is_a_bad_request() {
+        let body = r#"{"user":"alice","answers":[["not-a-uuid",{"Text":"x"}]]}"#;
+        let req = actix_test::TestRequest::post()
+            .uri(&prono_api::answers_path(SURVEY_ID))
+            .insert_header((header::AUTHORIZATION, format!("Bearer {API_KEY}")))
+            .insert_header((DEVICE_ID_HEADER, "dev-1"))
+            .insert_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(body);
+        let (statuses, _) = run(vec![req]).await;
+        assert_eq!(statuses, [StatusCode::BAD_REQUEST]);
+    }
+
     #[test]
     fn repository_details_are_not_exposed() {
         let err = ApiError::Prono(Error::Repository("password=hunter2".into()));

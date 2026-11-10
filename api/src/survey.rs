@@ -3,6 +3,7 @@ use std::ops::RangeInclusive;
 
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Years a predicted date may fall in.
 pub const PREDICTION_YEARS: RangeInclusive<u16> = 2024..=2100;
@@ -22,7 +23,8 @@ pub struct Survey {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Question {
-    pub id: String,
+    /// Derived from the question text and answer kind, see `catalog`.
+    pub id: Uuid,
     pub text: String,
     pub kind: AnswerKind,
 }
@@ -60,7 +62,7 @@ pub enum Invalid {
 pub struct Submission {
     pub user: String,
     /// `(question id, answer)` pairs.
-    pub answers: Vec<(String, Answer)>,
+    pub answers: Vec<(Uuid, Answer)>,
 }
 
 /// One participant's answer to a question.
@@ -71,7 +73,7 @@ pub struct UserAnswer {
 }
 
 /// Every participant's answers to a survey, keyed by question id.
-pub type Results = HashMap<String, Vec<UserAnswer>>;
+pub type Results = HashMap<Uuid, Vec<UserAnswer>>;
 
 impl Survey {
     /// A blank answer for each question, in question order.
@@ -152,7 +154,7 @@ impl Submission {
                 .questions
                 .iter()
                 .zip(answers)
-                .map(|(question, answer)| (question.id.clone(), answer.clone()))
+                .map(|(question, answer)| (question.id, answer.clone()))
                 .collect(),
         }
     }
@@ -186,6 +188,10 @@ impl Submission {
 mod tests {
     use super::*;
 
+    const Q1: Uuid = Uuid::from_u128(1);
+    const Q2: Uuid = Uuid::from_u128(2);
+    const Q9: Uuid = Uuid::from_u128(9);
+
     fn date(month: u8, year: u16) -> Answer {
         Answer::PredictionDate { day: None, month, year }
     }
@@ -197,12 +203,12 @@ mod tests {
             link: None,
             questions: vec![
                 Question {
-                    id: "q1".into(),
+                    id: Q1,
                     text: "When?".into(),
                     kind: AnswerKind::PredictionDate,
                 },
                 Question {
-                    id: "q2".into(),
+                    id: Q2,
                     text: "Why?".into(),
                     kind: AnswerKind::Text,
                 },
@@ -262,7 +268,7 @@ mod tests {
         let survey = survey();
         let submission = Submission::new(" Sam ", &survey, &[date(5, 2030), Answer::Text("fun".into())]);
         assert_eq!(submission.user, "Sam");
-        assert_eq!(submission.answers[0], ("q1".into(), date(5, 2030)));
+        assert_eq!(submission.answers[0], (Q1, date(5, 2030)));
         assert_eq!(submission.validate(&survey), Ok(()));
     }
 
@@ -271,19 +277,19 @@ mod tests {
         let survey = survey();
         let missing = Submission {
             user: "Sam".into(),
-            answers: vec![("q1".into(), date(5, 2030))],
+            answers: vec![(Q1, date(5, 2030))],
         };
         assert_eq!(missing.validate(&survey), Err(Invalid::Incomplete));
 
         let duplicate = Submission {
             user: "Sam".into(),
-            answers: vec![("q1".into(), date(5, 2030)), ("q1".into(), date(6, 2030))],
+            answers: vec![(Q1, date(5, 2030)), (Q1, date(6, 2030))],
         };
         assert_eq!(duplicate.validate(&survey), Err(Invalid::Incomplete));
 
         let unknown = Submission {
             user: "Sam".into(),
-            answers: vec![("q1".into(), date(5, 2030)), ("q9".into(), Answer::Text("x".into()))],
+            answers: vec![(Q1, date(5, 2030)), (Q9, Answer::Text("x".into()))],
         };
         assert_eq!(unknown.validate(&survey), Err(Invalid::Incomplete));
     }
@@ -303,5 +309,32 @@ mod tests {
         // The deployed web app and backend exchange answers in this shape.
         let json = serde_json::to_string(&date(3, 2026)).unwrap();
         assert_eq!(json, r#"{"PredictionDate":{"day":null,"month":3,"year":2026}}"#);
+    }
+
+    #[test]
+    fn question_ids_keep_their_wire_format() {
+        // Typed ids are still hyphenated strings on the wire, as in the deployed
+        // web app and backend, also as keys of the results.
+        let id = "7873dd07-86a3-593b-ab8f-80bce8b7e84e";
+        let uuid: Uuid = id.parse().unwrap();
+
+        let submission = Submission {
+            user: "Sam".into(),
+            answers: vec![(uuid, Answer::Text("x".into()))],
+        };
+        let json = serde_json::to_string(&submission).unwrap();
+        assert_eq!(json, format!(r#"{{"user":"Sam","answers":[["{id}",{{"Text":"x"}}]]}}"#));
+        assert_eq!(serde_json::from_str::<Submission>(&json).unwrap(), submission);
+
+        let results = format!(r#"{{"{id}":[{{"user":"Sam","answer":{{"Text":"x"}}}}]}}"#);
+        let parsed: Results = serde_json::from_str(&results).unwrap();
+        assert_eq!(parsed[&uuid][0].user, "Sam");
+        assert_eq!(serde_json::to_string(&parsed).unwrap(), results);
+    }
+
+    #[test]
+    fn malformed_question_ids_do_not_parse() {
+        let body = r#"{"user":"Sam","answers":[["not-a-uuid",{"Text":"x"}]]}"#;
+        assert!(serde_json::from_str::<Submission>(body).is_err());
     }
 }

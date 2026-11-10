@@ -65,12 +65,12 @@ fn parse(json: &str) -> serde_json::Result<Survey> {
 
 /// Stored answers are keyed by this id, so it must never change for an
 /// existing question: it hashes the question text and the answer kind.
-fn question_id(text: &str, kind: AnswerKind) -> String {
+fn question_id(text: &str, kind: AnswerKind) -> Uuid {
     let kind = match kind {
         AnswerKind::Text => "Text",
         AnswerKind::PredictionDate => "PredictionDate",
     };
-    Uuid::new_v5(&Uuid::NAMESPACE_DNS, format!("{text}{kind}").as_bytes()).to_string()
+    Uuid::new_v5(&Uuid::NAMESPACE_DNS, format!("{text}{kind}").as_bytes())
 }
 
 #[cfg(test)]
@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn existing_question_ids_are_stable() {
         // Answers already stored in the database reference these ids.
-        let ids: Vec<_> = survey(1).unwrap().questions.iter().map(|q| q.id.as_str()).collect();
+        let ids: Vec<_> = survey(1).unwrap().questions.iter().map(|q| q.id.to_string()).collect();
         assert_eq!(
             ids,
             [

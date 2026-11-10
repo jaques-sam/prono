@@ -20,3 +20,6 @@ temp
 
 # local secrets
 .env
+
+# Python bytecode (e2e)
+__pycache__/

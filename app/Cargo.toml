@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Sam Jaques <sam.jaques@me.com>"]
 edition = "2024"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
-rust-version = "1.88"
+rust-version = "1.95"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -13,8 +13,8 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 [dependencies]
 prono_api = { path = "../api" }
 
-egui = "0.33.3"
-eframe = { version = "0.33.3", default-features = false, features = [
+egui = "0.36.0"
+eframe = { version = "0.36.0", default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
@@ -36,6 +36,3 @@ uuid = { version = "1", features = ["v4"] }
 wasm-bindgen-futures = "0.4.80"
 web-sys = "0.3.107"
 uuid = { version = "1", features = ["v4", "js"] }
-# fix compile error because of stepping to egui 0.33,
-getrandom_v2 = { version = "0.2", features = ["js"], package = "getrandom" }
-getrandom    = { version = "0.3", features = ["wasm_js"] }

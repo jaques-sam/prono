@@ -8,7 +8,17 @@ prono = { path = "../prono" }
 prono_api = { path = "../api" }
 
 actix-cors = "0.7"
-actix-web = "4"
+# `http2` is left out on purpose: the server speaks plain HTTP and `h2` 0.3 has an unpatched advisory.
+actix-web = { version = "4", default-features = false, features = [
+    "macros",
+    "compress-brotli",
+    "compress-gzip",
+    "compress-zstd",
+    "cookies",
+    "unicode",
+    "compat",
+    "ws",
+] }
 env_logger = "0.11"
 log = "0.4"
 thiserror = "2.0.21"

@@ -32,9 +32,9 @@ impl eframe::App for App {
         eframe::set_value(storage, eframe::APP_KEY, &self.state);
     }
 
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.state.poll(&self.backend);
-        if let Some(action) = ui::show(ctx, &mut self.state) {
+        if let Some(action) = ui::show(ui, &mut self.state) {
             self.state.apply(action, &self.backend);
         }
     }

@@ -52,7 +52,7 @@ pub fn extract_and_sort_dates<'a>(
 fn draw_month_ticks(ctx: &TimelineDrawContext, max_month: i32) {
     let min_year = (ctx.min_month / 12) + 2000;
     let max_year = (max_month / 12) + 2000;
-    let color = ctx.painter.ctx().style().visuals.strong_text_color();
+    let color = ctx.painter.ctx().global_style().visuals.strong_text_color();
 
     for year in min_year..=max_year {
         for month in 1..=12 {
@@ -107,7 +107,7 @@ fn draw_timeline_point(painter: &Painter, pos: egui::Pos2, hovered: bool) {
 }
 
 fn draw_hover_tooltip(ctx: &TimelineDrawContext, label: &str, name: Option<&str>, x: f32, y: f32) {
-    let color = ctx.painter.ctx().style().visuals.strong_text_color();
+    let color = ctx.painter.ctx().global_style().visuals.strong_text_color();
 
     // 45° diagonal going up from the bullet
     let diag_len = 15.0;
@@ -133,7 +133,7 @@ fn draw_hover_tooltip(ctx: &TimelineDrawContext, label: &str, name: Option<&str>
     let text_pos = egui::pos2(horiz_end.x + 3.0, horiz_end.y - galley.size().y / 2.0);
     let text_rect = egui::Rect::from_min_size(text_pos, galley.size()).expand(2.0);
 
-    let bg_color = ctx.painter.ctx().style().visuals.window_fill;
+    let bg_color = ctx.painter.ctx().global_style().visuals.window_fill;
     ctx.painter.rect_filled(text_rect, 2.0, bg_color);
     ctx.painter.rect_stroke(
         text_rect,

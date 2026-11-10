@@ -83,6 +83,25 @@ impl Survey {
     }
 }
 
+impl Survey {
+    /// `user`'s answers to this survey in question order, if `results` hold a
+    /// valid answer of theirs to every question: what to refill when they
+    /// come back.
+    #[must_use]
+    pub fn answers_of(&self, results: &Results, user: &str) -> Option<Vec<Answer>> {
+        self.questions
+            .iter()
+            .map(|question| {
+                results
+                    .get(&question.id)?
+                    .iter()
+                    .find(|found| found.user == user && found.answer.is_valid_for(question.kind))
+                    .map(|found| found.answer.clone())
+            })
+            .collect()
+    }
+}
+
 impl AnswerKind {
     /// The answer a question starts with: empty text, or the current month.
     ///
@@ -309,6 +328,44 @@ mod tests {
         // The deployed web app and backend exchange answers in this shape.
         let json = serde_json::to_string(&date(3, 2026)).unwrap();
         assert_eq!(json, r#"{"PredictionDate":{"day":null,"month":3,"year":2026}}"#);
+    }
+
+    fn results_of(entries: &[(Uuid, &str, Answer)]) -> Results {
+        let mut results = Results::new();
+        for (question, user, answer) in entries {
+            results.entry(*question).or_default().push(UserAnswer {
+                user: (*user).into(),
+                answer: answer.clone(),
+            });
+        }
+        results
+    }
+
+    #[test]
+    fn answers_of_picks_the_users_answers_in_question_order() {
+        let results = results_of(&[
+            (Q2, "Bob", Answer::Text("bob".into())),
+            (Q2, "Sam", Answer::Text("sam".into())),
+            (Q1, "Bob", date(1, 2031)),
+            (Q1, "Sam", date(5, 2030)),
+        ]);
+        assert_eq!(
+            survey().answers_of(&results, "Sam"),
+            Some(vec![date(5, 2030), Answer::Text("sam".into())])
+        );
+    }
+
+    #[test]
+    fn answers_of_needs_a_valid_answer_to_every_question() {
+        let partial = results_of(&[(Q1, "Sam", date(5, 2030))]);
+        assert_eq!(survey().answers_of(&partial, "Sam"), None);
+
+        let wrong_kind = results_of(&[(Q1, "Sam", date(5, 2030)), (Q2, "Sam", date(5, 2030))]);
+        assert_eq!(survey().answers_of(&wrong_kind, "Sam"), None);
+
+        let other_user = results_of(&[(Q1, "Bob", date(5, 2030)), (Q2, "Bob", Answer::Text("x".into()))]);
+        assert_eq!(survey().answers_of(&other_user, "Sam"), None);
+        assert_eq!(survey().answers_of(&Results::new(), "Sam"), None);
     }
 
     #[test]

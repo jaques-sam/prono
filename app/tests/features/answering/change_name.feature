@@ -13,7 +13,7 @@ Feature: Changing my name
     And the name fields show "Sam" and "Smith"
 
   Scenario: After a name that is taken I can use another name
-    Given "Alice Adams" already answered from another device, predicting month 3 of 2031
+    Given "Alice Adams" already answered "C" to "What is your background" from another device
     And I am answering the survey as "Alice Adams"
     When I submit my answers
     Then I see the error "This name is registered on another device"

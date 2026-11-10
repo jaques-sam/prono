@@ -169,7 +169,7 @@ fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: b
         .any(|question| question.kind == AnswerKind::PredictionDate)
     {
         ui.separator();
-        ui.label("Timeline of your predictions");
+        ui.heading("Timeline of your predictions");
         let dates = timeline::extract_and_sort_dates(answers.iter().map(|answer| (None, answer)));
         timeline::draw(ui, &dates);
     }
@@ -218,14 +218,14 @@ fn done(
     }
 
     ui.separator();
-    ui.label("All answers");
+    ui.heading("All answers");
     let Some(results) = results else {
         ui.spinner();
         return action;
     };
     egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
         for question in &survey.questions {
-            ui.heading(&question.text);
+            ui.strong(&question.text);
             let answers = results.get(&question.id).map_or(&[][..], Vec::as_slice);
             if answers.is_empty() {
                 ui.label("No answers yet");

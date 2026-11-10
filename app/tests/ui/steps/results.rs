@@ -73,6 +73,11 @@ fn assert_painted(world: &World, text: &str) {
     );
 }
 
+#[then("I cannot change my answers")]
+fn cannot_change_answers(world: &mut World) {
+    assert!(!world.has_button("Submit"), "the Submit button is there");
+}
+
 #[then(expr = "I see the thanks to {string}")]
 fn sees_thanks(world: &mut World, name: String) {
     let thanks = format!("Thanks {name}, your answers are saved.");

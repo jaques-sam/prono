@@ -47,11 +47,12 @@ Feature: Poll questions
     Then the answer to "What is your background" is "C"
     And the option "Other" of "What is your background" is not selected
 
-  Scenario: An answer of one's own comes back after logging in again
+  Scenario: An answer of one's own shows in the results after logging in again
     Given "Sam Smith" already answered "Rust" to "What is your background" from this device
-    When I answer the course survey as "Sam Smith"
-    Then the option "Other" of "What is your background" is selected
-    And the answer to "What is your background" is "Rust"
+    When I enter the name "Sam Smith"
+    And I start the course survey
+    Then the poll results show "Rust (other): 1 vote (100%)"
+    And I cannot change my answers
 
   @debug-only
   Scenario: Resetting the answers clears "Other"

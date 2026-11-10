@@ -1,13 +1,17 @@
 #!/bin/bash
 # Build a Synology SPK package from a pre-built backend binary.
 #
-# Usage: ./build-spk.sh <path-to-binary> <output-dir>
+# Usage: ./build-spk.sh [path-to-binary] [output-dir]
+#   Defaults: <repo>/target/release/prono-backend and <repo>/target/release/
 #   e.g.: ./build-spk.sh target/x86_64-unknown-linux-gnu/release/prono-backend dist/
 
 set -euo pipefail
 validate_inputs() {
-    BINARY="${1:?Usage: build-spk.sh <binary-path> <output-dir>}"
-    OUTPUT_DIR="${2:?Usage: build-spk.sh <binary-path> <output-dir>}"
+    local release_dir
+    release_dir="$(cd "$(dirname "$0")/../.." && pwd)/target/release"
+    BINARY="${1:-$release_dir/prono-backend}"
+    OUTPUT_DIR="${2:-$release_dir}"
+    [ -f "$BINARY" ] || { echo "No binary at $BINARY (cargo build --release --bin prono-backend)" >&2; exit 1; }
 }
 
 setup_directories() {

@@ -28,8 +28,9 @@ async fn get_answers(repo: web::Data<dyn Repo>, survey_id: web::Path<u64>) -> Re
     Ok(HttpResponse::Ok().json(results))
 }
 
-/// Whether the user `name` already filled in a survey: a JSON `bool`, and
-/// nothing more. Same API key and device id as a submission.
+/// What the app may know about the user `name`: a JSON [`prono_api::UserStatus`]
+/// (whether they already filled in a survey, and which surveys they may
+/// answer), and nothing more. Same API key and device id as a submission.
 #[get("/api/users/{name}")]
 async fn get_user(
     repo: web::Data<dyn Repo>,
@@ -37,8 +38,8 @@ async fn get_user(
     req: HttpRequest,
 ) -> Result<HttpResponse, ApiError> {
     let device_id = authorized_device(&req)?;
-    let answered = prono::has_answered(repo.get_ref(), device_id, &name).await?;
-    Ok(HttpResponse::Ok().json(answered))
+    let status = prono::user_status(repo.get_ref(), device_id, &name).await?;
+    Ok(HttpResponse::Ok().json(status))
 }
 
 /// Checks the API key and returns the id of the calling device.
@@ -72,7 +73,9 @@ impl ResponseError for ApiError {
             ApiError::MissingDeviceId => StatusCode::BAD_REQUEST,
             ApiError::Prono(err) => match err {
                 Error::Invalid(_) | Error::InvalidDeviceId => StatusCode::BAD_REQUEST,
-                Error::DeviceMismatch | Error::DeviceInUse => StatusCode::FORBIDDEN,
+                Error::DeviceMismatch | Error::DeviceInUse | Error::NotListed | Error::WrongPassPhrase => {
+                    StatusCode::FORBIDDEN
+                }
                 Error::AnswerExists => StatusCode::CONFLICT,
                 Error::Repository(_) => StatusCode::INTERNAL_SERVER_ERROR,
             },
@@ -97,7 +100,7 @@ mod tests {
 
     use actix_web::{App, test as actix_test};
     use prono::MemoryRepo;
-    use prono_api::{Answer, Results};
+    use prono_api::{Answer, Results, UserStatus};
 
     use super::*;
 
@@ -206,7 +209,7 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn user_check_answers_yes_or_no() {
+    async fn user_check_reports_answered_and_available_surveys() {
         let (statuses, body) = run(vec![
             get_user("alice", Some("dev-2"), API_KEY),
             post(SURVEY_ID, Some("dev-1"), API_KEY, &submission("alice")),
@@ -214,10 +217,37 @@ mod tests {
         ])
         .await;
         assert_eq!(statuses, [StatusCode::OK; 3]);
-        assert_eq!(body, "true");
+        let status: UserStatus = serde_json::from_str(&body).unwrap();
+        // The name list survey is not offered to an unlisted name.
+        assert_eq!(
+            status,
+            UserStatus {
+                answered: true,
+                surveys: vec![SURVEY_ID]
+            }
+        );
 
         let (_, body) = run(vec![get_user("alice", Some("dev-2"), API_KEY)]).await;
-        assert_eq!(body, "false");
+        assert!(!serde_json::from_str::<UserStatus>(&body).unwrap().answered);
+    }
+
+    #[actix_web::test]
+    async fn unlisted_name_cannot_answer_a_name_list_survey() {
+        let survey = prono_api::survey(2).unwrap();
+        let answers: Vec<_> = survey
+            .questions
+            .iter()
+            .map(|question| Answer::Poll(question.possible_answers[0].clone()))
+            .collect();
+        let (statuses, body) = run(vec![post(
+            survey.id,
+            Some("dev-1"),
+            API_KEY,
+            &Submission::new("Ada Lovelace", survey, &answers),
+        )])
+        .await;
+        assert_eq!(statuses, [StatusCode::FORBIDDEN]);
+        assert_eq!(body, "\"You are not on the list for this survey\"");
     }
 
     #[actix_web::test]
@@ -229,7 +259,7 @@ mod tests {
         ])
         .await;
         assert_eq!(statuses, [StatusCode::OK; 2]);
-        assert_eq!(body, "true");
+        assert!(serde_json::from_str::<UserStatus>(&body).unwrap().answered);
     }
 
     #[actix_web::test]

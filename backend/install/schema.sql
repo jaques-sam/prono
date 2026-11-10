@@ -18,3 +18,20 @@ CREATE TABLE IF NOT EXISTS AnswerResponse (
     INDEX idx_question (question_id),
     UNIQUE KEY uq_user_question (user_id, question_id)
 );
+
+-- Who may answer a survey with `"access": "name_list"`. Filled with
+-- `prono-cli access allow`; a participant matches when `first_name`, a space
+-- and `last_name` equal their name, ignoring case.
+CREATE TABLE IF NOT EXISTS SurveyAllowedUser (
+    survey_id BIGINT UNSIGNED NOT NULL,
+    first_name VARCHAR(255) NOT NULL,
+    last_name VARCHAR(255) NOT NULL,
+    PRIMARY KEY (survey_id, first_name, last_name)
+);
+
+-- The pass phrase of a survey with `"access": "pass_phrase"`. Set with
+-- `prono-cli access pass-phrase`; the survey stays closed until it is set.
+CREATE TABLE IF NOT EXISTS SurveyPassPhrase (
+    survey_id BIGINT UNSIGNED PRIMARY KEY,
+    pass_phrase VARCHAR(255) NOT NULL
+);

@@ -18,14 +18,15 @@
 14. [x] Check when typing if user already exists/filld in survey, show warning
 15. [x] Show errors over the UI
 16. [ ] Add different user verification methods linking to the specific survey
-  17. [ ] a given pass phrase given by me
-  18. [ ] on given surname + first name (list of names given by me)
+  17. [x] a given pass phrase given by me
+  18. [x] on given first + last name (list of names given by me, in a db table filled with `prono-cli access`)
   18. [ ] is human (captcha?)
   19. [ ] login via
     20. [ ] Apple account
     21. [ ] Google account
     22. [ ] GitHub account
 23. [x] Support a poll (bullet list) as anwser type, where the results are shown with rectangles (longer means more votes). It adds "possible_answers" key in the questions list where "other" is always an (implicit) option which allows the respondent to specify a random possible answer.
+24. [ ] Make an interactive prono-cli with navigation
 
 ## Technical Dept
 1. [x] Move prono-api to shared lib prono

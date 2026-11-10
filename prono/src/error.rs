@@ -19,6 +19,12 @@ pub enum Error {
     #[error("This device was already used by another participant")]
     DeviceInUse,
 
+    #[error("You are not on the list for this survey")]
+    NotListed,
+
+    #[error("Wrong pass phrase")]
+    WrongPassPhrase,
+
     #[error("Repository error: {0}")]
     Repository(String),
 }

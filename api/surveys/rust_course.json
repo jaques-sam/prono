@@ -1,6 +1,7 @@
 {
     "survey_id": 2,
     "description": "You were chosen to follow a splendid course...",
+    "access": "name_list",
     "questions": [
         {
             "question": "What is your background",

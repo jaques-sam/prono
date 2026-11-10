@@ -71,3 +71,32 @@ async fn answers_round_trip_by_uuid_and_duplicates_are_refused() {
     repo.delete_user(&user).await.unwrap();
     assert_eq!(repo.answers(&question1).await.unwrap(), Vec::<UserAnswer>::new());
 }
+
+#[tokio::test]
+#[ignore = "needs a dev database, see the module docs"]
+async fn survey_access_is_stored_and_matched_by_full_name() {
+    let repo = MysqlRepo::connect(&config()).await.unwrap();
+    // A survey id no catalog survey uses, so runs never touch real lists.
+    let survey_id = u64::MAX - 1;
+
+    repo.allow_user(survey_id, "Ada", "Lovelace").await.unwrap();
+    repo.allow_user(survey_id, "Ada", "Lovelace").await.unwrap(); // no error, no duplicate
+    assert_eq!(
+        repo.allowed_users(survey_id).await.unwrap(),
+        [("Ada".to_string(), "Lovelace".to_string())]
+    );
+    assert_eq!(repo.listed_surveys("Ada Lovelace").await.unwrap(), [survey_id]);
+    assert_eq!(repo.listed_surveys("ada lovelace").await.unwrap(), [survey_id]);
+    assert_eq!(repo.listed_surveys("Ada Byron").await.unwrap(), Vec::<u64>::new());
+
+    repo.disallow_user(survey_id, "Ada", "Lovelace").await.unwrap();
+    assert_eq!(
+        repo.allowed_users(survey_id).await.unwrap(),
+        Vec::<(String, String)>::new()
+    );
+
+    assert_eq!(repo.pass_phrase(survey_id).await.unwrap(), None);
+    repo.set_pass_phrase(survey_id, "one").await.unwrap();
+    repo.set_pass_phrase(survey_id, "two").await.unwrap();
+    assert_eq!(repo.pass_phrase(survey_id).await.unwrap().as_deref(), Some("two"));
+}

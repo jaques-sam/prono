@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use prono_api::{API_KEY, DEVICE_ID_HEADER, Results, Submission};
+use prono_api::{API_KEY, DEVICE_ID_HEADER, Results, Submission, UserStatus};
 
 pub const PROD_URL: &str = "https://prono.samagali.myds.me";
 #[cfg(target_arch = "wasm32")]
@@ -11,8 +11,9 @@ pub const DEV_URL: &str = "http://localhost:8081";
 pub trait Backend {
     fn submit(&self, survey_id: u64, submission: &Submission) -> Pending<()>;
     fn results(&self, survey_id: u64) -> Pending<Results>;
-    /// Whether `user` already filled in a survey.
-    fn user_answered(&self, user: &str) -> Pending<bool>;
+    /// Whether `user` (the full name) already filled in a survey, and which
+    /// surveys they may answer.
+    fn user_status(&self, user: &str) -> Pending<UserStatus>;
 }
 
 /// The result of a request that may still be in flight. The error is a
@@ -104,7 +105,7 @@ impl Backend for HttpBackend {
         )
     }
 
-    fn user_answered(&self, user: &str) -> Pending<bool> {
+    fn user_status(&self, user: &str) -> Pending<UserStatus> {
         let request = ehttp::Request::get(self.url(&prono_api::user_path(user)));
         self.send(self.authorized(request), parse_json)
     }

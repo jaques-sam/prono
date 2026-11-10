@@ -18,7 +18,23 @@ pub struct Survey {
     pub id: u64,
     pub description: String,
     pub link: Option<String>,
+    pub access: Access,
     pub questions: Vec<Question>,
+}
+
+/// Who may answer a survey. Enforced by the backend when answers are
+/// submitted; the secrets (the pass phrase, the names on the list) live in
+/// its database only, never in the catalog shipped with the app.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Access {
+    /// Anyone who gave a name.
+    #[default]
+    Open,
+    /// Whoever knows the survey's pass phrase, see [`Submission::pass_phrase`].
+    PassPhrase,
+    /// Only the participants on the survey's name list.
+    NameList,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -57,7 +73,7 @@ pub enum Answer {
 /// the participant.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum Invalid {
-    #[error("Please fill in your name (at most {MAX_USER_NAME_LEN} characters)")]
+    #[error("Please fill in your first and last name (at most {MAX_USER_NAME_LEN} characters)")]
     UserName,
     #[error("Unknown survey {0}")]
     UnknownSurvey(u64),
@@ -70,9 +86,22 @@ pub enum Invalid {
 /// A participant's answers to one survey: the body of a submit request.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Submission {
+    /// The participant's [`full_name`].
     pub user: String,
+    /// The pass phrase, for a survey with [`Access::PassPhrase`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pass_phrase: Option<String>,
     /// `(question id, answer)` pairs.
     pub answers: Vec<(Uuid, Answer)>,
+}
+
+/// What the backend tells the app about a participant, found by name.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UserStatus {
+    /// Whether the name already filled in a survey.
+    pub answered: bool,
+    /// The ids of the surveys the participant may answer.
+    pub surveys: Vec<u64>,
 }
 
 /// One participant's answer to a question.
@@ -201,12 +230,34 @@ pub fn check_user_name(name: &str) -> Result<(), Invalid> {
     Ok(())
 }
 
+/// A participant's name as it is stored: the trimmed first and last name,
+/// joined by a space.
+#[must_use]
+pub fn full_name(first: &str, last: &str) -> String {
+    format!("{} {}", first.trim(), last.trim())
+}
+
+/// Checks a participant's first and last name and returns their [`full_name`].
+///
+/// # Errors
+///
+/// [`Invalid::UserName`] if either is blank, or the full name is too long.
+pub fn check_name_parts(first: &str, last: &str) -> Result<String, Invalid> {
+    if first.trim().is_empty() || last.trim().is_empty() {
+        return Err(Invalid::UserName);
+    }
+    let name = full_name(first, last);
+    check_user_name(&name)?;
+    Ok(name)
+}
+
 impl Submission {
     /// Pairs `answers` (in question order) with `survey`'s questions.
     #[must_use]
     pub fn new(user: &str, survey: &Survey, answers: &[Answer]) -> Self {
         Self {
             user: user.trim().to_string(),
+            pass_phrase: None,
             answers: survey
                 .questions
                 .iter()
@@ -214,6 +265,15 @@ impl Submission {
                 .map(|(question, answer)| (question.id, answer.clone()))
                 .collect(),
         }
+    }
+
+    /// The submission with the pass phrase typed by the participant; a blank
+    /// one counts as none.
+    #[must_use]
+    pub fn with_pass_phrase(mut self, pass_phrase: &str) -> Self {
+        let pass_phrase = pass_phrase.trim();
+        self.pass_phrase = (!pass_phrase.is_empty()).then(|| pass_phrase.to_string());
+        self
     }
 
     /// Checks the submission against `survey`: a valid name and exactly one
@@ -258,6 +318,7 @@ mod tests {
             id: 7,
             description: "Test".into(),
             link: None,
+            access: Access::Open,
             questions: vec![
                 Question {
                     id: Q1,
@@ -412,18 +473,21 @@ mod tests {
         let survey = survey();
         let missing = Submission {
             user: "Sam".into(),
+            pass_phrase: None,
             answers: vec![(Q1, date(5, 2030))],
         };
         assert_eq!(missing.validate(&survey), Err(Invalid::Incomplete));
 
         let duplicate = Submission {
             user: "Sam".into(),
+            pass_phrase: None,
             answers: vec![(Q1, date(5, 2030)), (Q1, date(6, 2030))],
         };
         assert_eq!(duplicate.validate(&survey), Err(Invalid::Incomplete));
 
         let unknown = Submission {
             user: "Sam".into(),
+            pass_phrase: None,
             answers: vec![(Q1, date(5, 2030)), (Q9, Answer::Text("x".into()))],
         };
         assert_eq!(unknown.validate(&survey), Err(Invalid::Incomplete));
@@ -493,6 +557,7 @@ mod tests {
 
         let submission = Submission {
             user: "Sam".into(),
+            pass_phrase: None,
             answers: vec![(uuid, Answer::Text("x".into()))],
         };
         let json = serde_json::to_string(&submission).unwrap();
@@ -509,5 +574,30 @@ mod tests {
     fn malformed_question_ids_do_not_parse() {
         let body = r#"{"user":"Sam","answers":[["not-a-uuid",{"Text":"x"}]]}"#;
         assert!(serde_json::from_str::<Submission>(body).is_err());
+    }
+
+    #[test]
+    fn name_parts_make_one_full_name() {
+        assert_eq!(full_name(" Ada ", "Lovelace "), "Ada Lovelace");
+        assert_eq!(check_name_parts("Ada", "Lovelace"), Ok("Ada Lovelace".into()));
+        assert_eq!(check_name_parts("Ada", "  "), Err(Invalid::UserName));
+        assert_eq!(check_name_parts("", "Lovelace"), Err(Invalid::UserName));
+        let long = "x".repeat(MAX_USER_NAME_LEN);
+        assert_eq!(check_name_parts(&long, "y"), Err(Invalid::UserName));
+    }
+
+    #[test]
+    fn pass_phrase_is_trimmed_and_optional_on_the_wire() {
+        let survey = survey();
+        let plain = Submission::new("Sam", &survey, &survey.empty_answers());
+        assert_eq!(plain.pass_phrase, None);
+        // Submissions of the deployed app have no such key.
+        assert!(!serde_json::to_string(&plain).unwrap().contains("pass_phrase"));
+        let old = r#"{"user":"Sam","answers":[]}"#;
+        assert_eq!(serde_json::from_str::<Submission>(old).unwrap().pass_phrase, None);
+
+        let with = plain.clone().with_pass_phrase("  open sesame ");
+        assert_eq!(with.pass_phrase.as_deref(), Some("open sesame"));
+        assert_eq!(plain.with_pass_phrase("   ").pass_phrase, None);
     }
 }

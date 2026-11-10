@@ -80,6 +80,9 @@ and create the tables once with `install/schema.sql`. For the NAS, `install/crea
 > SSH tunnel (`ssh -L 3306:127.0.0.1:3306 nas`, then `host = "127.0.0.1"`).
 
 Question ids are UUIDs, stored in `AnswerResponse.question_id` as `BINARY(16)` (`HEX(question_id)` shows them in a `mysql` session).
+Who may answer a survey with `"access": "name_list"` or `"pass_phrase"` is stored in `SurveyAllowedUser` and
+`SurveyPassPhrase`, filled with `prono-cli access`. Run `install/schema.sql` (or `create_db.sh`) again to add
+them to an existing database; it is idempotent.
 Answers are stored as text: `DD/MM/YYYY` for dates (`00` when there is no day), the text itself otherwise.
 
 

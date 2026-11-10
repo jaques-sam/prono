@@ -15,6 +15,14 @@ Feature: Coming back after answering
     And each question's timeline shows 1 points
     And I cannot change my answers
 
+  Scenario: My own answer stands out among the others on the timelines
+    Given "Alice Adams" already answered from another device, predicting month 7 of 2036
+    And "Bob Brown" already answered from this device, predicting month 4 of 2033
+    When I enter the name "Bob Brown"
+    And I start the survey
+    Then each question's timeline shows 2 points
+    And each question's timeline marks my own point with the date "04/2033"
+
   Scenario: Spaces around the name do not hide my earlier answers
     Given "Bob Brown" already answered from this device, predicting month 4 of 2033
     When I enter the first name "  Bob " and the last name " Brown "

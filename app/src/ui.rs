@@ -169,7 +169,7 @@ fn answering(
         ui.separator();
         ui.heading("Timeline of your predictions");
         let dates = timeline::extract_and_sort_dates(answers.iter().map(|answer| (None, answer)));
-        timeline::draw(ui, &dates);
+        timeline::draw(ui, &dates, None);
     }
 
     action
@@ -216,7 +216,7 @@ fn done(ui: &mut egui::Ui, survey: &Survey, user: &str, results: Option<&Results
                     let dates =
                         timeline::extract_and_sort_dates(answers.iter().map(|a| (Some(a.user.as_str()), &a.answer)));
                     if !dates.is_empty() {
-                        timeline::draw(ui, &dates);
+                        timeline::draw(ui, &dates, Some(user));
                     }
                 }
                 AnswerKind::Text => {

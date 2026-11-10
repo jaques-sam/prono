@@ -10,6 +10,7 @@ use egui::{Color32, Pos2, vec2};
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 use egui_kittest::{Harness, Node};
 use prono_app::state::State;
+use prono_app::timeline::{OWN_POINT, POINT};
 
 use crate::fake_backend::FakeBackend;
 
@@ -25,9 +26,6 @@ const SETTLE_FRAMES: usize = 5;
 
 /// Where the app's clock starts, in seconds.
 const START_TIME: f64 = 100.0;
-
-/// The fill of the points the timeline draws, one per predicted date.
-const TIMELINE_POINT: Color32 = Color32::from_rgb(100, 255, 0);
 
 /// Which part of a predicted date: `month` or `year` in a step.
 #[derive(Clone, Copy, Debug, cucumber::Parameter)]
@@ -160,11 +158,21 @@ impl World {
 
     /// Where the timelines currently draw their points.
     pub fn timeline_points(&self) -> Vec<Pos2> {
+        self.points_filled(&[POINT, OWN_POINT])
+    }
+
+    /// Where the timelines currently draw the points of the participant's own
+    /// answers.
+    pub fn own_timeline_points(&self) -> Vec<Pos2> {
+        self.points_filled(&[OWN_POINT])
+    }
+
+    fn points_filled(&self, fills: &[Color32]) -> Vec<Pos2> {
         let mut points = Vec::new();
         for clipped in &self.harness.output().shapes {
             visit(&clipped.shape, &mut |shape| {
                 if let Shape::Circle(circle) = shape
-                    && circle.fill == TIMELINE_POINT
+                    && fills.contains(&circle.fill)
                 {
                     points.push(circle.center);
                 }

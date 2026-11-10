@@ -27,6 +27,9 @@ pub struct Question {
     pub id: Uuid,
     pub text: String,
     pub kind: AnswerKind,
+    /// The options of a `Poll` question, empty for any other kind. Free
+    /// "other" answers are always allowed on top of these.
+    pub possible_answers: Vec<String>,
 }
 
 /// What kind of answer a question expects.
@@ -35,12 +38,19 @@ pub struct Question {
 pub enum AnswerKind {
     Text,
     PredictionDate,
+    Poll,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Answer {
     Text(String),
-    PredictionDate { day: Option<u8>, month: u8, year: u16 },
+    PredictionDate {
+        day: Option<u8>,
+        month: u8,
+        year: u16,
+    },
+    /// The text of the chosen option, or a free "other" text.
+    Poll(String),
 }
 
 /// Why a submission (or part of it) is rejected. The message is meant for
@@ -102,6 +112,30 @@ impl Survey {
     }
 }
 
+impl Question {
+    /// The votes of `answers` (only `Answer::Poll` count): one entry per
+    /// possible answer in their order, zero votes included, followed by every
+    /// other voted text grouped by exact text, most votes first, then by text.
+    #[must_use]
+    pub fn poll_tally(&self, answers: &[UserAnswer]) -> Vec<(String, usize)> {
+        let mut votes: HashMap<&str, usize> = HashMap::new();
+        for user_answer in answers {
+            if let Answer::Poll(text) = &user_answer.answer {
+                *votes.entry(text).or_default() += 1;
+            }
+        }
+        let mut tally: Vec<_> = self
+            .possible_answers
+            .iter()
+            .map(|option| (option.clone(), votes.remove(option.as_str()).unwrap_or(0)))
+            .collect();
+        let mut others: Vec<_> = votes.into_iter().map(|(text, n)| (text.to_string(), n)).collect();
+        others.sort_by(|(a, count_a), (b, count_b)| count_b.cmp(count_a).then_with(|| a.cmp(b)));
+        tally.extend(others);
+        tally
+    }
+}
+
 impl AnswerKind {
     /// The answer a question starts with: empty text, or the current month.
     ///
@@ -112,6 +146,7 @@ impl AnswerKind {
     pub fn empty_answer(self) -> Answer {
         match self {
             AnswerKind::Text => Answer::Text(String::new()),
+            AnswerKind::Poll => Answer::Poll(String::new()),
             AnswerKind::PredictionDate => {
                 let today = chrono::Utc::now();
                 Answer::PredictionDate {
@@ -129,6 +164,7 @@ impl Answer {
     pub fn kind(&self) -> AnswerKind {
         match self {
             Answer::Text(_) => AnswerKind::Text,
+            Answer::Poll(_) => AnswerKind::Poll,
             Answer::PredictionDate { .. } => AnswerKind::PredictionDate,
         }
     }
@@ -140,7 +176,9 @@ impl Answer {
             return false;
         }
         match self {
-            Answer::Text(text) => !text.trim().is_empty() && text.chars().count() <= MAX_TEXT_ANSWER_LEN,
+            Answer::Text(text) | Answer::Poll(text) => {
+                !text.trim().is_empty() && text.chars().count() <= MAX_TEXT_ANSWER_LEN
+            }
             Answer::PredictionDate { day, month, year } => {
                 (1..=12).contains(month)
                     && PREDICTION_YEARS.contains(year)
@@ -225,11 +263,13 @@ mod tests {
                     id: Q1,
                     text: "When?".into(),
                     kind: AnswerKind::PredictionDate,
+                    possible_answers: Vec::new(),
                 },
                 Question {
                     id: Q2,
                     text: "Why?".into(),
                     kind: AnswerKind::Text,
+                    possible_answers: Vec::new(),
                 },
             ],
         }
@@ -268,6 +308,82 @@ mod tests {
         assert!(Answer::Text("because".into()).is_valid_for(AnswerKind::Text));
         assert!(!Answer::Text("  ".into()).is_valid_for(AnswerKind::Text));
         assert!(!Answer::Text("x".repeat(MAX_TEXT_ANSWER_LEN + 1)).is_valid_for(AnswerKind::Text));
+    }
+
+    #[test]
+    fn poll_answers_are_valid_like_text() {
+        assert_eq!(AnswerKind::Poll.empty_answer(), Answer::Poll(String::new()));
+        assert!(!AnswerKind::Poll.empty_answer().is_valid_for(AnswerKind::Poll));
+        assert!(Answer::Poll("C++".into()).is_valid_for(AnswerKind::Poll));
+        assert!(Answer::Poll("something else".into()).is_valid_for(AnswerKind::Poll));
+        assert!(!Answer::Poll("  ".into()).is_valid_for(AnswerKind::Poll));
+        assert!(!Answer::Poll("x".repeat(MAX_TEXT_ANSWER_LEN + 1)).is_valid_for(AnswerKind::Poll));
+        assert!(!Answer::Poll("C".into()).is_valid_for(AnswerKind::Text));
+        assert!(!Answer::Text("C".into()).is_valid_for(AnswerKind::Poll));
+    }
+
+    #[test]
+    fn poll_answer_wire_format() {
+        let json = serde_json::to_string(&Answer::Poll("C++".into())).unwrap();
+        assert_eq!(json, r#"{"Poll":"C++"}"#);
+        assert_eq!(
+            serde_json::from_str::<Answer>(&json).unwrap(),
+            Answer::Poll("C++".into())
+        );
+    }
+
+    fn poll_question() -> Question {
+        Question {
+            id: Q1,
+            text: "Background?".into(),
+            kind: AnswerKind::Poll,
+            possible_answers: vec!["C".into(), "C++".into(), "Rust".into()],
+        }
+    }
+
+    fn voted(user: &str, answer: Answer) -> UserAnswer {
+        UserAnswer {
+            user: user.into(),
+            answer,
+        }
+    }
+
+    #[test]
+    fn poll_tally_lists_options_in_order_then_others_by_votes() {
+        let poll = |text: &str| Answer::Poll(text.into());
+        let answers = [
+            voted("a", poll("Rust")),
+            voted("b", poll("Rust")),
+            voted("c", poll("C")),
+            voted("d", poll("Go")),
+            voted("e", poll("Zig")),
+            voted("f", poll("Zig")),
+            voted("g", poll("Ada")),
+            // Not a poll answer: ignored.
+            voted("h", Answer::Text("C++".into())),
+            // Matching is exact, so this is an "other" answer.
+            voted("i", poll("rust")),
+        ];
+        assert_eq!(
+            poll_question().poll_tally(&answers),
+            [
+                ("C".to_string(), 1),
+                ("C++".to_string(), 0),
+                ("Rust".to_string(), 2),
+                ("Zig".to_string(), 2),
+                ("Ada".to_string(), 1),
+                ("Go".to_string(), 1),
+                ("rust".to_string(), 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn poll_tally_without_votes_has_every_option_at_zero() {
+        assert_eq!(
+            poll_question().poll_tally(&[]),
+            [("C".to_string(), 0), ("C++".to_string(), 0), ("Rust".to_string(), 0)]
+        );
     }
 
     #[test]

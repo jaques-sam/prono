@@ -1,7 +1,7 @@
 use std::sync::{Mutex, MutexGuard};
 
 use async_trait::async_trait;
-use prono_api::{Answer, UserAnswer};
+use prono_api::{Answer, Question, UserAnswer};
 use uuid::Uuid;
 
 use crate::{Error, Repo, Result};
@@ -61,12 +61,12 @@ impl Repo for MemoryRepo {
         Ok(())
     }
 
-    async fn answers(&self, question_id: Uuid) -> Result<Vec<UserAnswer>> {
+    async fn answers(&self, question: &Question) -> Result<Vec<UserAnswer>> {
         Ok(self
             .state()
             .answers
             .iter()
-            .filter(|(_, q, _)| *q == question_id)
+            .filter(|(_, q, _)| *q == question.id)
             .map(|(user, _, answer)| UserAnswer {
                 user: user.clone(),
                 answer: answer.clone(),
@@ -88,10 +88,21 @@ impl Repo for MemoryRepo {
 
 #[cfg(test)]
 mod tests {
+    use prono_api::AnswerKind;
+
     use super::*;
 
     const Q1: Uuid = Uuid::from_u128(1);
     const Q2: Uuid = Uuid::from_u128(2);
+
+    fn question(id: Uuid) -> Question {
+        Question {
+            id,
+            text: String::new(),
+            kind: AnswerKind::Text,
+            possible_answers: Vec::new(),
+        }
+    }
 
     fn text(s: &str) -> Answer {
         Answer::Text(s.into())
@@ -105,7 +116,7 @@ mod tests {
         assert_eq!(repo.device_of("alice").await.unwrap().as_deref(), Some("dev-1"));
         assert_eq!(repo.user_of("dev-1").await.unwrap().as_deref(), Some("alice"));
         assert_eq!(repo.users().await.unwrap(), ["alice"]);
-        let answers = repo.answers(Q1).await.unwrap();
+        let answers = repo.answers(&question(Q1)).await.unwrap();
         assert_eq!(
             answers,
             [UserAnswer {
@@ -123,7 +134,7 @@ mod tests {
         let batch = [(Q1, text("b")), (Q2, text("c"))];
         let err = repo.save_answers("alice", "dev-1", &batch).await.unwrap_err();
         assert_eq!(err, Error::AnswerExists);
-        assert_eq!(repo.answers(Q1).await.unwrap(), Vec::<UserAnswer>::new());
+        assert_eq!(repo.answers(&question(Q1)).await.unwrap(), Vec::<UserAnswer>::new());
     }
 
     #[tokio::test]
@@ -133,7 +144,7 @@ mod tests {
         repo.delete_user("alice").await.unwrap();
 
         assert_eq!(repo.users().await.unwrap(), Vec::<String>::new());
-        assert_eq!(repo.answers(Q1).await.unwrap(), Vec::<UserAnswer>::new());
+        assert_eq!(repo.answers(&question(Q1)).await.unwrap(), Vec::<UserAnswer>::new());
         assert!(repo.user_of("dev-1").await.unwrap().is_none());
     }
 }

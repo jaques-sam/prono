@@ -7,6 +7,8 @@ use crate::world::World;
 /// The survey the scenarios use.
 pub const SURVEY: &str = "SpaceX Starship achievements survey";
 pub const SURVEY_ID: u64 = 1;
+/// The survey with poll questions.
+pub const COURSE_ID: u64 = 2;
 
 impl World {
     /// Replaces whatever is in the name field with `name`.

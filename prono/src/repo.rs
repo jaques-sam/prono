@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use prono_api::{Answer, UserAnswer};
+use prono_api::{Answer, Question, UserAnswer};
 use uuid::Uuid;
 
 use crate::Result;
@@ -27,8 +27,9 @@ pub trait Repo: Send + Sync {
     /// questions.
     async fn save_answers(&self, user: &str, device_id: &str, answers: &[(Uuid, Answer)]) -> Result<()>;
 
-    /// Every participant's answer to the question `question_id`.
-    async fn answers(&self, question_id: Uuid) -> Result<Vec<UserAnswer>>;
+    /// Every participant's answer to `question`. Answers are stored as text,
+    /// so the question's kind tells how to decode them.
+    async fn answers(&self, question: &Question) -> Result<Vec<UserAnswer>>;
 
     /// The names of all participants.
     async fn users(&self) -> Result<Vec<String>>;

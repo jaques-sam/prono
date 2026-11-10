@@ -103,6 +103,9 @@ fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: b
             if ui.add_enabled(!busy, egui::Button::new("Submit")).clicked() {
                 action = Some(Action::Submit);
             }
+            if ui.add_enabled(!busy, egui::Button::new("Change name")).clicked() {
+                action = Some(Action::ChangeName);
+            }
             if busy {
                 ui.spinner();
             }

@@ -61,7 +61,8 @@ pub struct World {
 impl fmt::Debug for World {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("World")
-            .field("user_name", &self.session().state.user_name)
+            .field("first_name", &self.session().state.first_name)
+            .field("last_name", &self.session().state.last_name)
             .field("error", &self.session().state.error)
             .finish_non_exhaustive()
     }

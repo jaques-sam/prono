@@ -5,7 +5,7 @@ Feature: Predicting dates
 
   Background:
     Given the Prono app is open
-    And I am answering the survey as "Sam"
+    And I am answering the survey as "Sam Smith"
 
   Scenario: Every question asks for a date
     Then I see the question "First cargo only Moon landing"

@@ -2,18 +2,14 @@ use cucumber::{given, then, when};
 use egui::accesskit::{Role, Toggled};
 use egui_kittest::Node;
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
-use prono_api::{Answer, Survey};
+use prono_api::Answer;
 
 use crate::fake_backend::MY_DEVICE;
-use crate::steps::common::COURSE_ID;
+use crate::steps::common::{COURSE_ID, course};
 use crate::world::World;
 
 /// The label of the radio button for an answer of one's own.
 const OTHER: &str = "Other";
-
-fn course() -> &'static Survey {
-    prono_api::survey(COURSE_ID).expect("the course survey exists")
-}
 
 impl World {
     /// The radio button `label` of the poll question `question`.
@@ -57,9 +53,7 @@ impl World {
 #[given(expr = "I answer the course survey as {string}")]
 #[when(expr = "I answer the course survey as {string}")]
 fn answer_course(world: &mut World, name: String) {
-    world.enter_name(&name);
-    world.click_button(&course().description);
-    assert!(world.has_button("Submit"), "the survey was not started");
+    world.answer_survey_as(&name, &course().description);
 }
 
 #[given(expr = "{string} already answered {string} to {string} from this device")]

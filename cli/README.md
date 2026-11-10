@@ -14,6 +14,13 @@ It has the following functionality:
 - users:
   - show all
   - delete one
+- access (who may answer a survey, see `"access"` in `api/surveys/*.json`):
+  - `access allow <survey id> <first name> <last name>` / `disallow` / `show`: the name list of a
+    `"name_list"` survey, stored in table `SurveyAllowedUser`
+  - `access pass-phrase <survey id> <phrase>`: the pass phrase of a `"pass_phrase"` survey, stored in
+    `SurveyPassPhrase` (the survey stays closed until it is set)
+
+Participants are matched on `<first name> <last name>`, ignoring case.
 
 
 ## Build & Run

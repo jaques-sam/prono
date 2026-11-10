@@ -5,41 +5,42 @@ Feature: Poll questions
 
   Background:
     Given the Prono app is open
+    And "Sam Smith" is on the name list of the course survey
 
   Scenario: Every option is offered next to "Other"
-    When I answer the course survey as "Sam"
+    When I answer the course survey as "Sam Smith"
     Then I see the option "C" of "What is your background"
     And I see the option "C++" of "What is your background"
     And I see the option "Other" of "What is your background"
 
   Scenario: Choosing an option gives that answer
-    Given I answer the course survey as "Sam"
+    Given I answer the course survey as "Sam Smith"
     When I choose "C++" for "What is your background"
     Then the answer to "What is your background" is "C++"
     And the option "C++" of "What is your background" is selected
 
   Scenario: Another option replaces the choice
-    Given I answer the course survey as "Sam"
+    Given I answer the course survey as "Sam Smith"
     And I choose "C++" for "What is your background"
     When I choose "C" for "What is your background"
     Then the answer to "What is your background" is "C"
     And the option "C++" of "What is your background" is not selected
 
   Scenario: "Other" lets the participant type an answer
-    Given I answer the course survey as "Sam"
+    Given I answer the course survey as "Sam Smith"
     When I choose "Other" for "What is your background"
     And I type the answer "Rust"
     Then the answer to "What is your background" is "Rust"
     And the option "Other" of "What is your background" is selected
 
   Scenario: "Other" stays selected until something is typed
-    Given I answer the course survey as "Sam"
+    Given I answer the course survey as "Sam Smith"
     When I choose "Other" for "What is your background"
     Then the option "Other" of "What is your background" is selected
     And the answer to "What is your background" is ""
 
   Scenario: Going back to an option hides the typed answer
-    Given I answer the course survey as "Sam"
+    Given I answer the course survey as "Sam Smith"
     And I choose "Other" for "What is your background"
     And I type the answer "Rust"
     When I choose "C" for "What is your background"
@@ -47,13 +48,13 @@ Feature: Poll questions
     And the option "Other" of "What is your background" is not selected
 
   Scenario: An answer of one's own comes back after logging in again
-    Given "Sam" already answered "Rust" to "What is your background" from this device
-    When I answer the course survey as "Sam"
+    Given "Sam Smith" already answered "Rust" to "What is your background" from this device
+    When I answer the course survey as "Sam Smith"
     Then the option "Other" of "What is your background" is selected
     And the answer to "What is your background" is "Rust"
 
   Scenario: Resetting the answers clears "Other"
-    Given I answer the course survey as "Sam"
+    Given I answer the course survey as "Sam Smith"
     And I choose "Other" for "What is your background"
     And I type the answer "Rust"
     When I reset my answers
@@ -61,9 +62,9 @@ Feature: Poll questions
     And the option "Other" of "What is your background" is not selected
 
   Scenario: The results show a bar for every option and for the other answers
-    Given "Alice" already answered "C" to "What is your background" from another device
-    And "Bob" already answered "Rust" to "What is your background" from another device
-    And I answer the course survey as "Sam"
+    Given "Alice Adams" already answered "C" to "What is your background" from another device
+    And "Bob Brown" already answered "Rust" to "What is your background" from another device
+    And I answer the course survey as "Sam Smith"
     And I choose "C" for "What is your background"
     And I choose "Of course!" for "I come to the course!"
     When I submit my answers

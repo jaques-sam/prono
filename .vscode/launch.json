@@ -63,53 +63,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'generic'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--lib",
-                    "--package=generic"
-                ],
-                "filter": {
-                    "name": "generic",
-                    "kind": "lib"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in library 'prono_db'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--lib",
-                    "--package=prono_db"
-                ],
-                "filter": {
-                    "name": "prono_db",
-                    "kind": "lib"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
             "name": "Debug executable 'backend'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=backend",
-                    "--package=backend"
+                    "--bin=prono-backend",
+                    "--package=prono-backend"
                 ],
                 "filter": {
-                    "name": "backend",
+                    "name": "prono-backend",
                     "kind": "bin"
                 }
             },
@@ -124,11 +86,11 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=backend",
-                    "--package=backend"
+                    "--bin=prono-backend",
+                    "--package=prono-backend"
                 ],
                 "filter": {
-                    "name": "backend",
+                    "name": "prono-backend",
                     "kind": "bin"
                 }
             },

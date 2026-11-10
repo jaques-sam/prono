@@ -6,7 +6,8 @@ branch-coverage = true
 test-timeout = "30s"
 offline = true
 target-dir = "./target/coverage"
-exclude-files = ["target/*", "*/**/adapters/*", "*/*/main*.rs"]
+# Drawing, HTTP/database I/O and entry points are verified by running them.
+exclude-files = ["target/*", "*/src/main.rs", "app/src/ui.rs", "app/src/timeline.rs", "app/src/client.rs", "app/src/device.rs", "prono/src/mysql.rs"]
 
 [report]
 out = ["Html"]

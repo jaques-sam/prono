@@ -1,61 +1,43 @@
+mod rest;
+
+use std::io;
 use std::sync::Arc;
 
 use actix_cors::Cors;
-use actix_web::{App, HttpServer, web};
+use actix_web::{App, HttpServer, http::header, web};
 use log::info;
-use prono::ReadConfig;
-use prono::repo::Db;
+use prono::{DbConfig, MysqlRepo, Repo};
 
-use prono_backend::adapters::{auth_middleware::ApiKeyAuth, rest};
-use prono_backend::use_cases::SurveyService;
+const ADDRESS: (&str, u16) = ("0.0.0.0", 8081);
+const ALLOWED_ORIGINS: &[&str] = &[
+    "https://jaques-sam.github.io",
+    "https://prono-app.samagali.myds.me",
+    "http://127.0.0.1:8080",
+    "http://localhost:8080",
+    "http://127.0.0.1:8888",
+    "http://localhost:8888",
+];
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> io::Result<()> {
     env_logger::init();
 
-    let config_reader = prono::factory::create_config_reader();
-    let default_config_path = config_reader.default_config_path();
-    let db_config: prono_db::Config = config_reader.read(default_config_path).db.into();
+    let config = DbConfig::load().map_err(io::Error::other)?;
+    let repo = MysqlRepo::connect(&config).await.map_err(io::Error::other)?;
+    let repo: web::Data<dyn Repo> = web::Data::from(Arc::new(repo) as Arc<dyn Repo>);
 
-    let db = prono_db::MysqlDb::init(db_config)
-        .await
-        .expect("Failed to initialize database");
-
-    let api_key = prono_api::API_KEY.to_string();
-
-    let db = Arc::new(db);
-    let service = web::Data::new(SurveyService::new(db.clone(), db));
-
-    info!("Starting backend server on 0.0.0.0:8081");
-
-    let api_key_clone = api_key.clone();
+    info!("Starting backend server on {}:{}", ADDRESS.0, ADDRESS.1);
     HttpServer::new(move || {
-        let cors = Cors::default()
-            .allowed_origin("https://jaques-sam.github.io")
-            .allowed_origin("https://prono-app.samagali.myds.me")
-            .allowed_origin("http://127.0.0.1:8080")
-            .allowed_origin("http://localhost:8080")
-            .allowed_methods(vec!["GET", "POST"])
-            .allowed_header(actix_web::http::header::CONTENT_TYPE)
-            .allowed_header(actix_web::http::header::AUTHORIZATION)
-            .allowed_header("X-Device-Id")
+        let cors = ALLOWED_ORIGINS
+            .iter()
+            .fold(Cors::default(), |cors, origin| cors.allowed_origin(origin))
+            .allowed_methods(["GET", "POST"])
+            .allowed_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+            .allowed_header(prono_api::DEVICE_ID_HEADER)
             .max_age(3600);
-
-        App::new()
-            .wrap(cors)
-            .app_data(service.clone())
-            .service(rest::get_survey)
-            .service(rest::get_response)
-            .service(rest::get_all_answers)
-            .service(
-                web::scope("")
-                    .guard(actix_web::guard::Post())
-                    .wrap(ApiKeyAuth::new(api_key_clone.clone()))
-                    .service(rest::add_user)
-                    .service(rest::add_answer),
-            )
+        App::new().wrap(cors).app_data(repo.clone()).configure(rest::routes)
     })
-    .bind(("0.0.0.0", 8081))?
+    .bind(ADDRESS)?
     .run()
     .await
 }

@@ -6,19 +6,17 @@
     - [Web app](#web-app)
     - [Web Deploy](#web-deploy)
     - [Native build](#native-build)
-      - [Configuration](#configuration)
-        - [Feed into the Prono App](#feed-into-the-prono-app)
+  - [Structure](#structure)
 
 
 ## Summary
 
 Prono is an application to conduct surveys and store the answers in a database.
 
-It's multi-platform (desktop and web) and written in Rust using the [egui](ehttps://github.com/emilk/egui) framework.
+It's multi-platform (desktop and web) and written in Rust using the [egui](https://github.com/emilk/egui) framework.
+Both the desktop and the web app talk to the [Prono Backend](../backend/README.md) over REST; neither needs database credentials.
 
 For now, the web app is deployed as github page: https://jaques-sam.github.io/prono.
-
-To run the desktop app, see instructions below.
 
 
 ## Build & Run
@@ -34,13 +32,14 @@ You can compile the app to [WASM](https://en.wikipedia.org/wiki/WebAssembly) and
 
 > `assets/sw.js` script will try to cache our app, and loads the cached version when it cannot connect to server allowing your app to work offline (like PWA).
 > appending `#dev` to `index.html` will skip this caching, allowing us to load the latest builds during development.
+> `#dev` also makes the app use a local backend at `http://localhost:8081` instead of the production one.
 
 
 ### Web Deploy
 
-1. Just run `trunk build --release`.
+1. Just run `trunk build --release --config ./app`.
 2. It will generate a `dist` directory as a "static html" website
-3. Upload the `dist` directory to any of the numerous free hosting websites including [GitHub Pages](https://docs.github.com/en/free-pro-team@latest/github/working-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site). The app is auto-deployed to GitHub pages on a github release, see `.github/workflows/pages.yml` for more details (there is also an option to auto-deploy on push to `master` branch).
+3. Upload the `dist` directory to any of the numerous free hosting websites including [GitHub Pages](https://docs.github.com/en/free-pro-team@latest/github/working-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site). The app is auto-deployed to GitHub pages on a push to the `release` branch, see `.github/workflows/pages.yml` for more details.
 
 
 ### Native build
@@ -50,47 +49,18 @@ cargo run --bin prono-app
 ```
 To see more logs, add `RUST_LOG=debug|info` in front.
 
-The debug build has some more functions than the release build:
+The app connects to the production backend. Set `PRONO_BACKEND_URL` to use another one, e.g. a local backend:
 
-- When voted, the user can add a new vote using a different user
-- `device_id`s are stored as random and not checked when adding a new user
-- If the database connection fails, it will use the fake db with fake data
-
-They can be found by searching for the `debug_assertions` attribute.
-
-
-#### Configuration
-
-The configuration is only needed/used in the native app, to connect to the prono database.
-
-Parameters:
-
-- host: hostname or IP address of the database server
-- port: port number (16 bit) of the database server
-- user: username to connect to the database
-- pass: password to connect to the database
-
-
-##### Feed into the Prono App
-
-Either provide a `config.toml` file in the default configuration location:
-- MacOS: `$HOME/Library/Application Support/prono/`
-- Linux: `$HOME/.config/prono/`
-- Windows: `C:\Users\Administrator\AppData\Roaming\prono`
-
-with the following contents:
-
-```toml
-[db]
-host = "the_prono_db_host"
-port = the_prono_db_port
-user = "the_prono_db_user"
-pass = "the_prono_db_password"
+```sh
+PRONO_BACKEND_URL=http://localhost:8081 cargo run --bin prono-app
 ```
 
-or set the following environment variables:
 
-- `PRONO_DB_HOST`
-- `PRONO_DB_PORT`
-- `PRONO_DB_USER`
-- `PRONO_DB_PASS`
+## Structure
+
+- `state.rs`: the app's flow (pick a survey, answer, submit, show results) without any drawing; unit tested.
+- `ui.rs` and `timeline.rs`: draw the state and turn clicks into actions. No rules live here.
+- `client.rs`: the non-blocking REST client ([ehttp](https://github.com/emilk/ehttp)), the same on desktop and web.
+- `device.rs`: the random device id the backend binds a participant's name to.
+
+The surveys and answer rules come from the shared [`prono_api`](../api) crate.

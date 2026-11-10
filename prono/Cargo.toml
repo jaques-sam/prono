@@ -3,26 +3,18 @@ name = "prono"
 version = "0.1.0"
 edition = "2024"
 
+# Server-side core: submit/results use cases, the repository (MySQL and
+# in-memory) and the database configuration. Used by the backend and the CLI.
 [dependencies]
-generic = { version = "0.1.0", path = "../generic" }
 prono_api = { path = "../api" }
 
-chrono = "0.4.43"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-uuid = { version = "1.20.0", features = ["js", "v4", "v5"] }
-async-trait = "0.1.89"
-log = "0.4.29"
-thiserror = "2.0.17"
-tokio = { version = "1.49.0", default-features = false, features = [
-    "rt",
-    "rt-multi-thread",
-    "macros",
-    "sync",
-] }
+async-trait = "0.1.92"
 dirs = "6.0.0"
-secure-string = { version = "0.3.0", features = ["serde"] }
-toml = "0.9.8"
+log = "0.4.35"
+serde = { version = "1.0.229", features = ["derive"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["mysql", "runtime-tokio"] }
+thiserror = "2.0.21"
+toml = "0.9.12"
 
 [dev-dependencies]
-rstest = "0.26"
+tokio = { version = "1.54.1", features = ["macros", "rt"] }

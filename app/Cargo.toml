@@ -11,7 +11,7 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
-prono_api = { path = "../api", features = ["serde"] }
+prono_api = { path = "../api" }
 
 egui = "0.33.3"
 eframe = { version = "0.33.3", default-features = false, features = [
@@ -21,32 +21,21 @@ eframe = { version = "0.33.3", default-features = false, features = [
     "persistence",   # Enable restoring app state when restarting the app.
     "wayland",       # To support Linux (and CI)
 ] }
-log = "0.4.29"
-serde = { version = "1.0.228", features = ["derive"] }
-chrono = "0.4.42"
+ehttp = { version = "0.7.3", features = ["json"] }
+log = "0.4.35"
+serde = { version = "1.0.229", features = ["derive"] }
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-prono = { path = "../prono" }
-prono_db = { path = "../db" }
-tokio = { version = "1.49.0", default-features = false, features = ["rt", "rt-multi-thread", "macros"] }
-
-env_logger = "0.11.8"
-uuid = { version = "1", features = ["v4"] }
 dirs = "6.0.0"
+env_logger = "0.11.11"
+uuid = { version = "1", features = ["v4"] }
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen-futures = "0.4.50"
-web-sys = "0.3.70"
-gloo-net = { version = "0.6", features = ["http"] }
-serde_json = "1.0"
+wasm-bindgen-futures = "0.4.80"
+web-sys = "0.3.107"
 uuid = { version = "1", features = ["v4", "js"] }
 # fix compile error because of stepping to egui 0.33,
 getrandom_v2 = { version = "0.2", features = ["js"], package = "getrandom" }
 getrandom    = { version = "0.3", features = ["wasm_js"] }
-
-[dev-dependencies]
-generic = { path = "../generic" }
-prono_api = { path = "../api", features = ["test-utils"] }
-rstest = "0.26"

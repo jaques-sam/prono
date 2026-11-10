@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Prono is a multi-platform survey application (desktop and web) written in Rust using the egui framework. It conducts surveys and stores answers in a MySQL database. The web app is deployed at https://jaques-sam.github.io/prono/.
+Prono is a multi-platform survey application (desktop and web) written in Rust using the egui framework. It conducts surveys; the backend stores the answers in a MySQL/MariaDB database. The web app is deployed at https://jaques-sam.github.io/prono/.
 
 ## Build Commands
 **Desktop app:**
@@ -31,8 +31,8 @@ trunk build --release --config ./app
 **Run all tests:**
 ```sh
 cargo test
-# With coverage (requires 70% minimum):
-cargo tarpaulin --fail-under 70 --workspace --all-targets --all-features
+# With coverage (requires 80% minimum):
+cargo tarpaulin --fail-under 80 --workspace --all-targets --all-features
 ```
 
 **Run tests for specific crate:**
@@ -49,7 +49,7 @@ cargo test <test-name> -- --nocapture
 
 **Full CI validation (runs locally):**
 ```sh
-./check.sh
+./checks.sh
 ```
 This script runs: typos, lychee, fmt, machete, audit, check (debug + release + wasm), clippy, tarpaulin, doc tests, and trunk build.
 
@@ -72,70 +72,44 @@ cargo audit
 
 ## Architecture
 
-The codebase follows **Clean Architecture** (entities, ports, use cases, adapters) across all modules.
+See the Architecture section of `README.md`. In short: every survey type is defined once, in `prono_api`, and both apps reach the database only through the backend's REST API.
 
 ### Workspace Structure
 
-- **app/**: egui-based GUI application
-  - Compiles to both native (desktop) and wasm32 (web)
-  - Uses clean architecture: adapters (GUI), entities (view models), main_native/main_wasm entry points
+- **api/** (`prono_api`): the model shared by every binary, wasm-safe
+  - `Survey`, `Question`, `AnswerKind`, `Answer`, `Submission`, `Results`
+  - The survey catalog: JSON files in `api/surveys/`, listed in `SURVEY_FILES` (`api/src/catalog.rs`)
+  - The rules (`Submission::validate`, `check_user_name`, `Answer::is_valid_for`) and the REST contract (`answers_path`, `API_KEY`, `DEVICE_ID_HEADER`)
+  - Question ids hash the question text and answer kind; stored answers reference them, so `existing_question_ids_are_stable` must keep passing
 
-- **backend/**: New backend service under development
-  - Being structured with clean architecture (entities, ports, use_cases, adapters)
-  - Uses prono and prono_db crates
-  - Currently minimal implementation in progress
+- **prono/**: server-side core
+  - Use cases `submit` and `results` (`service.rs`)
+  - `Repo` trait with `MysqlRepo` (runtime `sqlx` queries, one transaction per submission) and `MemoryRepo` (tests)
+  - `DbConfig::load()`: `secure_config.toml` plus `PRONO_DB_*` env overrides
 
-- **prono/**: Core business logic library
-  - Contains entities (Survey, Question, Answer, FileSurvey)
-  - Ports define interfaces (repo traits, config readers, factories)
-  - Use cases include fake_db for development/testing
-  - **Key component**: `SyncPronoAdapter` bridges synchronous egui GUI with async database operations using mpsc channels and tokio
-  - Implements prono_api::Surveys trait
-  - Includes embedded survey JSON: `surveys/survey_spacex_starship.json`
+- **backend/**: `actix-web` server; `rest.rs` holds the handlers, the API key check and the error to HTTP status mapping
 
-- **prono_api/**: API trait definitions
-  - Defines the `Surveys`, `Survey`, `Question`, `Answer` traits/types used by the GUI
-  - Provides test utilities when `test-utils` feature is enabled
+- **app/**: egui app for native and wasm32
+  - `state.rs`: the flow as a state machine (no egui); `ui.rs`/`timeline.rs` only draw it and return `Action`s
+  - `client.rs`: non-blocking REST client (`ehttp`), identical on both targets
+  - No business rules in the UI: put them in `prono_api` or `state.rs`
 
-- **prono_db/**: Database adapter layer
-  - Implements `repo::Db` trait using sqlx with MySQL backend
-  - Requires manual database setup (see prono_db/README.md)
-  - Tables: `Users`, `AnswerResponse`
-  - Excluded from test coverage (.tarpaulin.toml)
-
-- **generic/**: Shared utilities used across crates
-
-### Key Architectural Patterns
-
-**SyncPronoAdapter Pattern:**
-The `prono` crate's `SyncPronoAdapter` solves the sync/async impedance mismatch:
-- GUI (egui) is synchronous and must not block
-- Database operations are async
-- Solution: Background tokio task receives requests via `std::sync::mpsc`, performs async work, sends results back via per-request response channels
-- GUI calls `request_*` methods, receives `Receiver<T>`, polls with `try_recv()` to stay non-blocking
-- In debug builds, falls back to `FakeRepo` if DB initialization fails
-
-**Clippy Configuration:**
-Wildcard imports are explicitly allowed for clean architecture modules (`use entities::*;`, `use ports::*;`, etc.) per `.clippy.toml`.
+- **cli/**: admin tool (list/delete users) on top of `prono`
 
 ## Configuration
 
-**Database connection** via config file or environment variables:
-
-Config file: `$HOME/.config/prono/config.toml`
+**Database connection** (backend and CLI only) via `<config dir>/prono/secure_config.toml`:
 ```toml
 [db]
 host = "the_prono_db_host"
-port = the_prono_db_port
+port = 3306
 user = "the_prono_db_user"
 pass = "the_prono_db_password"
 ```
 
-Or environment variables:
-- `PRONO_DB_HOST`
-- `PRONO_DB_PORT`
-- `PRONO_DB_USER`
-- `PRONO_DB_PASS`
+Each setting can be overridden by `PRONO_DB_HOST`, `PRONO_DB_PORT`, `PRONO_DB_USER`, `PRONO_DB_PASS`.
+
+**App backend URL:** native uses `PRONO_BACKEND_URL` (default: production); web uses `http://localhost:8081` when the URL contains `#dev`.
 
 **Secure files:**
 This repo uses git-crypt. To work with encrypted files, obtain the GPG key from @jaques-sam and run:
@@ -148,7 +122,7 @@ git-crypt unlock
 
 **Rust toolchain:**
 ```sh
-rustup update  # Uses rust-toolchain.toml (channel 1.93)
+rustup update  # Uses rust-toolchain.toml (channel 1.99)
 rustup target add wasm32-unknown-unknown
 ```
 
@@ -171,20 +145,10 @@ sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev lib
 dnf install clang clang-devel clang-tools-extra libxkbcommon-devel pkg-config openssl-devel libxcb-devel gtk3-devel atk fontconfig-devel
 ```
 
-## Working with Backend
-
-The `backend/` crate is under active development with clean architecture structure:
-- **entities/**: Domain entities
-- **ports/**: Interfaces and error types (currently has `ports::Error` and `BackendResult<T>`)
-- **use_cases/**: Business logic
-- **adapters/**: External interface implementations
-
-Backend reads config via `prono::factory::create_config_reader()` and initializes database using `SyncPronoAdapter::new_with_db_config::<prono_db::MysqlDb>()`.
-
 ## CI/CD
 
 CI runs on push/PR via `.github/workflows/rust.yml`:
-- Checks, tests (with 70% coverage requirement), fmt, clippy, audit
+- Checks, tests (with 80% coverage requirement), fmt, clippy, audit
 - Builds for multiple targets: Linux (x86_64, arm), macOS (x86_64, aarch64), Windows
 - Wasm32 validation and trunk build
 - Web deployment to GitHub Pages on `release` branch updates
@@ -194,4 +158,4 @@ CI runs on push/PR via `.github/workflows/rust.yml`:
 - Use edition 2024 for all crates
 - Target wasm32-unknown-unknown for web builds
 - The app includes PWA support via `assets/sw.js` (append `#dev` to URL to skip caching during development)
-- Coverage excludes `app/src/adapters/*` and `prono_db/*` per `.tarpaulin.toml`
+- Coverage excludes drawing, I/O and entry-point files per `.tarpaulin.toml`

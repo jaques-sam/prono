@@ -1,9 +1,7 @@
 [workspace]
-members = ["app", "backend", "cli", "generic", "prono", "db", "api"]
+members = ["api", "app", "backend", "cli", "prono"]
 resolver = "3"
 
 [profile.release]
 opt-level = 2
 
-[profile.dev.package.sqlx-macros]
-opt-level = 3

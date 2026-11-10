@@ -17,3 +17,6 @@ tarpaulin-report.html
 temp
 
 .claude
+
+# local secrets
+.env

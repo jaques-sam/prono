@@ -23,3 +23,5 @@ cargo run --bin prono-cli
 ```
 
 See help with `cargo run --bin prono-cli -- --help`.
+
+It connects to the database with the same [configuration](../backend/README.md#configuration) as the backend.

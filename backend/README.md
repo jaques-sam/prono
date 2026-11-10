@@ -69,7 +69,15 @@ A MariaDB/MySQL database named `db_prono`. Log in with:
 mysql db_prono -vh ${HOST} -P ${PORT} -u ${USER} -p --connect-timeout=2
 ```
 
-and create the tables once with `install/schema.sql`.
+and create the tables once with `install/schema.sql`. For the NAS, `install/create_db.sh` does everything
+(database, tables and the app user from your `secure_config.toml`) over `ssh nas`; it asks for the MariaDB root password.
+
+> Synology's MariaDB 10 starts with `skip_networking=1`: enable *TCP/IP connection* in the MariaDB 10 package settings
+> (DSM) before the backend or the CLI can reach it over `host`/`port`.
+>
+> MariaDB there has no SSL (`have_ssl = DISABLED`), so keep the database traffic on the NAS: the app user can only log in
+> from `localhost`/`127.0.0.1`, the backend uses `host = "127.0.0.1"`, and the CLI from another machine goes through an
+> SSH tunnel (`ssh -L 3306:127.0.0.1:3306 nas`, then `host = "127.0.0.1"`).
 
 Question ids are UUIDs, stored in `AnswerResponse.question_id` as `BINARY(16)` (`HEX(question_id)` shows them in a `mysql` session).
 Answers are stored as text: `DD/MM/YYYY` for dates (`00` when there is no day), the text itself otherwise.
@@ -104,7 +112,7 @@ This needs the [configuration](#configuration).
 ### As a Synology service
 
 ```sh
-./backend/install/build-spk.sh target/release/prono-backend target/  # Using x86 builds
+./backend/install/build-spk.sh  # Packages target/release/prono-backend into target/release/ (x86 builds)
 ```
 Then install the generated `target/prono-backend.spk` file on the NAS using the Synology Package Center.
 You can then start the service from the Package Center UI.

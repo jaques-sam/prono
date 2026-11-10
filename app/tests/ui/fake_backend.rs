@@ -7,7 +7,7 @@ use std::cell::{Cell, RefCell};
 
 use futures::FutureExt as _;
 use prono::MemoryRepo;
-use prono_api::{Answer, Results, Submission};
+use prono_api::{Answer, AnswerKind, Question, Results, Submission};
 use prono_app::client::{Backend, Pending};
 
 /// The device the app under test runs on.
@@ -63,10 +63,21 @@ impl FakeBackend {
     }
 
     /// `user` answered every question of survey `survey_id` earlier, from
-    /// `device_id`, predicting `month`/`year`.
+    /// `device_id`: dates predict `month`/`year`, polls pick their first
+    /// option, text questions say "text".
     pub fn seed(&self, survey_id: u64, user: &str, device_id: &str, month: u8, year: u16) {
+        self.seed_answers(survey_id, user, device_id, |question| match question.kind {
+            AnswerKind::PredictionDate => Answer::PredictionDate { day: None, month, year },
+            AnswerKind::Text => Answer::Text("text".into()),
+            AnswerKind::Poll => Answer::Poll(question.possible_answers[0].clone()),
+        });
+    }
+
+    /// `user` answered every question of survey `survey_id` earlier, from
+    /// `device_id`, with the answer `answer_to` gives for each question.
+    pub fn seed_answers(&self, survey_id: u64, user: &str, device_id: &str, answer_to: impl Fn(&Question) -> Answer) {
         let survey = prono_api::survey(survey_id).expect("the seeded survey exists");
-        let answers = vec![Answer::PredictionDate { day: None, month, year }; survey.questions.len()];
+        let answers: Vec<_> = survey.questions.iter().map(answer_to).collect();
         let submission = Submission::new(user, survey, &answers);
         Self::now(prono::submit(&self.repo, survey_id, device_id, &submission)).expect("seeding succeeds");
     }

@@ -1,0 +1,72 @@
+Feature: Poll questions
+  As a participant
+  I want to pick one of the offered options, or give an answer of my own
+  So that the poll captures what I think
+
+  Background:
+    Given the Prono app is open
+
+  Scenario: Every option is offered next to "Other"
+    When I answer the course survey as "Sam"
+    Then I see the option "C" of "What is your background"
+    And I see the option "C++" of "What is your background"
+    And I see the option "Other" of "What is your background"
+
+  Scenario: Choosing an option gives that answer
+    Given I answer the course survey as "Sam"
+    When I choose "C++" for "What is your background"
+    Then the answer to "What is your background" is "C++"
+    And the option "C++" of "What is your background" is selected
+
+  Scenario: Another option replaces the choice
+    Given I answer the course survey as "Sam"
+    And I choose "C++" for "What is your background"
+    When I choose "C" for "What is your background"
+    Then the answer to "What is your background" is "C"
+    And the option "C++" of "What is your background" is not selected
+
+  Scenario: "Other" lets the participant type an answer
+    Given I answer the course survey as "Sam"
+    When I choose "Other" for "What is your background"
+    And I type the answer "Rust"
+    Then the answer to "What is your background" is "Rust"
+    And the option "Other" of "What is your background" is selected
+
+  Scenario: "Other" stays selected until something is typed
+    Given I answer the course survey as "Sam"
+    When I choose "Other" for "What is your background"
+    Then the option "Other" of "What is your background" is selected
+    And the answer to "What is your background" is ""
+
+  Scenario: Going back to an option hides the typed answer
+    Given I answer the course survey as "Sam"
+    And I choose "Other" for "What is your background"
+    And I type the answer "Rust"
+    When I choose "C" for "What is your background"
+    Then the answer to "What is your background" is "C"
+    And the option "Other" of "What is your background" is not selected
+
+  Scenario: An answer of one's own comes back after logging in again
+    Given "Sam" already answered "Rust" to "What is your background" from this device
+    When I answer the course survey as "Sam"
+    Then the option "Other" of "What is your background" is selected
+    And the answer to "What is your background" is "Rust"
+
+  Scenario: Resetting the answers clears "Other"
+    Given I answer the course survey as "Sam"
+    And I choose "Other" for "What is your background"
+    And I type the answer "Rust"
+    When I reset my answers
+    Then the answer to "What is your background" is ""
+    And the option "Other" of "What is your background" is not selected
+
+  Scenario: The results show a bar for every option and for the other answers
+    Given "Alice" already answered "C" to "What is your background" from another device
+    And "Bob" already answered "Rust" to "What is your background" from another device
+    And I answer the course survey as "Sam"
+    And I choose "C" for "What is your background"
+    And I choose "Of course!" for "I come to the course!"
+    When I submit my answers
+    Then the poll results show "C: 2 votes (67%)"
+    And the poll results show "C++: 0 votes (0%)"
+    And the poll results show "Rust (other): 1 vote (33%)"

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::LazyLock;
 
 use serde::Deserialize;
@@ -7,7 +8,10 @@ use crate::{AnswerKind, Question, Survey};
 
 /// Every survey, compiled into each binary. To add a questionnaire, drop a
 /// JSON file in `api/surveys/` and list it here.
-const SURVEY_FILES: &[&str] = &[include_str!("../surveys/spacex_starship.json")];
+const SURVEY_FILES: &[&str] = &[
+    include_str!("../surveys/spacex_starship.json"),
+    include_str!("../surveys/rust_course.json"),
+];
 
 static SURVEYS: LazyLock<Vec<Survey>> = LazyLock::new(|| {
     SURVEY_FILES
@@ -43,10 +47,43 @@ struct SurveyFile {
 struct QuestionFile {
     question: String,
     answer_type: AnswerKind,
+    /// The options of a `poll` question, and only of those.
+    #[serde(default)]
+    possible_answers: Vec<String>,
+}
+
+impl QuestionFile {
+    fn check<E: serde::de::Error>(&self) -> Result<(), E> {
+        let options = &self.possible_answers;
+        let is_poll = self.answer_type == AnswerKind::Poll;
+        if is_poll && options.is_empty() {
+            return Err(E::custom(format!(
+                "poll question \"{}\" needs possible_answers",
+                self.question
+            )));
+        }
+        if !is_poll && !options.is_empty() {
+            return Err(E::custom(format!(
+                "question \"{}\" is not a poll, it cannot have possible_answers",
+                self.question
+            )));
+        }
+        let mut seen = HashSet::new();
+        for option in options {
+            if option.trim() != option || option.is_empty() || !seen.insert(option) {
+                return Err(E::custom(format!(
+                    "possible answer \"{option}\" of \"{}\" must be non-blank, trimmed and unique",
+                    self.question
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 fn parse(json: &str) -> serde_json::Result<Survey> {
     let file: SurveyFile = serde_json::from_str(json)?;
+    file.questions.iter().try_for_each(QuestionFile::check)?;
     Ok(Survey {
         id: file.survey_id,
         description: file.description,
@@ -58,6 +95,7 @@ fn parse(json: &str) -> serde_json::Result<Survey> {
                 id: question_id(&q.question, q.answer_type),
                 text: q.question,
                 kind: q.answer_type,
+                possible_answers: q.possible_answers,
             })
             .collect(),
     })
@@ -69,6 +107,7 @@ fn question_id(text: &str, kind: AnswerKind) -> Uuid {
     let kind = match kind {
         AnswerKind::Text => "Text",
         AnswerKind::PredictionDate => "PredictionDate",
+        AnswerKind::Poll => "Poll",
     };
     Uuid::new_v5(&Uuid::NAMESPACE_DNS, format!("{text}{kind}").as_bytes())
 }
@@ -116,6 +155,41 @@ mod tests {
         assert_eq!(base, question_id("When?", AnswerKind::Text));
         assert_ne!(base, question_id("When", AnswerKind::Text));
         assert_ne!(base, question_id("When?", AnswerKind::PredictionDate));
+        assert_ne!(base, question_id("When?", AnswerKind::Poll));
+    }
+
+    fn survey_json(question: &str) -> String {
+        format!(r#"{{"survey_id": 1, "description": "", "questions": [{question}]}}"#)
+    }
+
+    #[test]
+    fn poll_questions_carry_their_possible_answers() {
+        let json = survey_json(r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A", "B"]}"#);
+        let question = &parse(&json).unwrap().questions[0];
+        assert_eq!(question.kind, AnswerKind::Poll);
+        assert_eq!(question.possible_answers, ["A", "B"]);
+        assert_eq!(question.id, question_id("Q?", AnswerKind::Poll));
+
+        let text = survey_json(r#"{"question": "Q?", "answer_type": "text"}"#);
+        assert_eq!(
+            parse(&text).unwrap().questions[0].possible_answers,
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn invalid_possible_answers_are_rejected() {
+        for question in [
+            r#"{"question": "Q?", "answer_type": "poll"}"#,
+            r#"{"question": "Q?", "answer_type": "poll", "possible_answers": []}"#,
+            r#"{"question": "Q?", "answer_type": "text", "possible_answers": ["A"]}"#,
+            r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A", "A"]}"#,
+            r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A", " "]}"#,
+            r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A", ""]}"#,
+            r#"{"question": "Q?", "answer_type": "poll", "possible_answers": [" A"]}"#,
+        ] {
+            assert!(parse(&survey_json(question)).is_err(), "{question}");
+        }
     }
 
     #[test]

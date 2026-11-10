@@ -7,6 +7,7 @@
 #![allow(clippy::must_use_candidate)]
 
 pub mod client;
+pub mod poll;
 pub mod state;
 pub mod timeline;
 pub mod ui;

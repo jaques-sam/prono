@@ -25,6 +25,7 @@
     20. [ ] Apple account
     21. [ ] Google account
     22. [ ] GitHub account
+23. [x] Support a poll (bullet list) as anwser type, where the results are shown with rectangles (longer means more votes). It adds "possible_answers" key in the questions list where "other" is always an (implicit) option which allows the respondent to specify a random possible answer.
 
 ## Technical Dept
 1. [x] Move prono-api to shared lib prono
@@ -35,8 +36,8 @@
 6. [x] Add coverage checker
 7. [x] Avoid asking survey responses on cursor movement etc.
 8. [x] Use Uuid for question IDs directly
-9. [ ] Use TLS for db traffic
-10. [ ] Use TLS for REST traffic
+9. ~~[x] Use TLS for db traffic~~ --> db stays on server, app connects through REST only
+10. [x] Use TLS for REST traffic
 11. [x] Read config from default location(s) so app can run from any machine
 12. [x] ~~Listen onblocked on recv from db thread~~ Update UI async (non-blocking HTTP client)
 13. [x] Create backend service package for Synology

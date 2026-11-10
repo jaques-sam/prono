@@ -31,10 +31,18 @@ impl MysqlRepo {
             .max_connections(5)
             .idle_timeout(Duration::from_secs(10))
             .connect_with(options)
-            .await?;
+            .await
+            .map_err(|err| connect_error(config, &err))?;
         info!("Connected to database at {}:{}", config.host, config.port);
         Ok(Self { pool })
     }
+}
+
+fn connect_error(config: &DbConfig, err: &sqlx::Error) -> Error {
+    Error::Repository(format!(
+        "cannot connect to the database at {}:{} (check its settings in `secure_config.toml` or `PRONO_DB_*`): {err}",
+        config.host, config.port
+    ))
 }
 
 #[async_trait]
@@ -195,5 +203,21 @@ mod tests {
             assert_eq!(from_db(text.into()), Answer::Text(text.into()), "{text}");
         }
         assert_eq!(to_db(&Answer::Text("hello".into())), "hello");
+    }
+
+    #[test]
+    fn connect_error_names_the_database() {
+        let config = DbConfig {
+            host: "db.local".into(),
+            port: 3306,
+            user: "nobody".into(),
+            pass: String::new(),
+        };
+        let message = connect_error(&config, &sqlx::Error::PoolTimedOut).to_string();
+        assert!(
+            message.contains("cannot connect to the database at db.local:3306"),
+            "{message}"
+        );
+        assert!(message.contains("pool timed out"), "{message}");
     }
 }

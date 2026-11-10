@@ -1,11 +1,11 @@
 mod rest;
 
-use std::io;
+use std::process::ExitCode;
 use std::sync::Arc;
 
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, http::header, web};
-use log::info;
+use log::{error, info};
 use prono::{DbConfig, MysqlRepo, Repo};
 
 const ADDRESS: (&str, u16) = ("0.0.0.0", 8081);
@@ -19,11 +19,20 @@ const ALLOWED_ORIGINS: &[&str] = &[
 ];
 
 #[actix_web::main]
-async fn main() -> io::Result<()> {
+async fn main() -> ExitCode {
     env_logger::init();
+    match run().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            error!("{err}");
+            ExitCode::FAILURE
+        }
+    }
+}
 
-    let config = DbConfig::load().map_err(io::Error::other)?;
-    let repo = MysqlRepo::connect(&config).await.map_err(io::Error::other)?;
+async fn run() -> Result<(), String> {
+    let config = DbConfig::load()?;
+    let repo = MysqlRepo::connect(&config).await.map_err(|err| err.to_string())?;
     let repo: web::Data<dyn Repo> = web::Data::from(Arc::new(repo) as Arc<dyn Repo>);
 
     info!("Starting backend server on {}:{}", ADDRESS.0, ADDRESS.1);
@@ -37,7 +46,9 @@ async fn main() -> io::Result<()> {
             .max_age(3600);
         App::new().wrap(cors).app_data(repo.clone()).configure(rest::routes)
     })
-    .bind(ADDRESS)?
+    .bind(ADDRESS)
+    .map_err(|err| format!("cannot listen on {}:{}: {err}", ADDRESS.0, ADDRESS.1))?
     .run()
     .await
+    .map_err(|err| err.to_string())
 }

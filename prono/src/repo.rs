@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use prono_api::{Answer, UserAnswer};
+use uuid::Uuid;
 
 use crate::Result;
 
@@ -24,10 +25,10 @@ pub trait Repo: Send + Sync {
     ///
     /// [`crate::Error::AnswerExists`] if `user` already answered one of the
     /// questions.
-    async fn save_answers(&self, user: &str, device_id: &str, answers: &[(String, Answer)]) -> Result<()>;
+    async fn save_answers(&self, user: &str, device_id: &str, answers: &[(Uuid, Answer)]) -> Result<()>;
 
     /// Every participant's answer to the question `question_id`.
-    async fn answers(&self, question_id: &str) -> Result<Vec<UserAnswer>>;
+    async fn answers(&self, question_id: Uuid) -> Result<Vec<UserAnswer>>;
 
     /// The names of all participants.
     async fn users(&self) -> Result<Vec<String>>;

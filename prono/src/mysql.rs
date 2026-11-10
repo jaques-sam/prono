@@ -5,6 +5,7 @@ use log::info;
 use prono_api::{Answer, UserAnswer};
 use sqlx::Row;
 use sqlx::mysql::{MySqlConnectOptions, MySqlPool, MySqlPoolOptions};
+use uuid::Uuid;
 
 use crate::{DbConfig, Error, Repo, Result};
 
@@ -65,7 +66,7 @@ impl Repo for MysqlRepo {
         )
     }
 
-    async fn save_answers(&self, user: &str, device_id: &str, answers: &[(String, Answer)]) -> Result<()> {
+    async fn save_answers(&self, user: &str, device_id: &str, answers: &[(Uuid, Answer)]) -> Result<()> {
         // Dropping the transaction on an early return rolls it back.
         let mut tx = self.pool.begin().await?;
 
@@ -102,14 +103,15 @@ impl Repo for MysqlRepo {
                 .bind(question_id)
                 .bind(to_db(answer))
                 .execute(&mut *tx)
-                .await?;
+                .await
+                .map_err(insert_error)?;
         }
 
         tx.commit().await?;
         Ok(())
     }
 
-    async fn answers(&self, question_id: &str) -> Result<Vec<UserAnswer>> {
+    async fn answers(&self, question_id: Uuid) -> Result<Vec<UserAnswer>> {
         let rows = sqlx::query(
             "SELECT u.user_name, ar.answer
              FROM AnswerResponse ar
@@ -144,6 +146,16 @@ impl Repo for MysqlRepo {
             .await?;
         info!("Deleted user '{user}' and their answers");
         Ok(())
+    }
+}
+
+/// The error of inserting an answer. A duplicate is caught by the `UNIQUE`
+/// key on `(user_id, question_id)` when two submissions of the same user
+/// race past the check in [`MysqlRepo::save_answers`].
+fn insert_error(err: sqlx::Error) -> Error {
+    match &err {
+        sqlx::Error::Database(db_err) if db_err.is_unique_violation() => Error::AnswerExists,
+        _ => err.into(),
     }
 }
 
@@ -203,6 +215,61 @@ mod tests {
             assert_eq!(from_db(text.into()), Answer::Text(text.into()), "{text}");
         }
         assert_eq!(to_db(&Answer::Text("hello".into())), "hello");
+    }
+
+    /// A database error of a given kind, as the driver would report it.
+    #[derive(Debug)]
+    struct FakeDbError {
+        unique_violation: bool,
+    }
+
+    impl std::fmt::Display for FakeDbError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "fake database error (unique violation: {})", self.unique_violation)
+        }
+    }
+
+    impl std::error::Error for FakeDbError {}
+
+    impl sqlx::error::DatabaseError for FakeDbError {
+        fn message(&self) -> &'static str {
+            "fake database error"
+        }
+
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
+
+        fn kind(&self) -> sqlx::error::ErrorKind {
+            if self.unique_violation {
+                sqlx::error::ErrorKind::UniqueViolation
+            } else {
+                sqlx::error::ErrorKind::Other
+            }
+        }
+    }
+
+    #[test]
+    fn duplicate_insert_means_answer_exists() {
+        let duplicate = sqlx::Error::Database(Box::new(FakeDbError { unique_violation: true }));
+        assert_eq!(insert_error(duplicate), Error::AnswerExists);
+    }
+
+    #[test]
+    fn other_insert_failures_stay_repository_errors() {
+        let other_db = sqlx::Error::Database(Box::new(FakeDbError {
+            unique_violation: false,
+        }));
+        assert!(matches!(insert_error(other_db), Error::Repository(_)));
+        assert!(matches!(insert_error(sqlx::Error::PoolTimedOut), Error::Repository(_)));
     }
 
     #[test]

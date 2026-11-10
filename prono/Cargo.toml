@@ -12,9 +12,10 @@ async-trait = "0.1.92"
 dirs = "6.0.0"
 log = "0.4.35"
 serde = { version = "1.0.229", features = ["derive"] }
-sqlx = { version = "0.8.6", default-features = false, features = ["mysql", "runtime-tokio"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["mysql", "runtime-tokio", "uuid"] }
 thiserror = "2.0.21"
 toml = "0.9.12"
+uuid = "1.29.2"
 
 [dev-dependencies]
 tokio = { version = "1.54.1", features = ["macros", "rt"] }

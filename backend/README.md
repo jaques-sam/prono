@@ -69,27 +69,9 @@ A MariaDB/MySQL database named `db_prono`. Log in with:
 mysql db_prono -vh ${HOST} -P ${PORT} -u ${USER} -p --connect-timeout=2
 ```
 
-and create the tables once:
+and create the tables once with `install/schema.sql`.
 
-```sql
-CREATE TABLE Users (
-    user_id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_name TEXT NOT NULL,
-    email TEXT,
-    device_id VARCHAR(255) NOT NULL UNIQUE,
-    INDEX idx_user_name (user_name(255))
-);
-
-CREATE TABLE AnswerResponse (
-    user_id BIGINT NOT NULL,
-    question_id TEXT NOT NULL,
-    answer TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
-    INDEX idx_question (question_id(255)),
-    INDEX idx_user_question (user_id, question_id(255))
-);
-```
-
+Question ids are UUIDs, stored in `AnswerResponse.question_id` as `BINARY(16)` (`HEX(question_id)` shows them in a `mysql` session).
 Answers are stored as text: `DD/MM/YYYY` for dates (`00` when there is no day), the text itself otherwise.
 
 

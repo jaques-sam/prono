@@ -28,10 +28,10 @@
 5. [x] Add unit tests (especially for operations right before db)
 6. [x] Add coverage checker
 7. [x] Avoid asking survey responses on cursor movement etc.
-8. [ ] Use Uuid for question IDs directly
+8. [x] Use Uuid for question IDs directly
 9. [ ] Use TLS for db traffic
 10. [ ] Use TLS for REST traffic
 11. [x] Read config from default location(s) so app can run from any machine
 12. [x] ~~Listen onblocked on recv from db thread~~ Update UI async (non-blocking HTTP client)
 13. [x] Create backend service package for Synology
-14. [ ] Add a `UNIQUE (user_id, question_id)` constraint on `AnswerResponse`
+14. [x] Add a `UNIQUE (user_id, question_id)` constraint on `AnswerResponse` (`backend/install/schema.sql`)

@@ -17,8 +17,14 @@
 13. [x] Restrict users for filling in (twice)
 14. [x] Check when typing if user already exists/filld in survey, show warning
 15. [x] Show errors over the UI
-16. [ ] Add user verification (pass phrase?/is human?)
-17. [ ] Table as output
+16. [ ] Add different user verification methods linking to the specific survey
+  17. [ ] a given pass phrase given by me
+  18. [ ] on given surname + first name (list of names given by me)
+  18. [ ] is human (captcha?)
+  19. [ ] login via
+    20. [ ] Apple account
+    21. [ ] Google account
+    22. [ ] GitHub account
 
 ## Technical Dept
 1. [x] Move prono-api to shared lib prono

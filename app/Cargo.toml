@@ -36,3 +36,16 @@ uuid = { version = "1", features = ["v4"] }
 wasm-bindgen-futures = "0.4.80"
 web-sys = "0.3.107"
 uuid = { version = "1", features = ["v4", "js"] }
+
+[dev-dependencies]
+prono = { path = "../prono" }
+
+cucumber = "0.23.0"
+egui_kittest = "0.36.2"
+futures = { version = "0.3.34", default-features = false, features = ["executor"] }
+
+# UI component tests: Gherkin scenarios driving the egui UI headlessly.
+[[test]]
+name = "ui"
+path = "tests/ui/main.rs"
+harness = false

@@ -1,14 +1,10 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-mod client;
 mod device;
-mod state;
-mod timeline;
-mod ui;
 
-use client::HttpBackend;
-use state::State;
+use prono_app::client::{self, HttpBackend};
+use prono_app::state::State;
 
 struct App {
     state: State,
@@ -33,10 +29,7 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.state.poll(&self.backend);
-        if let Some(action) = ui::show(ui, &mut self.state) {
-            self.state.apply(action, &self.backend);
-        }
+        prono_app::frame(ui, &mut self.state, &self.backend);
     }
 }
 

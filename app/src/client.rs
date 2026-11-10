@@ -18,12 +18,12 @@ pub trait Backend {
 pub struct Pending<T>(Arc<Mutex<Option<Result<T, String>>>>);
 
 impl<T> Pending<T> {
-    #[cfg(test)]
+    /// A request that already finished with `result`, for fakes.
     pub fn ready(result: Result<T, String>) -> Self {
         Self(Arc::new(Mutex::new(Some(result))))
     }
 
-    #[cfg(test)]
+    /// A request that never finishes, for fakes.
     pub fn never() -> Self {
         Self(Arc::default())
     }

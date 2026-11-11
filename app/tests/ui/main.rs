@@ -15,9 +15,16 @@ use cucumber::World as _;
 use world::World;
 
 fn main() {
-    futures::executor::block_on(
-        World::cucumber()
-            .fail_on_skipped()
-            .run_and_exit(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/features")),
-    );
+    futures::executor::block_on(World::cucumber().fail_on_skipped().filter_run_and_exit(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/features"),
+        |_, _, scenario| {
+            // Resetting answers is a development feature, off in release builds.
+            let skipped = if cfg!(debug_assertions) {
+                "release-only"
+            } else {
+                "debug-only"
+            };
+            !scenario.tags.iter().any(|tag| tag == skipped)
+        },
+    ));
 }

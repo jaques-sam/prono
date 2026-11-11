@@ -40,7 +40,7 @@ flowchart TB
 | `prono` | Server-side core: the use cases (`upload_survey`, `submit`, `results`, `scores`), the `Repo` trait with its MySQL and in-memory implementations, and the database config. |
 | `backend` | `actix-web` REST server around `prono`. |
 | `app` | egui app for desktop and web. Both talk to the backend over REST; the UI only draws a small state machine (`app/src/state.rs`). |
-| `cli` | Admin tool on top of `prono`. |
+| `cli` | Admin tool on top of `prono`: a menu to navigate, or commands for scripts. |
 
 There is one definition of each survey type (in `prono_api`), and the rules
 live there too, so the app checks a submission with exactly the code the

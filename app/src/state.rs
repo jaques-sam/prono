@@ -12,10 +12,10 @@ pub enum Phase {
     /// Entering a name and picking a survey.
     #[default]
     Start,
-    /// Filling in a survey; `answers` follow the survey's question order.
-    Answering { survey_id: u64, answers: Vec<Answer> },
-    /// Submitted; showing everyone's answers.
-    Done { survey_id: u64 },
+    /// Filling in `survey`; `answers` follow its question order.
+    Answering { survey: Survey, answers: Vec<Answer> },
+    /// Submitted `survey`; showing everyone's answers.
+    Done { survey: Survey },
 }
 
 /// Something the participant asked for in the UI.
@@ -32,7 +32,7 @@ pub enum Action {
 }
 
 /// The surveys the start screen offers.
-pub enum SurveyList {
+pub enum SurveyList<'a> {
     /// There is no valid first and last name yet.
     NeedName,
     /// The backend has not told yet which surveys the name may answer.
@@ -40,8 +40,8 @@ pub enum SurveyList {
     /// The backend could not tell; the error is in [`State::error`]. Changing
     /// the name asks again.
     Failed,
-    /// The surveys the name may answer, in catalog order.
-    Ready(Vec<&'static Survey>),
+    /// The surveys the name may answer, by id.
+    Ready(&'a [Survey]),
 }
 
 /// The app's state and flow, without any drawing: the UI shows it, edits the
@@ -96,16 +96,16 @@ struct NameCheck {
 }
 
 impl State {
-    /// Drops restored state that no longer fits the survey catalog.
+    /// Drops restored state whose answers do not fit their survey. A survey
+    /// that changed on the backend since is only found out when submitting.
     #[must_use]
     pub fn restored(mut self) -> Self {
         let fits = match &self.phase {
-            Phase::Start => true,
-            Phase::Answering { survey_id, answers } => prono_api::survey(*survey_id).is_some_and(|survey| {
+            Phase::Start | Phase::Done { .. } => true,
+            Phase::Answering { survey, answers } => {
                 survey.questions.len() == answers.len()
                     && survey.questions.iter().zip(answers).all(|(q, a)| q.kind == a.kind())
-            }),
-            Phase::Done { survey_id } => prono_api::survey(*survey_id).is_some(),
+            }
         };
         if !fits {
             self.phase = Phase::Start;
@@ -114,10 +114,10 @@ impl State {
     }
 
     /// The survey being answered or shown, if any.
-    pub fn survey(&self) -> Option<&'static Survey> {
-        match self.phase {
+    pub fn survey(&self) -> Option<&Survey> {
+        match &self.phase {
             Phase::Start => None,
-            Phase::Answering { survey_id, .. } | Phase::Done { survey_id } => prono_api::survey(survey_id),
+            Phase::Answering { survey, .. } | Phase::Done { survey } => Some(survey),
         }
     }
 
@@ -139,8 +139,7 @@ impl State {
         match action {
             Action::StartSurvey(survey_id) => self.start(survey_id, backend),
             Action::ResetAnswers => {
-                let survey = self.survey();
-                if let (Phase::Answering { answers, .. }, Some(survey)) = (&mut self.phase, survey) {
+                if let Phase::Answering { survey, answers } = &mut self.phase {
                     *answers = survey.empty_answers();
                 }
             }
@@ -173,13 +172,14 @@ impl State {
         match self.request.take() {
             Some(Request::Submit(pending)) => match pending.take() {
                 None => self.request = Some(Request::Submit(pending)),
-                Some(Ok(())) => {
-                    if let Phase::Answering { survey_id, .. } = self.phase {
-                        self.phase = Phase::Done { survey_id };
+                Some(Ok(())) => match std::mem::take(&mut self.phase) {
+                    Phase::Answering { survey, .. } => {
+                        self.phase = Phase::Done { survey };
                         self.results = None;
                         self.mark_answered();
                     }
-                }
+                    other => self.phase = other,
+                },
                 Some(Err(err)) => self.error = Some(err),
             },
             Some(Request::Results(pending)) => match pending.take() {
@@ -191,12 +191,12 @@ impl State {
         }
 
         // After an error, wait until it is dismissed before retrying.
-        if let Phase::Done { survey_id } = self.phase
+        if let Phase::Done { survey } = &self.phase
             && self.results.is_none()
             && self.request.is_none()
             && self.error.is_none()
         {
-            self.request = Some(Request::Results(backend.results(survey_id)));
+            self.request = Some(Request::Results(backend.results(survey.id)));
         }
     }
 
@@ -220,8 +220,7 @@ impl State {
             self.refill = Some(refill);
             return;
         };
-        let survey = self.survey();
-        let (Phase::Answering { answers, .. }, Some(survey), Ok(results)) = (&mut self.phase, survey, found) else {
+        let (Phase::Answering { survey, answers }, Ok(results)) = (&mut self.phase, found) else {
             return;
         };
         // Answers the participant has already changed are theirs to keep.
@@ -301,25 +300,20 @@ impl State {
 
     /// The surveys the start screen offers: none before there is a valid
     /// name the backend answered for.
-    pub fn survey_list(&self) -> SurveyList {
+    pub fn survey_list(&self) -> SurveyList<'_> {
         let Ok(name) = self.full_name() else {
             return SurveyList::NeedName;
         };
         match &self.name_check.answer {
-            Some((asked, Some(status))) if *asked == name => SurveyList::Ready(
-                prono_api::surveys()
-                    .iter()
-                    .filter(|survey| status.surveys.contains(&survey.id))
-                    .collect(),
-            ),
+            Some((asked, Some(status))) if *asked == name => SurveyList::Ready(&status.surveys),
             Some((asked, None)) if *asked == name => SurveyList::Failed,
             _ => SurveyList::Waiting,
         }
     }
 
-    /// The surveys the typed name may answer, in catalog order; `None` while
-    /// that is not known.
-    pub fn available_surveys(&self) -> Option<Vec<&'static Survey>> {
+    /// The surveys the typed name may answer, by id; `None` while that is
+    /// not known.
+    pub fn available_surveys(&self) -> Option<&[Survey]> {
         match self.survey_list() {
             SurveyList::Ready(surveys) => Some(surveys),
             _ => None,
@@ -334,8 +328,11 @@ impl State {
                 return;
             }
         };
-        let available = self.available_surveys().unwrap_or_default();
-        if let Some(survey) = available.into_iter().find(|survey| survey.id == survey_id) {
+        let survey = self
+            .available_surveys()
+            .and_then(|surveys| surveys.iter().find(|survey| survey.id == survey_id))
+            .cloned();
+        if let Some(survey) = survey {
             // Everyone's answers are public, so a returning participant's
             // are found among them: no endpoint of their own is needed.
             self.refill = Some(Refill {
@@ -344,8 +341,8 @@ impl State {
             });
             self.error = None;
             self.phase = Phase::Answering {
-                survey_id,
                 answers: survey.empty_answers(),
+                survey,
             };
         } else {
             self.error = Some("This survey is not available for you".into());
@@ -353,7 +350,7 @@ impl State {
     }
 
     fn submit(&mut self, backend: &impl Backend) {
-        let (Phase::Answering { survey_id, answers }, Some(survey)) = (&self.phase, self.survey()) else {
+        let Phase::Answering { survey, answers } = &self.phase else {
             return;
         };
         if self.is_busy() {
@@ -370,7 +367,7 @@ impl State {
         match submission.validate(survey) {
             Ok(()) => {
                 self.error = None;
-                self.request = Some(Request::Submit(backend.submit(*survey_id, &submission)));
+                self.request = Some(Request::Submit(backend.submit(survey.id, &submission)));
             }
             Err(err) => self.error = Some(err.to_string()),
         }
@@ -392,13 +389,23 @@ impl State {
 mod tests {
     use std::cell::{Cell, RefCell};
 
-    use prono_api::{AnswerKind, Question, UserAnswer};
+    use prono_api::{AnswerKind, Question, UserAnswer, samples};
 
     use super::*;
 
+    /// The survey with a pass phrase.
     const SURVEY_ID: u64 = 1;
     /// The survey that only a name list may answer.
     const LISTED_ID: u64 = 2;
+
+    /// The sample survey `id`.
+    fn sample(id: u64) -> Survey {
+        match id {
+            SURVEY_ID => samples::starship(),
+            LISTED_ID => samples::course(),
+            _ => panic!("no sample survey {id}"),
+        }
+    }
 
     /// Answers requests immediately with `submit_result`, or never if `None`.
     struct FakeBackend {
@@ -412,10 +419,11 @@ mod tests {
         results_answer: Option<Result<Results, String>>,
     }
 
+    /// A status offering the sample surveys with the given ids.
     fn status(answered: bool, surveys: &[u64]) -> UserStatus {
         UserStatus {
             answered,
-            surveys: surveys.to_vec(),
+            surveys: surveys.iter().map(|id| sample(*id)).collect(),
         }
     }
 
@@ -496,7 +504,7 @@ mod tests {
         state
     }
 
-    fn ids(surveys: Option<Vec<&Survey>>) -> Option<Vec<u64>> {
+    fn ids(surveys: Option<&[Survey]>) -> Option<Vec<u64>> {
         surveys.map(|surveys| surveys.iter().map(|survey| survey.id).collect())
     }
 
@@ -532,11 +540,11 @@ mod tests {
     #[test]
     fn starting_shows_blank_answers() {
         let state = answering("Sam Smith");
-        let Phase::Answering { survey_id, answers } = &state.phase else {
+        let Phase::Answering { survey, answers } = &state.phase else {
             panic!("not answering");
         };
-        assert_eq!(*survey_id, SURVEY_ID);
-        assert_eq!(*answers, prono_api::survey(SURVEY_ID).unwrap().empty_answers());
+        assert_eq!(survey.id, SURVEY_ID);
+        assert_eq!(*answers, sample(SURVEY_ID).empty_answers());
     }
 
     #[test]
@@ -573,13 +581,6 @@ mod tests {
         assert_eq!(
             ids(known("Sam Smith", &open_only).available_surveys()),
             Some(vec![SURVEY_ID])
-        );
-
-        // In catalog order, whatever the order of the answer.
-        let reversed = FakeBackend::new(None).with_name_answer(Some(Ok(status(false, &[LISTED_ID, SURVEY_ID]))));
-        assert_eq!(
-            ids(known("Sam Smith", &reversed).available_surveys()),
-            Some(vec![SURVEY_ID, LISTED_ID])
         );
 
         let none = FakeBackend::new(None).with_name_answer(Some(Ok(status(false, &[]))));
@@ -630,7 +631,7 @@ mod tests {
         let Phase::Answering { answers, .. } = &state.phase else {
             panic!("not answering");
         };
-        assert_eq!(*answers, prono_api::survey(SURVEY_ID).unwrap().empty_answers());
+        assert_eq!(*answers, sample(SURVEY_ID).empty_answers());
     }
 
     #[test]
@@ -642,7 +643,7 @@ mod tests {
         assert_eq!(backend.submissions.borrow()[0].user, "Sam Smith");
 
         state.poll(&backend); // submit done, results requested
-        assert!(matches!(state.phase, Phase::Done { survey_id: SURVEY_ID }));
+        assert!(matches!(&state.phase, Phase::Done { survey } if survey.id == SURVEY_ID));
         state.poll(&backend); // results arrived
         assert_eq!(state.results, Some(Results::new()));
         assert!(!state.is_busy());
@@ -692,7 +693,9 @@ mod tests {
             first_name: "Sam".into(),
             last_name: "Smith".into(),
             pass_phrase: "secret".into(),
-            phase: Phase::Done { survey_id: SURVEY_ID },
+            phase: Phase::Done {
+                survey: sample(SURVEY_ID),
+            },
             results: Some(Results::new()),
             ..State::default()
         };
@@ -704,24 +707,43 @@ mod tests {
     }
 
     #[test]
-    fn restored_state_must_fit_the_catalog() {
-        let unknown = State {
-            phase: Phase::Done { survey_id: 999 },
-            ..State::default()
-        };
-        assert!(matches!(unknown.restored().phase, Phase::Start));
-
+    fn restored_answers_must_fit_their_survey() {
         let stale_answers = State {
             phase: Phase::Answering {
-                survey_id: SURVEY_ID,
+                survey: sample(SURVEY_ID),
                 answers: vec![Answer::Text("old".into())],
             },
             ..State::default()
         };
         assert!(matches!(stale_answers.restored().phase, Phase::Start));
 
+        let wrong_kind = State {
+            phase: Phase::Answering {
+                survey: sample(SURVEY_ID),
+                answers: vec![Answer::Text("old".into()); 4],
+            },
+            ..State::default()
+        };
+        assert!(matches!(wrong_kind.restored().phase, Phase::Start));
+
         let valid = answering("Sam Smith").restored();
         assert!(matches!(valid.phase, Phase::Answering { .. }));
+        let done = State {
+            phase: Phase::Done {
+                survey: sample(SURVEY_ID),
+            },
+            ..State::default()
+        };
+        assert!(matches!(done.restored().phase, Phase::Done { .. }));
+    }
+
+    #[test]
+    fn the_phase_survives_persisting() {
+        let state = answering("Sam Smith");
+        let json = serde_json::to_string(&state).unwrap();
+        let restored: State = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.survey(), state.survey());
+        assert!(matches!(restored.restored().phase, Phase::Answering { .. }));
     }
 
     #[test]
@@ -894,15 +916,18 @@ mod tests {
             Some("open sesame")
         );
         assert_eq!(submit(Access::PassPhrase, "  "), None);
-        assert_eq!(submit(Access::Open, "open sesame"), None);
         assert_eq!(submit(Access::NameList, "open sesame"), None);
     }
 
     #[test]
-    fn submitting_a_catalog_survey_sends_no_pass_phrase() {
+    fn submitting_a_name_list_survey_sends_no_pass_phrase() {
         let backend = FakeBackend::new(None);
-        let mut state = answering("Sam Smith");
+        let mut state = known("Sam Smith", &backend);
+        state.apply(Action::StartSurvey(LISTED_ID), &backend);
         state.pass_phrase = "left over".into();
+        if let Phase::Answering { answers, .. } = &mut state.phase {
+            *answers = vec![Answer::Poll("C".into()), Answer::Poll("Of course!".into())];
+        }
         state.apply(Action::Submit, &backend);
         assert_eq!(backend.submissions.borrow()[0].pass_phrase, None);
     }
@@ -913,8 +938,7 @@ mod tests {
 
     /// Everyone's results where `user` predicted `month`/`year` everywhere.
     fn results_of(user: &str, month: u8, year: u16) -> Results {
-        prono_api::survey(SURVEY_ID)
-            .unwrap()
+        sample(SURVEY_ID)
             .questions
             .iter()
             .map(|question| {
@@ -944,10 +968,7 @@ mod tests {
     fn earlier_answers_refill_the_questions() {
         let backend = FakeBackend::new(None).with_results(Some(Ok(results_of("Sam Smith", 4, 2033))));
         let mut state = started(" Sam  Smith ", &backend);
-        assert_eq!(
-            answers_of(&state),
-            prono_api::survey(SURVEY_ID).unwrap().empty_answers()
-        );
+        assert_eq!(answers_of(&state), sample(SURVEY_ID).empty_answers());
 
         state.poll(&backend);
         assert!(answers_of(&state).iter().all(|answer| *answer == date(4, 2033)));
@@ -960,10 +981,7 @@ mod tests {
         let backend = FakeBackend::new(None).with_results(Some(Ok(results_of("Bob Brown", 4, 2033))));
         let mut state = started("Sam Smith", &backend);
         state.poll(&backend);
-        assert_eq!(
-            answers_of(&state),
-            prono_api::survey(SURVEY_ID).unwrap().empty_answers()
-        );
+        assert_eq!(answers_of(&state), sample(SURVEY_ID).empty_answers());
     }
 
     #[test]
@@ -990,10 +1008,7 @@ mod tests {
         let backend = FakeBackend::new(None).with_results(Some(Err("Cannot reach the server".into())));
         let mut state = started("Sam Smith", &backend);
         state.poll(&backend);
-        assert_eq!(
-            answers_of(&state),
-            prono_api::survey(SURVEY_ID).unwrap().empty_answers()
-        );
+        assert_eq!(answers_of(&state), sample(SURVEY_ID).empty_answers());
         assert!(state.error.is_none());
     }
 

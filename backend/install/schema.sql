@@ -19,6 +19,13 @@ CREATE TABLE IF NOT EXISTS AnswerResponse (
     UNIQUE KEY uq_user_question (user_id, question_id)
 );
 
+-- The surveys: their JSON definitions, see `api/src/definition.rs`. Uploaded
+-- with `prono-cli surveys upload`; there are no surveys until one is.
+CREATE TABLE IF NOT EXISTS Survey (
+    survey_id BIGINT UNSIGNED PRIMARY KEY,
+    definition MEDIUMTEXT NOT NULL
+);
+
 -- Who may answer a survey with `"access": "name_list"`. Filled with
 -- `prono-cli access allow`; a participant matches when `first_name`, a space
 -- and `last_name` equal their name, ignoring case.

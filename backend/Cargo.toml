@@ -24,4 +24,6 @@ log = "0.4"
 thiserror = "2.0.21"
 
 [dev-dependencies]
+prono_api = { path = "../api", features = ["samples"] }
+
 serde_json = "1.0.154"

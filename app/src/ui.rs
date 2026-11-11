@@ -34,14 +34,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
 
             let busy = state.is_busy();
             let warning = state.name_warning();
-            let survey = state.survey();
             let user = prono_api::full_name(&state.first_name, &state.last_name);
-            let phase_action = match (&mut state.phase, survey) {
-                (Phase::Answering { answers, .. }, Some(survey)) => {
-                    answering(ui, survey, answers, &mut state.pass_phrase, busy)
-                }
-                (Phase::Done { .. }, Some(survey)) => done(ui, survey, &user, state.results.as_ref()),
-                _ => start(ui, state, warning.as_deref()),
+            let phase_action = match &mut state.phase {
+                Phase::Answering { survey, answers } => answering(ui, survey, answers, &mut state.pass_phrase, busy),
+                Phase::Done { survey } => done(ui, survey, &user, state.results.as_ref()),
+                Phase::Start => start(ui, state, warning.as_deref()),
             };
             if !matches!(state.phase, Phase::Answering { .. }) {
                 poll::forget_other(ui.ctx());
@@ -96,7 +93,7 @@ fn start(ui: &mut egui::Ui, state: &mut State, warning: Option<&str>) -> Option<
             ui.label("Your surveys could not be loaded. Change your name to try again.");
             None
         }
-        SurveyList::Ready(surveys) if surveys.is_empty() => {
+        SurveyList::Ready([]) => {
             ui.label("No surveys are available for you.");
             None
         }

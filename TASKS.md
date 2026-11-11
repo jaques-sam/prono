@@ -26,7 +26,9 @@
     21. [ ] Google account
     22. [ ] GitHub account
 23. [x] Support a poll (bullet list) as anwser type, where the results are shown with rectangles (longer means more votes). It adds "possible_answers" key in the questions list where "other" is always an (implicit) option which allows the respondent to specify a random possible answer.
-24. [ ] Make an interactive prono-cli with navigation
+24. [x] Make it possible to upload a new surveys, they should not be embedded in the binary any more, put them in a fixed location
+25. [ ] Make it possible to add scores to a survey, in that case all questions should have a correct answer
+26. [ ] Make an interactive prono-cli with navigation
 
 ## Technical Dept
 1. [x] Move prono-api to shared lib prono

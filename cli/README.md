@@ -11,6 +11,10 @@ The cli app is meant for the administrator only.
 
 It has the following functionality:
 
+- surveys (stored in table `Survey`, the backend and the apps get them from there):
+  - `surveys list`
+  - `surveys upload <file>`: upload a survey definition, see [Adding a questionnaire](../README.md#adding-a-questionnaire);
+    it replaces the survey with the same id
 - users:
   - show all
   - delete one

@@ -29,7 +29,7 @@ async fn get_answers(repo: web::Data<dyn Repo>, survey_id: web::Path<u64>) -> Re
 }
 
 /// What the app may know about the user `name`: a JSON [`prono_api::UserStatus`]
-/// (whether they already filled in a survey, and which surveys they may
+/// (whether they already filled in a survey, and the surveys they may
 /// answer), and nothing more. Same API key and device id as a submission.
 #[get("/api/users/{name}")]
 async fn get_user(
@@ -72,7 +72,7 @@ impl ResponseError for ApiError {
             ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
             ApiError::MissingDeviceId => StatusCode::BAD_REQUEST,
             ApiError::Prono(err) => match err {
-                Error::Invalid(_) | Error::InvalidDeviceId => StatusCode::BAD_REQUEST,
+                Error::Invalid(_) | Error::InvalidDeviceId | Error::InvalidSurvey(_) => StatusCode::BAD_REQUEST,
                 Error::DeviceMismatch | Error::DeviceInUse | Error::NotListed | Error::WrongPassPhrase => {
                     StatusCode::FORBIDDEN
                 }
@@ -100,15 +100,17 @@ mod tests {
 
     use actix_web::{App, test as actix_test};
     use prono::MemoryRepo;
-    use prono_api::{Answer, Results, UserStatus};
+    use prono_api::{Answer, Results, UserStatus, samples};
 
     use super::*;
 
+    /// The survey with a pass phrase.
     const SURVEY_ID: u64 = 1;
+    const PASS_PHRASE: &str = "open sesame";
 
     fn submission(user: &str) -> Submission {
-        let survey = prono_api::survey(SURVEY_ID).unwrap();
-        Submission::new(user, survey, &survey.empty_answers())
+        let survey = samples::starship();
+        Submission::new(user, &survey, &survey.empty_answers()).with_pass_phrase(PASS_PHRASE)
     }
 
     fn post(survey_id: u64, device_id: Option<&str>, key: &str, body: &Submission) -> actix_test::TestRequest {
@@ -125,7 +127,9 @@ mod tests {
     /// Sends each request in turn to one backend and returns the statuses
     /// and the last response body.
     async fn run(requests: Vec<actix_test::TestRequest>) -> (Vec<StatusCode>, String) {
-        let repo: web::Data<dyn Repo> = web::Data::from(Arc::new(MemoryRepo::default()) as Arc<dyn Repo>);
+        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON]);
+        repo.set_pass_phrase(SURVEY_ID, PASS_PHRASE).await.unwrap();
+        let repo: web::Data<dyn Repo> = web::Data::from(Arc::new(repo) as Arc<dyn Repo>);
         let app = actix_test::init_service(App::new().app_data(repo).configure(routes)).await;
         let mut statuses = Vec::new();
         let mut body = String::new();
@@ -147,7 +151,7 @@ mod tests {
         assert_eq!(statuses, [StatusCode::OK, StatusCode::OK]);
 
         let results: Results = serde_json::from_str(&body).unwrap();
-        let survey = prono_api::survey(SURVEY_ID).unwrap();
+        let survey = samples::starship();
         let first = &results[&survey.questions[0].id];
         assert_eq!(first.len(), 1);
         assert_eq!(first[0].user, "alice");
@@ -219,13 +223,10 @@ mod tests {
         assert_eq!(statuses, [StatusCode::OK; 3]);
         let status: UserStatus = serde_json::from_str(&body).unwrap();
         // The name list survey is not offered to an unlisted name.
-        assert_eq!(
-            status,
-            UserStatus {
-                answered: true,
-                surveys: vec![SURVEY_ID]
-            }
-        );
+        assert!(status.answered);
+        let ids: Vec<_> = status.surveys.iter().map(|survey| survey.id).collect();
+        assert_eq!(ids, [SURVEY_ID]);
+        assert_eq!(status.surveys[0], samples::starship());
 
         let (_, body) = run(vec![get_user("alice", Some("dev-2"), API_KEY)]).await;
         assert!(!serde_json::from_str::<UserStatus>(&body).unwrap().answered);
@@ -233,7 +234,7 @@ mod tests {
 
     #[actix_web::test]
     async fn unlisted_name_cannot_answer_a_name_list_survey() {
-        let survey = prono_api::survey(2).unwrap();
+        let survey = samples::course();
         let answers: Vec<_> = survey
             .questions
             .iter()
@@ -243,11 +244,20 @@ mod tests {
             survey.id,
             Some("dev-1"),
             API_KEY,
-            &Submission::new("Ada Lovelace", survey, &answers),
+            &Submission::new("Ada Lovelace", &survey, &answers),
         )])
         .await;
         assert_eq!(statuses, [StatusCode::FORBIDDEN]);
         assert_eq!(body, "\"You are not on the list for this survey\"");
+    }
+
+    #[actix_web::test]
+    async fn wrong_pass_phrase_is_forbidden() {
+        let survey = samples::starship();
+        let wrong = Submission::new("alice", &survey, &survey.empty_answers()).with_pass_phrase("nope");
+        let (statuses, body) = run(vec![post(SURVEY_ID, Some("dev-1"), API_KEY, &wrong)]).await;
+        assert_eq!(statuses, [StatusCode::FORBIDDEN]);
+        assert_eq!(body, "\"Wrong pass phrase\"");
     }
 
     #[actix_web::test]

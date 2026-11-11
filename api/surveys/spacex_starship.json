@@ -2,6 +2,7 @@
     "survey_id": 1,
     "description": "SpaceX Starship achievements survey",
     "link": "https://www.spacex.com",
+    "access": "pass_phrase",
     "questions": [
         {
             "question": "First cargo only Moon landing",

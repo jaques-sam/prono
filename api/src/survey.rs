@@ -12,8 +12,9 @@ pub const MAX_USER_NAME_LEN: usize = 64;
 /// Longest accepted text answer, in characters.
 pub const MAX_TEXT_ANSWER_LEN: usize = 1000;
 
-/// A questionnaire, loaded from the survey catalog.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A questionnaire, uploaded to the backend as a JSON definition (see
+/// [`Survey::from_json`]) and sent from there to the app.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Survey {
     pub id: u64,
     pub description: String,
@@ -22,24 +23,22 @@ pub struct Survey {
     pub questions: Vec<Question>,
 }
 
-/// Who may answer a survey. Enforced by the backend when answers are
-/// submitted; the secrets (the pass phrase, the names on the list) live in
-/// its database only, never in the catalog shipped with the app.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+/// Who may answer a survey. Every survey has one: nobody gets in without
+/// giving something. Enforced by the backend when answers are submitted; the
+/// secrets (the pass phrase, the names on the list) live in its database
+/// only, never in the survey definition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Access {
-    /// Anyone who gave a name.
-    #[default]
-    Open,
     /// Whoever knows the survey's pass phrase, see [`Submission::pass_phrase`].
     PassPhrase,
     /// Only the participants on the survey's name list.
     NameList,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Question {
-    /// Derived from the question text and answer kind, see `catalog`.
+    /// Derived from the question text and answer kind, see `definition`.
     pub id: Uuid,
     pub text: String,
     pub kind: AnswerKind,
@@ -49,7 +48,7 @@ pub struct Question {
 }
 
 /// What kind of answer a question expects.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AnswerKind {
     Text,
@@ -100,8 +99,8 @@ pub struct Submission {
 pub struct UserStatus {
     /// Whether the name already filled in a survey.
     pub answered: bool,
-    /// The ids of the surveys the participant may answer.
-    pub surveys: Vec<u64>,
+    /// The surveys the participant may answer, by id.
+    pub surveys: Vec<Survey>,
 }
 
 /// One participant's answer to a question.
@@ -318,7 +317,7 @@ mod tests {
             id: 7,
             description: "Test".into(),
             link: None,
-            access: Access::Open,
+            access: Access::PassPhrase,
             questions: vec![
                 Question {
                     id: Q1,

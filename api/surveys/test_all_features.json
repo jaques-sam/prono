@@ -1,0 +1,46 @@
+{
+    "survey_id": 3,
+    "description": "Test survey using every feature: all answer types, a link, an access rule and correct answers (a scored survey)",
+    "link": "https://jaques-sam.github.io/prono/",
+    "access": "pass_phrase",
+    "questions": [
+        {
+            "question": "When will the first crewed Mars landing happen?",
+            "answer_type": "prediction_date",
+            "correct_answer": { "month": 7, "year": 2031 }
+        },
+        {
+            "question": "When will fusion power first feed a public grid?",
+            "answer_type": "prediction_date",
+            "correct_answer": { "month": 1, "year": 2040 }
+        },
+        {
+            "question": "Which language is this app written in?",
+            "answer_type": "text",
+            "correct_answer": "Rust"
+        },
+        {
+            "question": "Name a framework that renders on desktop and web 🌍",
+            "answer_type": "text",
+            "correct_answer": "egui"
+        },
+        {
+            "question": "Which planet is the largest?",
+            "answer_type": "poll",
+            "possible_answers": ["Mercury", "Earth", "Jupiter", "Saturn"],
+            "correct_answer": "Jupiter"
+        },
+        {
+            "question": "Is Pluto a planet?",
+            "answer_type": "poll",
+            "possible_answers": ["Yes", "No"],
+            "correct_answer": "No"
+        },
+        {
+            "question": "What is your favourite pizza topping?",
+            "answer_type": "poll",
+            "possible_answers": ["Margherita 🍅", "Pepperoni", "Funghi", "Hawaii 🍍", "Quattro formaggi", "None, I don't like pizza 😪"],
+            "correct_answer": "Margherita 🍅"
+        }
+    ]
+}

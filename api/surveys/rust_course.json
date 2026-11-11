@@ -1,21 +1,28 @@
 {
-    "survey_id": 2,
-    "description": "You were chosen to follow a splendid course...",
-    "access": "name_list",
-    "questions": [
-        {
-            "question": "What is your background",
-            "answer_type": "poll",
-            "possible_answers": [
-              "C", "C++"
-            ]
-        },
-        {
-            "question": "I come to the course!",
-            "answer_type": "poll",
-            "possible_answers": [
-              "Of course!", "I can't make it 😪"
-            ]
-        }
-    ]
+  "survey_id": 2,
+  "description": "You were chosen to follow a splendid course...",
+  "access": "name_list",
+  "questions": [
+    {
+      "question": "What is your background",
+      "answer_type": "poll",
+      "possible_answers": ["C", "C++"]
+    },
+    {
+      "question": "I come to the course!",
+      "answer_type": "poll",
+      "possible_answers": ["Of course!", "I can't make it 😪"],
+      "other_label": "Other, specify:"
+    },
+    {
+      "question": "Do you have any diatery requirements or allergies?",
+      "answer_type": "poll",
+      "possible_answers": ["no"],
+      "other_label": "yes, specify:"
+    },
+    {
+      "question": "Other requests or questions?",
+      "answer_type": "text"
+    }
+  ]
 }

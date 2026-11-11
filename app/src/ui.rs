@@ -29,23 +29,57 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
 
     egui::CentralPanel::default()
         .show(ui, |ui| {
-            ui.heading("Prono");
-            let error_action = state.error.as_deref().and_then(|error| error_banner(ui, error));
+            card(ui, |ui| {
+                ui.heading("Prono");
+                let error_action = state.error.as_deref().and_then(|error| error_banner(ui, error));
 
-            let busy = state.is_busy();
-            let warning = state.name_warning();
-            let user = prono_api::full_name(&state.first_name, &state.last_name);
-            let phase_action = match &mut state.phase {
-                Phase::Answering { survey, answers } => answering(ui, survey, answers, busy),
-                Phase::Done { survey } => done(ui, survey, &user, state.results.as_ref(), state.scores.as_deref()),
-                Phase::Start => start(ui, state, warning.as_deref()),
-            };
-            if !matches!(state.phase, Phase::Answering { .. }) {
-                poll::forget_other(ui.ctx());
-            }
-            error_action.or(phase_action)
+                let busy = state.is_busy();
+                let warning = state.name_warning();
+                let user = prono_api::full_name(&state.first_name, &state.last_name);
+                let phase_action = match &mut state.phase {
+                    Phase::Answering { survey, answers } => answering(ui, survey, answers, busy),
+                    Phase::Done { survey } => done(ui, survey, &user, state.results.as_ref(), state.scores.as_deref()),
+                    Phase::Start => start(ui, state, warning.as_deref()),
+                };
+                if !matches!(state.phase, Phase::Answering { .. }) {
+                    poll::forget_other(ui.ctx());
+                }
+                error_action.or(phase_action)
+            })
         })
         .inner
+}
+
+/// The widest the card gets; on a wider window it stays centered.
+const CARD_MAX_WIDTH: f32 = 640.0;
+/// The space inside the card, between its border and its elements.
+const CARD_PADDING: i8 = 20;
+const CARD_CORNER_RADIUS: u8 = 16;
+/// The space between the elements in the card.
+const CARD_ITEM_SPACING: egui::Vec2 = egui::vec2(12.0, 12.0);
+
+/// Draws `content` in a rounded square, centered in the available space.
+fn card<R>(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let width = ui.available_width().min(CARD_MAX_WIDTH);
+    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(
+            egui::vec2(width, ui.available_height()),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                egui::Frame::group(ui.style())
+                    .inner_margin(egui::Margin::same(CARD_PADDING))
+                    .corner_radius(egui::CornerRadius::same(CARD_CORNER_RADIUS))
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.spacing_mut().item_spacing = CARD_ITEM_SPACING;
+                        content(ui)
+                    })
+                    .inner
+            },
+        )
+        .inner
+    })
+    .inner
 }
 
 fn error_banner(ui: &mut egui::Ui, error: &str) -> Option<Action> {
@@ -279,4 +313,46 @@ fn footer(ui: &mut egui::Ui) {
         );
         ui.label(small("."));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    use egui_kittest::Harness;
+
+    use super::*;
+
+    /// The rectangle the content of a `card` gets in a window of `width`.
+    fn content_rect(width: f32) -> egui::Rect {
+        let rect = Rc::new(Cell::new(egui::Rect::NOTHING));
+        let seen = Rc::clone(&rect);
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(width, 400.0))
+            .build_ui(move |ui| card(ui, |ui| seen.set(ui.max_rect())));
+        harness.run();
+        rect.get()
+    }
+
+    #[test]
+    fn card_is_centered_and_not_wider_than_its_maximum() {
+        let window = 1200.0;
+        let content = content_rect(window);
+
+        assert!((content.center().x - window / 2.0).abs() < 1.0, "{content:?}");
+        assert!(content.width() <= CARD_MAX_WIDTH, "{content:?}");
+    }
+
+    #[test]
+    fn card_fills_a_narrow_window() {
+        let window = 400.0;
+        let content = content_rect(window);
+
+        assert!(
+            content.width() > window - 4.0 * f32::from(CARD_PADDING) - 20.0,
+            "{content:?}"
+        );
+        assert!(content.width() < window, "{content:?}");
+    }
 }

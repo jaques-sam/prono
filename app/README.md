@@ -55,6 +55,10 @@ The app connects to the production backend. Set `PRONO_BACKEND_URL` to use anoth
 PRONO_BACKEND_URL=http://localhost:8081 cargo run --bin prono-app
 ```
 
+`./local-prod.sh` in the repository root does this for you: it release-builds and starts the latest backend against
+the production database (see the [backend configuration](../backend/README.md#configuration)) and runs the app on it.
+`./local-prod.sh cli` runs [`prono-cli`](../cli/README.md) against the same database.
+
 
 ## Structure
 

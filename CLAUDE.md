@@ -21,6 +21,14 @@ trunk serve --config ./app # Serves at http://127.0.0.1:8080
 # Access at http://127.0.0.1:8080/index.html#dev (the #dev skips PWA caching)
 ```
 
+**Desktop app + backend + CLI against the production database (the NAS):**
+
+```sh
+./local-prod.sh             # release-builds all three, runs the backend locally and the app against it
+./local-prod.sh cli [args]  # release-builds, then runs prono-cli (no args: the interactive menu)
+```
+Everything done there is written to the production database. Settings: `secure_config.toml` or `PRONO_DB_*`.
+
 **Web (production build):**
 ```sh
 trunk build --release --config ./app

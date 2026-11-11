@@ -6,6 +6,11 @@ use crate::client::{Backend, Pending};
 /// Seconds the name must stay unchanged before the backend is asked about it.
 pub const NAME_CHECK_DELAY: f64 = 0.5;
 
+/// Whether answers may be reset. Release builds, which real participants use,
+/// never allow it: a filled-in prono stays filled in. Debug builds keep it for
+/// development.
+pub const CAN_RESET: bool = cfg!(debug_assertions);
+
 /// What the participant is doing.
 #[derive(Default, Serialize, Deserialize)]
 pub enum Phase {
@@ -150,7 +155,7 @@ impl State {
         match action {
             Action::StartSurvey(survey_id) => self.start(survey_id, backend),
             Action::ResetAnswers => {
-                if let Phase::Answering { survey, answers } = &mut self.phase {
+                if CAN_RESET && let Phase::Answering { survey, answers } = &mut self.phase {
                     *answers = survey.empty_answers();
                 }
             }
@@ -757,20 +762,25 @@ mod tests {
     }
 
     #[test]
-    fn reset_restores_blank_answers() {
+    fn reset_restores_blank_answers_only_where_allowed() {
         let mut state = answering("Sam Smith");
+        let filled = Answer::PredictionDate {
+            day: None,
+            month: 1,
+            year: 2099,
+        };
         if let Phase::Answering { answers, .. } = &mut state.phase {
-            answers[0] = Answer::PredictionDate {
-                day: None,
-                month: 1,
-                year: 2099,
-            };
+            answers[0] = filled.clone();
         }
         state.apply(Action::ResetAnswers, &FakeBackend::new(None));
         let Phase::Answering { answers, .. } = &state.phase else {
             panic!("not answering");
         };
-        assert_eq!(*answers, sample(SURVEY_ID).empty_answers());
+        if CAN_RESET {
+            assert_eq!(*answers, sample(SURVEY_ID).empty_answers());
+        } else {
+            assert_eq!(answers[0], filled);
+        }
     }
 
     #[test]

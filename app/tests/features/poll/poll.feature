@@ -53,6 +53,7 @@ Feature: Poll questions
     Then the option "Other" of "What is your background" is selected
     And the answer to "What is your background" is "Rust"
 
+  @debug-only
   Scenario: Resetting the answers clears "Other"
     Given I answer the course survey as "Sam Smith"
     And I choose "Other" for "What is your background"

@@ -48,10 +48,15 @@ Feature: Predicting dates
       | 2101  | 2100  |
       | 3000  | 2100  |
 
+  @debug-only
   Scenario: Resetting restores the starting dates
     Given I set the year of "First cargo only Moon landing" to 2077
     When I reset my answers
     Then the year of "First cargo only Moon landing" no longer shows 2077
+
+  @release-only
+  Scenario: A filled-in prono cannot be reset
+    Then there is no "Reset" button
 
   Scenario: The timeline of my predictions follows my dates
     Then the timeline shows 4 points

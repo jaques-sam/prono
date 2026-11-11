@@ -25,7 +25,6 @@ Feature: Submitting answers
     And the server does not respond
     When I submit my answers
     Then the "Submit" button is disabled
-    And the "Reset" button is disabled
     And the server received 1 submissions
 
   Scenario: A participant cannot answer the same survey twice

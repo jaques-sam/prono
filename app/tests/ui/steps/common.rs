@@ -176,6 +176,11 @@ fn is_answering(world: &mut World) {
     assert!(world.has_button("Submit"), "there is no Submit button");
 }
 
+#[then(expr = "there is no {string} button")]
+fn has_no_button(world: &mut World, label: String) {
+    assert!(!world.has_button(&label), "there is a \"{label}\" button");
+}
+
 #[then(expr = "I see the question {string}")]
 fn sees_question(world: &mut World, question: String) {
     assert!(world.shows(&question), "the question \"{question}\" is missing");

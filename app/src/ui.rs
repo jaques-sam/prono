@@ -4,7 +4,7 @@
 use egui::{FontId, RichText, TextEdit};
 use prono_api::{Access, Answer, AnswerKind, PREDICTION_YEARS, Question, Results, Score, Survey};
 
-use crate::state::{Action, Phase, State, SurveyList};
+use crate::state::{Action, CAN_RESET, Phase, State, SurveyList};
 use crate::{poll, timeline};
 
 pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
@@ -144,7 +144,7 @@ fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: b
     let action = ui
         .horizontal(|ui| {
             let mut action = None;
-            if ui.add_enabled(!busy, egui::Button::new("Reset")).clicked() {
+            if CAN_RESET && ui.add_enabled(!busy, egui::Button::new("Reset")).clicked() {
                 action = Some(Action::ResetAnswers);
             }
             if ui.add_enabled(!busy, egui::Button::new("Submit")).clicked() {

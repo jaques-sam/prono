@@ -29,7 +29,7 @@ const QUIZ_JSON: &str = r#"{
         {"question": "Capital of Belgium", "answer_type": "poll",
          "possible_answers": ["Brussels", "Paris"], "correct_answer": "Brussels"},
         {"question": "Capital of France", "answer_type": "poll",
-         "possible_answers": ["Brussels", "Paris"], "correct_answer": "Paris"}
+         "possible_answers": ["Brussels", "Paris"], "other_label": "Another city:", "correct_answer": "Paris"}
     ]
 }"#;
 

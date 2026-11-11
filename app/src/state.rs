@@ -1052,6 +1052,7 @@ mod tests {
                 text: "Why".into(),
                 kind: AnswerKind::Text,
                 possible_answers: vec![],
+                other_label: None,
                 correct_answer: None,
             }],
         }

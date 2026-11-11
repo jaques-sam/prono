@@ -48,6 +48,10 @@ pub struct Question {
     /// The options of a `Poll` question, empty for any other kind. Free
     /// "other" answers are always allowed on top of these.
     pub possible_answers: Vec<String>,
+    /// What the free answer of a `Poll` question is called, when "Other"
+    /// does not fit: "Yes, namely:" next to the option "No".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub other_label: Option<String>,
     /// What a scored survey counts as right. A secret of the backend: it is
     /// never serialized, so it cannot reach the app.
     #[serde(default, skip_serializing)]
@@ -186,6 +190,13 @@ impl Survey {
 }
 
 impl Question {
+    /// What the free answer of a poll is called: [`Self::other_label`], or
+    /// "Other".
+    #[must_use]
+    pub fn other_label(&self) -> &str {
+        self.other_label.as_deref().unwrap_or("Other")
+    }
+
     /// The votes of `answers` (only `Answer::Poll` count): one entry per
     /// possible answer in their order, zero votes included, followed by every
     /// other voted text grouped by exact text, most votes first, then by text.
@@ -397,6 +408,7 @@ mod tests {
                     text: "When?".into(),
                     kind: AnswerKind::PredictionDate,
                     possible_answers: Vec::new(),
+                    other_label: None,
                     correct_answer: None,
                 },
                 Question {
@@ -404,6 +416,7 @@ mod tests {
                     text: "Why?".into(),
                     kind: AnswerKind::Text,
                     possible_answers: Vec::new(),
+                    other_label: None,
                     correct_answer: None,
                 },
             ],
@@ -473,6 +486,7 @@ mod tests {
             text: "Background?".into(),
             kind: AnswerKind::Poll,
             possible_answers: vec!["C".into(), "C++".into(), "Rust".into()],
+            other_label: None,
             correct_answer: None,
         }
     }

@@ -13,6 +13,18 @@ Feature: Poll questions
     And I see the option "C++" of "What is your background"
     And I see the option "Other" of "What is your background"
 
+  Scenario: A poll can name the answer of one's own
+    When I answer the quiz as "Sam Smith"
+    Then I see the option "Another city:" of "Capital of France"
+    And I see the option "Other" of "Capital of Belgium"
+
+  Scenario: A named answer of one's own lets the participant type
+    Given I answer the quiz as "Sam Smith"
+    When I choose "Another city:" for "Capital of France"
+    And I type the answer "Lyon"
+    Then the answer to "Capital of France" is "Lyon"
+    And the option "Another city:" of "Capital of France" is selected
+
   Scenario: Choosing an option gives that answer
     Given I answer the course survey as "Sam Smith"
     When I choose "C++" for "What is your background"

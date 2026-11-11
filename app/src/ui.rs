@@ -2,7 +2,7 @@
 //! live in `prono_api` and [`State`]; this module only renders.
 
 use egui::{FontId, RichText, TextEdit};
-use prono_api::{Access, Answer, AnswerKind, PREDICTION_YEARS, Question, Results, Survey};
+use prono_api::{Access, Answer, AnswerKind, PREDICTION_YEARS, Question, Results, Score, Survey};
 
 use crate::state::{Action, Phase, State, SurveyList};
 use crate::{poll, timeline};
@@ -37,7 +37,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
             let user = prono_api::full_name(&state.first_name, &state.last_name);
             let phase_action = match &mut state.phase {
                 Phase::Answering { survey, answers } => answering(ui, survey, answers, &mut state.pass_phrase, busy),
-                Phase::Done { survey } => done(ui, survey, &user, state.results.as_ref()),
+                Phase::Done { survey } => done(ui, survey, &user, state.results.as_ref(), state.scores.as_deref()),
                 Phase::Start => start(ui, state, warning.as_deref()),
             };
             if !matches!(state.phase, Phase::Answering { .. }) {
@@ -185,13 +185,30 @@ fn answer_input(ui: &mut egui::Ui, question: &Question, answer: &mut Answer) {
     }
 }
 
-fn done(ui: &mut egui::Ui, survey: &Survey, user: &str, results: Option<&Results>) -> Option<Action> {
+fn done(
+    ui: &mut egui::Ui,
+    survey: &Survey,
+    user: &str,
+    results: Option<&Results>,
+    scores: Option<&[Score]>,
+) -> Option<Action> {
     survey_heading(ui, survey);
     ui.label(format!("Thanks {user}, your answers are saved."));
     let action = ui
         .button("Choose another survey")
         .clicked()
         .then_some(Action::ChooseAnotherSurvey);
+
+    if survey.scored {
+        ui.separator();
+        ui.label("Scores");
+        match scores {
+            Some(scores) => scoreboard(ui, scores, survey.questions.len()),
+            None => {
+                ui.spinner();
+            }
+        }
+    }
 
     ui.separator();
     ui.label("All answers");
@@ -227,6 +244,18 @@ fn done(ui: &mut egui::Ui, survey: &Survey, user: &str, results: Option<&Results
         }
     });
     action
+}
+
+/// The ranking of a scored survey, one line per participant.
+fn scoreboard(ui: &mut egui::Ui, scores: &[Score], out_of: usize) {
+    for (rank, score) in scores.iter().enumerate() {
+        ui.label(score_line(rank + 1, score, out_of));
+    }
+}
+
+/// `1. Ann: 2 of 3`
+fn score_line(rank: usize, score: &Score, out_of: usize) -> String {
+    format!("{rank}. {}: {} of {out_of}", score.user, score.points)
 }
 
 fn survey_heading(ui: &mut egui::Ui, survey: &Survey) {

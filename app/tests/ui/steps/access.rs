@@ -1,13 +1,15 @@
 use cucumber::{given, then};
 
+use crate::fake_backend::QUIZ_DESCRIPTION;
 use crate::steps::common::{SURVEY, course};
 use crate::world::World;
 
-/// The description of the survey a step names: `Starship` or `course`.
+/// The description of the survey a step names: `Starship`, `course` or `quiz`.
 fn description(survey: &str) -> String {
     match survey {
         "Starship" => SURVEY.to_string(),
         "course" => course().description,
+        "quiz" => QUIZ_DESCRIPTION.to_string(),
         other => panic!("unknown survey \"{other}\""),
     }
 }
@@ -45,7 +47,7 @@ fn not_offered(world: &mut World, survey: String) {
 
 #[then("I am offered no surveys")]
 fn offered_nothing(world: &mut World) {
-    for description in [SURVEY.to_string(), course().description] {
+    for description in [SURVEY.to_string(), course().description, QUIZ_DESCRIPTION.to_string()] {
         assert!(!world.has_button(&description), "\"{description}\" is offered");
     }
 }

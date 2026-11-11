@@ -109,6 +109,12 @@ mod tests {
                 }
             }
         );
+        assert_eq!(
+            parse(&["surveys", "scores", "3"]).unwrap(),
+            Commands::Surveys {
+                action: SurveyAction::Scores { survey_id: 3 }
+            }
+        );
         assert!(parse(&["surveys", "upload"]).is_err());
     }
 }

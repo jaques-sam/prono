@@ -40,18 +40,28 @@ async fn surveys(repo: &dyn Repo, action: SurveyAction) -> Result<String, String
             let verb = if replaced { "replaced" } else { "uploaded" };
             Ok(format!("Survey {verb}: {}", describe(&survey)))
         }
+        SurveyAction::Scores { survey_id } => {
+            let scores = prono::scores(repo, survey_id).await.map_err(|e| e.to_string())?;
+            if scores.is_empty() {
+                return Ok(format!("Nobody answered survey {survey_id} yet."));
+            }
+            Ok(lines(
+                scores.iter().map(|score| format!("{}: {}", score.user, score.points)),
+            ))
+        }
     }
 }
 
-/// `1: SpaceX survey (pass phrase, 4 questions)`
+/// `1: SpaceX survey (pass phrase, 4 questions, scored)`
 #[must_use]
 pub fn describe(survey: &Survey) -> String {
     let access = match survey.access {
         Access::PassPhrase => "pass phrase",
         Access::NameList => "name list",
     };
+    let scored = if survey.scored { ", scored" } else { "" };
     format!(
-        "{}: {} ({access}, {} questions)",
+        "{}: {} ({access}, {} questions{scored})",
         survey.id,
         survey.description,
         survey.questions.len()
@@ -230,6 +240,24 @@ mod tests {
         let message = err(&repo, survey_action(SurveyAction::Upload { file: missing })).await;
         assert!(message.contains("cannot read"), "{message}");
         assert_eq!(prono::surveys(&repo).await.unwrap(), Vec::<Survey>::new());
+    }
+
+    #[tokio::test]
+    async fn scores_need_a_scored_survey_and_answers() {
+        let quiz = r#"{"survey_id": 3, "description": "Quiz", "access": "name_list",
+            "questions": [{"question": "Q?", "answer_type": "text", "correct_answer": "a"}]}"#;
+        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, quiz]);
+        let scores = |survey_id| survey_action(SurveyAction::Scores { survey_id });
+
+        assert!(err(&repo, scores(1)).await.contains("no scores"));
+        assert!(err(&repo, scores(9)).await.contains("Unknown survey"));
+        assert_eq!(ok(&repo, scores(3)).await, "Nobody answered survey 3 yet.");
+
+        let survey = prono::survey(&repo, 3).await.unwrap();
+        repo.allow_user(3, "Ann", "Lee").await.unwrap();
+        let submission = prono_api::Submission::new("Ann Lee", &survey, &[prono_api::Answer::Text("A".into())]);
+        prono::submit(&repo, 3, "dev-1", &submission).await.unwrap();
+        assert_eq!(ok(&repo, scores(3)).await, "Ann Lee: 1");
     }
 
     #[tokio::test]

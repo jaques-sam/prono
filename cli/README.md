@@ -15,6 +15,7 @@ It has the following functionality:
   - `surveys list`
   - `surveys upload <file>`: upload a survey definition, see [Adding a questionnaire](../README.md#adding-a-questionnaire);
     it replaces the survey with the same id
+  - `surveys scores <survey id>`: the ranking of a scored survey
 - users:
   - show all
   - delete one

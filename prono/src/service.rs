@@ -1,5 +1,5 @@
 use log::info;
-use prono_api::{Access, Invalid, Results, Submission, Survey, UserStatus, check_user_name};
+use prono_api::{Access, Invalid, Results, Score, Submission, Survey, UserStatus, check_user_name};
 
 use crate::{Error, Repo, Result};
 
@@ -67,12 +67,21 @@ pub async fn user_status(repo: &dyn Repo, device_id: &str, user: &str) -> Result
 ///
 /// [`Error::Invalid`] for an unknown survey, or a repository error.
 pub async fn results(repo: &dyn Repo, survey_id: u64) -> Result<Results> {
+    collect_results(repo, &survey(repo, survey_id).await?).await
+}
+
+/// What each participant got right in survey `survey_id`, best first.
+///
+/// # Errors
+///
+/// [`Error::Invalid`] for an unknown survey or one that is not scored, or a
+/// repository error.
+pub async fn scores(repo: &dyn Repo, survey_id: u64) -> Result<Vec<Score>> {
     let survey = survey(repo, survey_id).await?;
-    let mut results = Results::new();
-    for question in &survey.questions {
-        results.insert(question.id, repo.answers(question).await?);
+    if !survey.scored {
+        return Err(Invalid::NotScored(survey_id).into());
     }
-    Ok(results)
+    Ok(survey.scores(&collect_results(repo, &survey).await?))
 }
 
 /// Checks the survey definition `json` and stores it, replacing the survey
@@ -90,7 +99,7 @@ pub async fn upload_survey(repo: &dyn Repo, json: &str) -> Result<Survey> {
     Ok(survey)
 }
 
-/// Survey `survey_id`.
+/// Survey `survey_id`, with its correct answers if it has any.
 ///
 /// # Errors
 ///
@@ -103,7 +112,7 @@ pub async fn survey(repo: &dyn Repo, survey_id: u64) -> Result<Survey> {
     stored(&definition)
 }
 
-/// All surveys, by id.
+/// All surveys, with their correct answers if they have any, by id.
 ///
 /// # Errors
 ///
@@ -123,6 +132,14 @@ pub async fn surveys(repo: &dyn Repo) -> Result<Vec<Survey>> {
 /// parse means the database was changed by hand.
 fn stored(definition: &str) -> Result<Survey> {
     Survey::from_json(definition).map_err(|err| Error::Repository(format!("invalid stored survey: {err}")))
+}
+
+async fn collect_results(repo: &dyn Repo, survey: &Survey) -> Result<Results> {
+    let mut results = Results::new();
+    for question in &survey.questions {
+        results.insert(question.id, repo.answers(question).await?);
+    }
+    Ok(results)
 }
 
 /// Checks that the participant may answer `survey`. A survey with a pass
@@ -425,5 +442,74 @@ mod tests {
         repo.save_survey_definition(SURVEY_ID, "{}").await.unwrap();
         assert!(matches!(survey(&repo, SURVEY_ID).await, Err(Error::Repository(_))));
         assert!(matches!(surveys(&repo).await, Err(Error::Repository(_))));
+    }
+
+    const QUIZ: &str = r#"{
+        "survey_id": 3,
+        "description": "Quiz",
+        "access": "pass_phrase",
+        "questions": [
+            {"question": "Capital of Belgium", "answer_type": "text", "correct_answer": "Brussels"},
+            {"question": "Best language", "answer_type": "poll", "possible_answers": ["C", "Rust"],
+             "correct_answer": "Rust"}
+        ]
+    }"#;
+
+    #[tokio::test]
+    async fn scores_rank_the_participants_of_a_scored_survey() {
+        let repo = MemoryRepo::default();
+        let quiz = upload_survey(&repo, QUIZ).await.unwrap();
+        repo.set_pass_phrase(quiz.id, PASS_PHRASE).await.unwrap();
+        for (user, device, capital, language) in [
+            ("Ann", "dev-1", "brussels", "Rust"),
+            ("Bob", "dev-2", "Paris", "Rust"),
+            ("Cat", "dev-3", "Paris", "C"),
+        ] {
+            let answers = [Answer::Text(capital.into()), Answer::Poll(language.into())];
+            let submission = Submission::new(user, &quiz, &answers).with_pass_phrase(PASS_PHRASE);
+            submit(&repo, quiz.id, device, &submission).await.unwrap();
+        }
+
+        let points = |user: &str, points| Score {
+            user: user.into(),
+            points,
+        };
+        assert_eq!(
+            scores(&repo, quiz.id).await.unwrap(),
+            [points("Ann", 2), points("Bob", 1), points("Cat", 0)]
+        );
+    }
+
+    #[tokio::test]
+    async fn scores_need_a_scored_survey() {
+        let repo = repo().await;
+        let err = scores(&repo, SURVEY_ID).await.unwrap_err();
+        assert_eq!(err, Error::Invalid(Invalid::NotScored(SURVEY_ID)));
+        let err = scores(&repo, 999).await.unwrap_err();
+        assert_eq!(err, Error::Invalid(Invalid::UnknownSurvey(999)));
+    }
+
+    #[tokio::test]
+    async fn adding_the_correct_answers_later_keeps_the_given_answers() {
+        let repo = MemoryRepo::default();
+        let plain = QUIZ.replace(r#", "correct_answer": "Brussels""#, "").replace(
+            r#",
+             "correct_answer": "Rust""#,
+            "",
+        );
+        let open = upload_survey(&repo, &plain).await.unwrap();
+        assert!(!open.scored);
+        repo.set_pass_phrase(open.id, PASS_PHRASE).await.unwrap();
+        let answers = [Answer::Text("Brussels".into()), Answer::Poll("Rust".into())];
+        let submission = Submission::new("Ann", &open, &answers).with_pass_phrase(PASS_PHRASE);
+        submit(&repo, open.id, "dev-1", &submission).await.unwrap();
+
+        let quiz = upload_survey(&repo, QUIZ).await.unwrap();
+        assert!(quiz.scored);
+        let ann = Score {
+            user: "Ann".into(),
+            points: 2,
+        };
+        assert_eq!(scores(&repo, quiz.id).await.unwrap(), [ann]);
     }
 }

@@ -8,22 +8,25 @@
 //!     "link": "https://example.com",
 //!     "access": "pass_phrase",
 //!     "questions": [
-//!         { "question": "When?", "answer_type": "prediction_date" },
-//!         { "question": "Why?", "answer_type": "text" },
-//!         { "question": "Which?", "answer_type": "poll", "possible_answers": ["A", "B"] }
+//!         { "question": "When?", "answer_type": "prediction_date",
+//!           "correct_answer": { "month": 7, "year": 2028 } },
+//!         { "question": "Why?", "answer_type": "text", "correct_answer": "because" },
+//!         { "question": "Which?", "answer_type": "poll",
+//!           "possible_answers": ["A", "B"], "correct_answer": "A" }
 //!     ]
 //! }
 //! ```
 //!
 //! `link` is optional. `access` is required: `pass_phrase` or `name_list`.
-//! `possible_answers` is for `poll` questions only.
+//! `possible_answers` is for `poll` questions only. A `correct_answer` makes
+//! the survey scored, and then every question needs one.
 
 use std::collections::HashSet;
 
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{Access, AnswerKind, Question, Survey};
+use crate::{Access, Answer, AnswerKind, Question, Survey};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -44,6 +47,17 @@ struct QuestionFile {
     /// The options of a `poll` question, and only of those.
     #[serde(default)]
     possible_answers: Vec<String>,
+    #[serde(default)]
+    correct_answer: Option<CorrectAnswerFile>,
+}
+
+/// A correct answer as written in the file: text for a `text` or `poll`
+/// question, a month and a year for a `prediction_date`.
+#[derive(Deserialize)]
+#[serde(untagged, deny_unknown_fields)]
+enum CorrectAnswerFile {
+    Text(String),
+    Date { month: u8, year: u16 },
 }
 
 impl QuestionFile {
@@ -73,6 +87,40 @@ impl QuestionFile {
         }
         Ok(())
     }
+
+    /// The correct answer as an [`Answer`] of the question's kind.
+    fn correct_answer<E: serde::de::Error>(&self) -> Result<Option<Answer>, E> {
+        let invalid = || {
+            E::custom(format!(
+                "the correct answer of \"{}\" does not fit a {:?} question",
+                self.question, self.answer_type
+            ))
+        };
+        let answer = match (&self.correct_answer, self.answer_type) {
+            (None, _) => return Ok(None),
+            (Some(CorrectAnswerFile::Text(text)), AnswerKind::Text) => Answer::Text(text.clone()),
+            (Some(CorrectAnswerFile::Text(text)), AnswerKind::Poll) => {
+                if !self.possible_answers.contains(text) {
+                    return Err(E::custom(format!(
+                        "the correct answer of \"{}\" must be one of its possible_answers",
+                        self.question
+                    )));
+                }
+                Answer::Poll(text.clone())
+            }
+            (Some(CorrectAnswerFile::Date { month, year }), AnswerKind::PredictionDate) => Answer::PredictionDate {
+                day: None,
+                month: *month,
+                year: *year,
+            },
+            _ => return Err(invalid()),
+        };
+        if answer.is_valid_for(self.answer_type) {
+            Ok(Some(answer))
+        } else {
+            Err(invalid())
+        }
+    }
 }
 
 impl Survey {
@@ -81,25 +129,40 @@ impl Survey {
     /// # Errors
     ///
     /// If `json` is no valid definition: malformed JSON, an unknown or
-    /// missing key (also a missing `access`), or bad `possible_answers`.
+    /// missing key (also a missing `access`), bad `possible_answers`, or
+    /// `correct_answer`s that do not fit their questions or are not given to
+    /// every question or none.
     pub fn from_json(json: &str) -> serde_json::Result<Self> {
+        use serde::de::Error;
+
         let file: SurveyFile = serde_json::from_str(json)?;
         file.questions.iter().try_for_each(QuestionFile::check)?;
         let questions = file
             .questions
-            .into_iter()
-            .map(|q| Question {
-                id: question_id(&q.question, q.answer_type),
-                text: q.question,
-                kind: q.answer_type,
-                possible_answers: q.possible_answers,
+            .iter()
+            .map(|q| {
+                Ok(Question {
+                    id: question_id(&q.question, q.answer_type),
+                    text: q.question.clone(),
+                    kind: q.answer_type,
+                    possible_answers: q.possible_answers.clone(),
+                    correct_answer: q.correct_answer()?,
+                })
             })
-            .collect();
+            .collect::<serde_json::Result<Vec<_>>>()?;
+
+        let with_answer = questions.iter().filter(|q| q.correct_answer.is_some()).count();
+        if with_answer != 0 && with_answer != questions.len() {
+            return Err(serde_json::Error::custom(
+                "a scored survey needs a correct_answer for every question",
+            ));
+        }
         Ok(Survey {
             id: file.survey_id,
             description: file.description,
             link: file.link,
             access: file.access,
+            scored: with_answer != 0,
             questions,
         })
     }
@@ -223,5 +286,55 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn correct_answers_make_a_scored_survey() {
+        let json = survey_json(
+            r#"{"question": "When?", "answer_type": "prediction_date", "correct_answer": {"month": 7, "year": 2028}},
+               {"question": "Why?", "answer_type": "text", "correct_answer": "because"},
+               {"question": "Which?", "answer_type": "poll", "possible_answers": ["A", "B"], "correct_answer": "B"}"#,
+        );
+        let survey = Survey::from_json(&json).unwrap();
+        assert!(survey.scored);
+        let correct: Vec<_> = survey.questions.iter().map(|q| q.correct_answer.clone()).collect();
+        assert_eq!(
+            correct,
+            [
+                Some(Answer::PredictionDate {
+                    day: None,
+                    month: 7,
+                    year: 2028
+                }),
+                Some(Answer::Text("because".into())),
+                Some(Answer::Poll("B".into())),
+            ]
+        );
+
+        assert!(!samples::starship().scored);
+        assert!(!samples::course().scored);
+    }
+
+    #[test]
+    fn scored_surveys_need_a_fitting_correct_answer_for_every_question() {
+        let text = |answer: &str| format!(r#"{{"question": "Q?", "answer_type": "text", {answer}}}"#);
+        let blank = r#"{"question": "Blank", "answer_type": "text"}"#;
+        for questions in [
+            // Not every question has one.
+            format!("{}, {blank}", text(r#""correct_answer": "x""#)),
+            // Of the wrong shape for the kind.
+            text(r#""correct_answer": {"month": 1, "year": 2030}"#),
+            r#"{"question": "Q?", "answer_type": "prediction_date", "correct_answer": "soon"}"#.into(),
+            // Invalid answers.
+            text(r#""correct_answer": "  ""#),
+            r#"{"question": "Q?", "answer_type": "prediction_date", "correct_answer": {"month": 13, "year": 2030}}"#
+                .into(),
+            r#"{"question": "Q?", "answer_type": "prediction_date", "correct_answer": {"month": 1, "year": 1999}}"#
+                .into(),
+            // Not one of the options.
+            r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A"], "correct_answer": "B"}"#.into(),
+        ] {
+            assert!(Survey::from_json(&survey_json(&questions)).is_err(), "{questions}");
+        }
     }
 }

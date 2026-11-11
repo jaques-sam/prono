@@ -79,12 +79,12 @@ See the Architecture section of `README.md`. In short: every survey type is defi
 - **api/** (`prono_api`): the model shared by every binary, wasm-safe
   - `Survey`, `Question`, `AnswerKind`, `Answer`, `Submission`, `Results`
   - The survey definition: `Survey::from_json` (`api/src/definition.rs`). Surveys are uploaded to the backend's database (`prono-cli surveys upload`), never embedded; `api/surveys/*.json` are examples, also the test fixtures of the `samples` feature
-  - `access` is mandatory in a definition (`pass_phrase` or `name_list`, there is no open survey)
+  - `access` is mandatory in a definition (`pass_phrase` or `name_list`, there is no open survey); `correct_answer`s (all or none) make a survey scored, and they never serialize, so they stay on the backend
   - The rules (`Submission::validate`, `check_user_name`, `Answer::is_valid_for`) and the REST contract (`answers_path`, `API_KEY`, `DEVICE_ID_HEADER`)
   - Question ids hash the question text and answer kind; stored answers reference them, so `existing_question_ids_are_stable` must keep passing
 
 - **prono/**: server-side core
-  - Use cases `upload_survey`, `submit` and `results` (`service.rs`); the `Repo` also stores the survey definitions
+  - Use cases `upload_survey`, `submit`, `results` and `scores` (`service.rs`); the `Repo` also stores the survey definitions
   - `Repo` trait with `MysqlRepo` (runtime `sqlx` queries, one transaction per submission) and `MemoryRepo` (tests)
   - `DbConfig::load()`: `secure_config.toml` plus `PRONO_DB_*` env overrides
 

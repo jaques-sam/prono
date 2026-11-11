@@ -121,6 +121,12 @@ impl World {
         self.harness.query_by_label_contains(text).is_some()
     }
 
+    /// Whether `first` and `second` are both shown, `first` above `second`.
+    pub fn shows_before(&self, first: &str, second: &str) -> bool {
+        let top = |text: &str| self.harness.query_by_label_contains(text).map(|node| node.rect().top());
+        top(first).zip(top(second)).is_some_and(|(a, b)| a < b)
+    }
+
     /// The month or year input of the question `question`.
     pub fn date_input(&self, question: &str, part: DatePart) -> Node<'_> {
         let index = self

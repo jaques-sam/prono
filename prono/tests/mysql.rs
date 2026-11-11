@@ -36,6 +36,7 @@ fn text_question(what: &str) -> Question {
         text: what.into(),
         kind: AnswerKind::Text,
         possible_answers: Vec::new(),
+        correct_answer: None,
     }
 }
 

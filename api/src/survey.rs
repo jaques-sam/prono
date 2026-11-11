@@ -20,6 +20,9 @@ pub struct Survey {
     pub description: String,
     pub link: Option<String>,
     pub access: Access,
+    /// Whether every question has a correct answer, so the participants get
+    /// a [`Score`]. The correct answers themselves never leave the backend.
+    pub scored: bool,
     pub questions: Vec<Question>,
 }
 
@@ -45,6 +48,10 @@ pub struct Question {
     /// The options of a `Poll` question, empty for any other kind. Free
     /// "other" answers are always allowed on top of these.
     pub possible_answers: Vec<String>,
+    /// What a scored survey counts as right. A secret of the backend: it is
+    /// never serialized, so it cannot reach the app.
+    #[serde(default, skip_serializing)]
+    pub correct_answer: Option<Answer>,
 }
 
 /// What kind of answer a question expects.
@@ -80,6 +87,8 @@ pub enum Invalid {
     Incomplete,
     #[error("Invalid answer to \"{0}\"")]
     Answer(String),
+    #[error("Survey {0} has no scores")]
+    NotScored(u64),
 }
 
 /// A participant's answers to one survey: the body of a submit request.
@@ -113,6 +122,14 @@ pub struct UserAnswer {
 /// Every participant's answers to a survey, keyed by question id.
 pub type Results = HashMap<Uuid, Vec<UserAnswer>>;
 
+/// What a participant got right in a scored survey.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Score {
+    pub user: String,
+    /// The number of correct answers.
+    pub points: usize,
+}
+
 impl Survey {
     /// A blank answer for each question, in question order.
     #[must_use]
@@ -137,6 +154,34 @@ impl Survey {
                     .map(|found| found.answer.clone())
             })
             .collect()
+    }
+}
+
+impl Survey {
+    /// What each participant got right, best first, then by name. Empty for
+    /// a survey that is not [`scored`](Survey::scored). Only a survey that
+    /// knows its correct answers (the backend's) can score.
+    #[must_use]
+    pub fn scores(&self, results: &Results) -> Vec<Score> {
+        let mut points: HashMap<&str, usize> = HashMap::new();
+        for question in &self.questions {
+            let Some(correct) = &question.correct_answer else {
+                continue;
+            };
+            for user_answer in results.get(&question.id).map_or(&[][..], Vec::as_slice) {
+                let right = usize::from(user_answer.answer.is_correct(correct));
+                *points.entry(&user_answer.user).or_default() += right;
+            }
+        }
+        let mut scores: Vec<_> = points
+            .into_iter()
+            .map(|(user, points)| Score {
+                user: user.to_string(),
+                points,
+            })
+            .collect();
+        scores.sort_by(|a, b| b.points.cmp(&a.points).then_with(|| a.user.cmp(&b.user)));
+        scores
     }
 }
 
@@ -194,6 +239,26 @@ impl Answer {
             Answer::Text(_) => AnswerKind::Text,
             Answer::Poll(_) => AnswerKind::Poll,
             Answer::PredictionDate { .. } => AnswerKind::PredictionDate,
+        }
+    }
+
+    /// Whether this answer is as good as `correct`: texts and poll choices
+    /// match ignoring case and surrounding spaces, dates by month and year.
+    #[must_use]
+    pub fn is_correct(&self, correct: &Answer) -> bool {
+        match (self, correct) {
+            (Answer::Text(a), Answer::Text(b)) | (Answer::Poll(a), Answer::Poll(b)) => {
+                a.trim().to_lowercase() == b.trim().to_lowercase()
+            }
+            (
+                Answer::PredictionDate { month, year, .. },
+                Answer::PredictionDate {
+                    month: correct_month,
+                    year: correct_year,
+                    ..
+                },
+            ) => month == correct_month && year == correct_year,
+            _ => false,
         }
     }
 
@@ -318,18 +383,21 @@ mod tests {
             description: "Test".into(),
             link: None,
             access: Access::PassPhrase,
+            scored: false,
             questions: vec![
                 Question {
                     id: Q1,
                     text: "When?".into(),
                     kind: AnswerKind::PredictionDate,
                     possible_answers: Vec::new(),
+                    correct_answer: None,
                 },
                 Question {
                     id: Q2,
                     text: "Why?".into(),
                     kind: AnswerKind::Text,
                     possible_answers: Vec::new(),
+                    correct_answer: None,
                 },
             ],
         }
@@ -398,6 +466,7 @@ mod tests {
             text: "Background?".into(),
             kind: AnswerKind::Poll,
             possible_answers: vec!["C".into(), "C++".into(), "Rust".into()],
+            correct_answer: None,
         }
     }
 
@@ -598,5 +667,76 @@ mod tests {
         let with = plain.clone().with_pass_phrase("  open sesame ");
         assert_eq!(with.pass_phrase.as_deref(), Some("open sesame"));
         assert_eq!(plain.with_pass_phrase("   ").pass_phrase, None);
+    }
+
+    fn quiz() -> Survey {
+        let mut survey = survey();
+        survey.scored = true;
+        survey.questions[0].correct_answer = Some(date(7, 2028));
+        survey.questions[1].correct_answer = Some(Answer::Text("Because".into()));
+        survey
+    }
+
+    #[test]
+    fn answers_are_correct_ignoring_case_spaces_and_the_day() {
+        let text = |s: &str| Answer::Text(s.into());
+        assert!(text(" because ").is_correct(&text("Because")));
+        assert!(!text("because not").is_correct(&text("Because")));
+        let poll = |s: &str| Answer::Poll(s.into());
+        assert!(poll("c++").is_correct(&poll("C++")));
+        assert!(!poll("C").is_correct(&poll("C++")));
+
+        let with_day = Answer::PredictionDate {
+            day: Some(3),
+            month: 7,
+            year: 2028,
+        };
+        assert!(with_day.is_correct(&date(7, 2028)));
+        assert!(date(7, 2028).is_correct(&with_day));
+        assert!(!date(8, 2028).is_correct(&date(7, 2028)));
+        assert!(!date(7, 2029).is_correct(&date(7, 2028)));
+
+        // Another kind is never correct, even with the same text.
+        assert!(!text("C").is_correct(&poll("C")));
+        assert!(!date(7, 2028).is_correct(&text("7/2028")));
+    }
+
+    #[test]
+    fn scores_count_the_correct_answers_best_first_then_by_name() {
+        let right = |user, q1, q2| [(Q1, user, q1), (Q2, user, q2)];
+        let results = results_of(
+            &[
+                right("Zed", date(7, 2028), Answer::Text("because".into())),
+                right("Bob", date(1, 2030), Answer::Text("because".into())),
+                right("Ann", date(1, 2030), Answer::Text("nope".into())),
+                right("Cat", date(7, 2028), Answer::Text("BECAUSE".into())),
+            ]
+            .concat(),
+        );
+        let points = |user: &str, points| Score {
+            user: user.into(),
+            points,
+        };
+        assert_eq!(
+            quiz().scores(&results),
+            [points("Cat", 2), points("Zed", 2), points("Bob", 1), points("Ann", 0)]
+        );
+        assert_eq!(quiz().scores(&Results::new()), Vec::<Score>::new());
+    }
+
+    #[test]
+    fn a_survey_without_correct_answers_has_no_scores() {
+        let results = results_of(&[(Q1, "Sam", date(5, 2030)), (Q2, "Sam", Answer::Text("x".into()))]);
+        assert_eq!(survey().scores(&results), Vec::<Score>::new());
+    }
+
+    #[test]
+    fn correct_answers_never_reach_the_wire() {
+        let json = serde_json::to_string(&quiz()).unwrap();
+        assert!(!json.contains("correct_answer"));
+        assert!(!json.contains("Because"));
+        let sent: Survey = serde_json::from_str(&json).unwrap();
+        assert!(sent.scored, "the app still learns that it is scored");
+        assert!(sent.questions.iter().all(|q| q.correct_answer.is_none()));
     }
 }

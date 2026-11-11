@@ -240,6 +240,7 @@ mod tests {
             text: "Background?".into(),
             kind: AnswerKind::Poll,
             possible_answers: vec!["C".into(), "C++".into()],
+            correct_answer: None,
         }
     }
 

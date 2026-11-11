@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use prono_api::{API_KEY, DEVICE_ID_HEADER, Results, Submission, UserStatus};
+use prono_api::{API_KEY, DEVICE_ID_HEADER, Results, Score, Submission, UserStatus};
 
 pub const PROD_URL: &str = "https://prono.samagali.myds.me";
 #[cfg(target_arch = "wasm32")]
@@ -11,6 +11,8 @@ pub const DEV_URL: &str = "http://localhost:8081";
 pub trait Backend {
     fn submit(&self, survey_id: u64, submission: &Submission) -> Pending<()>;
     fn results(&self, survey_id: u64) -> Pending<Results>;
+    /// The scores of a scored survey, best first.
+    fn scores(&self, survey_id: u64) -> Pending<Vec<Score>>;
     /// Whether `user` (the full name) already filled in a survey, and the
     /// surveys they may answer.
     fn user_status(&self, user: &str) -> Pending<UserStatus>;
@@ -101,6 +103,13 @@ impl Backend for HttpBackend {
     fn results(&self, survey_id: u64) -> Pending<Results> {
         self.send(
             ehttp::Request::get(self.url(&prono_api::answers_path(survey_id))),
+            parse_json,
+        )
+    }
+
+    fn scores(&self, survey_id: u64) -> Pending<Vec<Score>> {
+        self.send(
+            ehttp::Request::get(self.url(&prono_api::scores_path(survey_id))),
             parse_json,
         )
     }

@@ -26,7 +26,7 @@ flowchart TB
     web["web app (wasm)"] -- REST --> backend
     native["native app"] -- REST --> backend
     subgraph backend [prono-backend]
-        rest["REST endpoints"] --> core["prono: surveys, submit / results, Repo"]
+        rest["REST endpoints"] --> core["prono: surveys, submit / results / scores, Repo"]
     end
     cli["prono-cli"] --> core
     core -- sqlx --> db[(MariaDB)]
@@ -37,7 +37,7 @@ flowchart TB
 | Crate | Role |
 | --- | --- |
 | `api` (`prono_api`) | The model every binary shares: `Survey` and how it is defined (`Survey::from_json`), `Answer`, the validation rules and the REST contract. Compiles to wasm. `api/surveys/*.json` are example definitions, not part of any binary. |
-| `prono` | Server-side core: the use cases (`upload_survey`, `submit`, `results`), the `Repo` trait with its MySQL and in-memory implementations, and the database config. |
+| `prono` | Server-side core: the use cases (`upload_survey`, `submit`, `results`, `scores`), the `Repo` trait with its MySQL and in-memory implementations, and the database config. |
 | `backend` | `actix-web` REST server around `prono`. |
 | `app` | egui app for desktop and web. Both talk to the backend over REST; the UI only draws a small state machine (`app/src/state.rs`). |
 | `cli` | Admin tool on top of `prono`. |
@@ -77,6 +77,11 @@ cargo run --bin prono-cli -- surveys upload my_survey.json
   `prono-cli access pass-phrase`) or `name_list` (fill it with `prono-cli access allow`). Until a pass phrase is set,
   the survey stays closed.
 - `link` is optional; `possible_answers` is for `poll` questions only.
+- **Scores:** give every question a `correct_answer` (text or option for `text` and `poll`,
+  `{"month": 7, "year": 2028}` for `prediction_date`) and the survey is scored: participants see a ranking of the
+  correct answers after submitting. All questions need one, or none. The correct answers never leave the backend, so a
+  prediction survey can be uploaded again with them once the events happened; the answers already given are kept.
+  `prono-cli surveys scores <id>` shows the ranking.
 
 A question's id is derived from its text and answer type, and stored answers
 reference that id: editing a question's text starts it from scratch.

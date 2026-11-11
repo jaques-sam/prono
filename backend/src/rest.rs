@@ -4,10 +4,14 @@ use log::error;
 use prono::{Error, Repo};
 use prono_api::{API_KEY, DEVICE_ID_HEADER, Submission};
 
-/// Registers the REST endpoints; their paths are [`prono_api::answers_path`]
-/// and [`prono_api::user_path`].
+/// Registers the REST endpoints; their paths are [`prono_api::answers_path`],
+/// [`prono_api::scores_path`] and [`prono_api::user_path`].
 pub fn routes(config: &mut web::ServiceConfig) {
-    config.service(submit_answers).service(get_answers).service(get_user);
+    config
+        .service(submit_answers)
+        .service(get_answers)
+        .service(get_scores)
+        .service(get_user);
 }
 
 #[post("/api/surveys/{survey_id}/answers")]
@@ -26,6 +30,14 @@ async fn submit_answers(
 async fn get_answers(repo: web::Data<dyn Repo>, survey_id: web::Path<u64>) -> Result<HttpResponse, ApiError> {
     let results = prono::results(repo.get_ref(), *survey_id).await?;
     Ok(HttpResponse::Ok().json(results))
+}
+
+/// The scores of a scored survey, best first, as a JSON list of
+/// [`prono_api::Score`]s.
+#[get("/api/surveys/{survey_id}/scores")]
+async fn get_scores(repo: web::Data<dyn Repo>, survey_id: web::Path<u64>) -> Result<HttpResponse, ApiError> {
+    let scores = prono::scores(repo.get_ref(), *survey_id).await?;
+    Ok(HttpResponse::Ok().json(scores))
 }
 
 /// What the app may know about the user `name`: a JSON [`prono_api::UserStatus`]
@@ -100,13 +112,18 @@ mod tests {
 
     use actix_web::{App, test as actix_test};
     use prono::MemoryRepo;
-    use prono_api::{Answer, Results, UserStatus, samples};
+    use prono_api::{Answer, Results, Score, Survey, UserStatus, samples};
 
     use super::*;
 
     /// The survey with a pass phrase.
     const SURVEY_ID: u64 = 1;
     const PASS_PHRASE: &str = "open sesame";
+    const QUIZ_ID: u64 = 3;
+    const QUIZ: &str = r#"{
+        "survey_id": 3, "description": "Quiz", "access": "pass_phrase",
+        "questions": [{"question": "Capital of Belgium", "answer_type": "text", "correct_answer": "Brussels"}]
+    }"#;
 
     fn submission(user: &str) -> Submission {
         let survey = samples::starship();
@@ -127,8 +144,9 @@ mod tests {
     /// Sends each request in turn to one backend and returns the statuses
     /// and the last response body.
     async fn run(requests: Vec<actix_test::TestRequest>) -> (Vec<StatusCode>, String) {
-        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON]);
+        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON, QUIZ]);
         repo.set_pass_phrase(SURVEY_ID, PASS_PHRASE).await.unwrap();
+        repo.set_pass_phrase(QUIZ_ID, PASS_PHRASE).await.unwrap();
         let repo: web::Data<dyn Repo> = web::Data::from(Arc::new(repo) as Arc<dyn Repo>);
         let app = actix_test::init_service(App::new().app_data(repo).configure(routes)).await;
         let mut statuses = Vec::new();
@@ -225,7 +243,7 @@ mod tests {
         // The name list survey is not offered to an unlisted name.
         assert!(status.answered);
         let ids: Vec<_> = status.surveys.iter().map(|survey| survey.id).collect();
-        assert_eq!(ids, [SURVEY_ID]);
+        assert_eq!(ids, [SURVEY_ID, QUIZ_ID]);
         assert_eq!(status.surveys[0], samples::starship());
 
         let (_, body) = run(vec![get_user("alice", Some("dev-2"), API_KEY)]).await;
@@ -258,6 +276,42 @@ mod tests {
         let (statuses, body) = run(vec![post(SURVEY_ID, Some("dev-1"), API_KEY, &wrong)]).await;
         assert_eq!(statuses, [StatusCode::FORBIDDEN]);
         assert_eq!(body, "\"Wrong pass phrase\"");
+    }
+
+    #[actix_web::test]
+    async fn scores_rank_the_participants_of_a_scored_survey() {
+        let quiz = Survey::from_json(QUIZ).unwrap();
+        let answer = |user: &str, text: &str| {
+            Submission::new(user, &quiz, &[Answer::Text(text.into())]).with_pass_phrase(PASS_PHRASE)
+        };
+        let (statuses, body) = run(vec![
+            post(QUIZ_ID, Some("dev-1"), API_KEY, &answer("Ann", "Paris")),
+            post(QUIZ_ID, Some("dev-2"), API_KEY, &answer("Bob", "Brussels")),
+            actix_test::TestRequest::get().uri(&prono_api::scores_path(QUIZ_ID)),
+        ])
+        .await;
+        assert_eq!(statuses, [StatusCode::OK; 3]);
+        let scores: Vec<Score> = serde_json::from_str(&body).unwrap();
+        let points = |user: &str, points| Score {
+            user: user.into(),
+            points,
+        };
+        assert_eq!(scores, [points("Bob", 1), points("Ann", 0)]);
+        // The correct answers do not leave the backend, not even in the survey list.
+        let (_, body) = run(vec![get_user("Ann", Some("dev-1"), API_KEY)]).await;
+        assert!(!body.contains("Brussels"));
+        assert!(body.contains(r#""scored":true"#));
+    }
+
+    #[actix_web::test]
+    async fn scores_of_a_survey_without_correct_answers_are_a_bad_request() {
+        let (statuses, body) = run(vec![
+            actix_test::TestRequest::get().uri(&prono_api::scores_path(SURVEY_ID)),
+            actix_test::TestRequest::get().uri(&prono_api::scores_path(999)),
+        ])
+        .await;
+        assert_eq!(statuses, [StatusCode::BAD_REQUEST; 2]);
+        assert_eq!(body, "\"Unknown survey 999\"");
     }
 
     #[actix_web::test]

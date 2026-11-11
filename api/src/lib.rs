@@ -25,6 +25,13 @@ pub fn answers_path(survey_id: u64) -> String {
     format!("/api/surveys/{survey_id}/answers")
 }
 
+/// REST path of a scored survey's scores: `GET` returns a JSON list of
+/// [`Score`]s, best first.
+#[must_use]
+pub fn scores_path(survey_id: u64) -> String {
+    format!("/api/surveys/{survey_id}/scores")
+}
+
 /// REST path asking whether `user` already filled in a survey: `GET` returns
 /// a JSON `bool`. It sends the same API key and device id headers as a
 /// submission, and reveals nothing else about the user.

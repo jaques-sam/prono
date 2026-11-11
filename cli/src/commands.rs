@@ -34,6 +34,8 @@ pub enum SurveyAction {
         /// The definition file
         file: PathBuf,
     },
+    /// Show who got how many answers right in a scored survey
+    Scores { survey_id: u64 },
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]

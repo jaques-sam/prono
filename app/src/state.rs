@@ -1,4 +1,4 @@
-use prono_api::{Access, Answer, Invalid, Results, Submission, Survey, UserStatus};
+use prono_api::{Access, Answer, Invalid, Results, Score, Submission, Survey, UserStatus};
 use serde::{Deserialize, Serialize};
 
 use crate::client::{Backend, Pending};
@@ -57,6 +57,9 @@ pub struct State {
     pub phase: Phase,
     #[serde(skip)]
     pub results: Option<Results>,
+    /// The scores of a scored survey, once fetched.
+    #[serde(skip)]
+    pub scores: Option<Vec<Score>>,
     /// Shown to the participant until dismissed.
     #[serde(skip)]
     pub error: Option<String>,
@@ -79,6 +82,7 @@ struct Refill {
 enum Request {
     Submit(Pending<()>),
     Results(Pending<Results>),
+    Scores(Pending<Vec<Score>>),
 }
 
 /// Finding out, while the name is typed, what the backend knows about it:
@@ -160,6 +164,7 @@ impl State {
     fn back_to_start(&mut self) {
         self.phase = Phase::Start;
         self.results = None;
+        self.scores = None;
         self.request = None;
         self.refill = None;
         self.pass_phrase.clear();
@@ -176,6 +181,7 @@ impl State {
                     Phase::Answering { survey, .. } => {
                         self.phase = Phase::Done { survey };
                         self.results = None;
+                        self.scores = None;
                         self.mark_answered();
                     }
                     other => self.phase = other,
@@ -187,16 +193,25 @@ impl State {
                 Some(Ok(results)) => self.results = Some(results),
                 Some(Err(err)) => self.error = Some(err),
             },
+            Some(Request::Scores(pending)) => match pending.take() {
+                None => self.request = Some(Request::Scores(pending)),
+                Some(Ok(scores)) => self.scores = Some(scores),
+                Some(Err(err)) => self.error = Some(err),
+            },
             None => {}
         }
 
-        // After an error, wait until it is dismissed before retrying.
+        // After an error, wait until it is dismissed before retrying. The
+        // scores of a scored survey follow the results.
         if let Phase::Done { survey } = &self.phase
-            && self.results.is_none()
             && self.request.is_none()
             && self.error.is_none()
         {
-            self.request = Some(Request::Results(backend.results(survey.id)));
+            if self.results.is_none() {
+                self.request = Some(Request::Results(backend.results(survey.id)));
+            } else if survey.scored && self.scores.is_none() {
+                self.request = Some(Request::Scores(backend.scores(survey.id)));
+            }
         }
     }
 
@@ -412,6 +427,9 @@ mod tests {
         submit_result: Option<Result<(), String>>,
         submissions: RefCell<Vec<Submission>>,
         results_requests: Cell<usize>,
+        /// What `scores` returns, or never answers if `None`.
+        scores_answer: Option<Result<Vec<Score>, String>>,
+        scores_requests: Cell<usize>,
         /// What `user_status` returns, or never answers if `None`.
         name_answer: Option<Result<UserStatus, String>>,
         name_requests: RefCell<Vec<String>>,
@@ -433,6 +451,8 @@ mod tests {
                 submit_result,
                 submissions: RefCell::default(),
                 results_requests: Cell::default(),
+                scores_answer: Some(Ok(Vec::new())),
+                scores_requests: Cell::default(),
                 name_answer: Some(Ok(status(false, &[SURVEY_ID, LISTED_ID]))),
                 name_requests: RefCell::default(),
                 results_answer: Some(Ok(Results::new())),
@@ -441,6 +461,11 @@ mod tests {
 
         fn with_results(mut self, answer: Option<Result<Results, String>>) -> Self {
             self.results_answer = answer;
+            self
+        }
+
+        fn with_scores(mut self, answer: Option<Result<Vec<Score>, String>>) -> Self {
+            self.scores_answer = answer;
             self
         }
 
@@ -464,6 +489,11 @@ mod tests {
         fn results(&self, _survey_id: u64) -> Pending<Results> {
             self.results_requests.set(self.results_requests.get() + 1);
             self.results_answer.clone().map_or_else(Pending::never, Pending::ready)
+        }
+
+        fn scores(&self, _survey_id: u64) -> Pending<Vec<Score>> {
+            self.scores_requests.set(self.scores_requests.get() + 1);
+            self.scores_answer.clone().map_or_else(Pending::never, Pending::ready)
         }
 
         fn user_status(&self, user: &str) -> Pending<UserStatus> {
@@ -738,7 +768,7 @@ mod tests {
     }
 
     #[test]
-    fn the_phase_survives_persisting() {
+    fn the_phase_survives_persisting_without_the_correct_answers() {
         let state = answering("Sam Smith");
         let json = serde_json::to_string(&state).unwrap();
         let restored: State = serde_json::from_str(&json).unwrap();
@@ -896,11 +926,13 @@ mod tests {
             description: "A survey".into(),
             link: None,
             access,
+            scored: false,
             questions: vec![Question {
                 id: uuid::Uuid::nil(),
                 text: "Why".into(),
                 kind: AnswerKind::Text,
                 possible_answers: vec![],
+                correct_answer: None,
             }],
         }
     }
@@ -1049,5 +1081,91 @@ mod tests {
         state.apply(Action::ChangeName, &backend);
         assert!(matches!(state.phase, Phase::Answering { .. }));
         assert!(state.is_busy());
+    }
+
+    /// The Starship survey, but scored.
+    fn scored_survey() -> Survey {
+        let mut survey = sample(SURVEY_ID);
+        survey.scored = true;
+        survey
+    }
+
+    fn done_with(survey: Survey) -> State {
+        State {
+            phase: Phase::Done { survey },
+            ..State::default()
+        }
+    }
+
+    fn score(user: &str, points: usize) -> Score {
+        Score {
+            user: user.into(),
+            points,
+        }
+    }
+
+    #[test]
+    fn a_scored_survey_fetches_the_scores_after_the_results() {
+        let ranking = vec![score("Ann", 2), score("Bob", 1)];
+        let backend = FakeBackend::new(None).with_scores(Some(Ok(ranking.clone())));
+        let mut state = done_with(scored_survey());
+
+        state.poll(&backend); // results requested
+        assert_eq!(backend.scores_requests.get(), 0, "the results come first");
+        state.poll(&backend); // results in, scores requested
+        assert!(state.results.is_some() && state.scores.is_none());
+        assert_eq!(backend.scores_requests.get(), 1);
+        state.poll(&backend); // scores in
+        assert_eq!(state.scores, Some(ranking));
+        assert!(!state.is_busy());
+
+        state.poll(&backend);
+        assert_eq!((backend.results_requests.get(), backend.scores_requests.get()), (1, 1));
+    }
+
+    #[test]
+    fn a_survey_without_scores_never_asks_for_them() {
+        let backend = FakeBackend::new(None);
+        let mut state = done_with(sample(SURVEY_ID));
+        for _ in 0..4 {
+            state.poll(&backend);
+        }
+        assert!(state.results.is_some());
+        assert_eq!(backend.scores_requests.get(), 0);
+        assert_eq!(state.scores, None);
+    }
+
+    #[test]
+    fn failed_scores_are_reported_and_not_retried_until_dismissed() {
+        let backend = FakeBackend::new(None).with_scores(Some(Err("Cannot reach the server".into())));
+        let mut state = done_with(scored_survey());
+        for _ in 0..3 {
+            state.poll(&backend);
+        }
+        assert_eq!(state.error.as_deref(), Some("Cannot reach the server"));
+        state.poll(&backend);
+        assert_eq!(backend.scores_requests.get(), 1);
+
+        state.apply(Action::DismissError, &backend);
+        state.poll(&backend);
+        assert_eq!(backend.scores_requests.get(), 2);
+    }
+
+    #[test]
+    fn submitting_a_scored_survey_forgets_old_scores_and_going_back_clears_them() {
+        let backend = FakeBackend::new(Some(Ok(())));
+        let mut state = known("Sam Smith", &backend);
+        state.apply(Action::StartSurvey(SURVEY_ID), &backend);
+        if let Phase::Answering { survey, .. } = &mut state.phase {
+            survey.scored = true;
+        }
+        state.scores = Some(vec![score("Old", 1)]);
+        state.apply(Action::Submit, &backend);
+        state.poll(&backend);
+        assert_eq!(state.scores, None);
+
+        state.scores = Some(vec![score("Ann", 1)]);
+        state.apply(Action::ChooseAnotherSurvey, &backend);
+        assert_eq!(state.scores, None);
     }
 }

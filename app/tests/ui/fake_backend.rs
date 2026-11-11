@@ -8,7 +8,7 @@ use std::cell::{Cell, RefCell};
 
 use futures::FutureExt as _;
 use prono::{MemoryRepo, Repo as _};
-use prono_api::{Access, Answer, AnswerKind, Question, Results, Submission, UserStatus, samples};
+use prono_api::{Access, Answer, AnswerKind, Question, Results, Score, Submission, UserStatus, samples};
 use prono_app::client::{Backend, Pending};
 
 /// The device the app under test runs on.
@@ -16,6 +16,22 @@ pub const MY_DEVICE: &str = "my-device";
 
 /// The pass phrase of the surveys that have one.
 pub const PASS_PHRASE: &str = "open sesame";
+
+/// The scored survey: both capitals are right in the options, the answers
+/// are not shown anywhere in the app.
+pub const QUIZ_ID: u64 = 3;
+pub const QUIZ_DESCRIPTION: &str = "Capitals quiz";
+const QUIZ_JSON: &str = r#"{
+    "survey_id": 3,
+    "description": "Capitals quiz",
+    "access": "pass_phrase",
+    "questions": [
+        {"question": "Capital of Belgium", "answer_type": "poll",
+         "possible_answers": ["Brussels", "Paris"], "correct_answer": "Brussels"},
+        {"question": "Capital of France", "answer_type": "poll",
+         "possible_answers": ["Brussels", "Paris"], "correct_answer": "Paris"}
+    ]
+}"#;
 
 /// How the fake server reacts to requests.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -48,10 +64,10 @@ impl FakeBackend {
         }
     }
 
-    /// A repository with the sample surveys, and the pass
+    /// A repository with the sample surveys and the quiz, and the pass
     /// phrase of those that have one.
     fn repo() -> MemoryRepo {
-        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON]);
+        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON, QUIZ_JSON]);
         for survey in Self::now(prono::surveys(&repo)).expect("the surveys are valid") {
             if survey.access == Access::PassPhrase {
                 Self::now(repo.set_pass_phrase(survey.id, PASS_PHRASE)).expect("setting succeeds");
@@ -105,9 +121,15 @@ impl FakeBackend {
 
     /// `user` answered every question of survey `survey_id` earlier, from
     /// `device_id`, with the answer `answer_to` gives for each question.
-    pub fn seed_answers(&self, survey_id: u64, user: &str, device_id: &str, answer_to: impl Fn(&Question) -> Answer) {
+    pub fn seed_answers(
+        &self,
+        survey_id: u64,
+        user: &str,
+        device_id: &str,
+        mut answer_to: impl FnMut(&Question) -> Answer,
+    ) {
         let survey = Self::now(prono::survey(&self.repo, survey_id)).expect("the seeded survey exists");
-        let answers: Vec<_> = survey.questions.iter().map(answer_to).collect();
+        let answers: Vec<_> = survey.questions.iter().map(&mut answer_to).collect();
         let mut submission = Submission::new(user, &survey, &answers);
         match survey.access {
             Access::NameList => self.allow(survey_id, user),
@@ -142,6 +164,10 @@ impl Backend for FakeBackend {
 
     fn results(&self, survey_id: u64) -> Pending<Results> {
         Self::respond(self.results.get(), || Self::now(prono::results(&self.repo, survey_id)))
+    }
+
+    fn scores(&self, survey_id: u64) -> Pending<Vec<Score>> {
+        Self::respond(self.results.get(), || Self::now(prono::scores(&self.repo, survey_id)))
     }
 
     fn user_status(&self, user: &str) -> Pending<UserStatus> {

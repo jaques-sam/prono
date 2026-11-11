@@ -93,17 +93,16 @@ Feature: Surveys by access
     When I submit my answers
     Then I see the thanks to "Sam Smith"
 
-  Scenario: A wrong pass phrase is refused
+  Scenario: A wrong pass phrase keeps the survey closed
     Given I entered the name "Sam Smith"
     And I entered the pass phrase "wrong"
-    And I start the survey
-    When I submit my answers
+    When I start the survey
     Then I see the error "Wrong pass phrase"
-    And I am answering the survey
+    And I am on the start screen
 
-  Scenario: A survey cannot be answered without its pass phrase
+  Scenario: A survey cannot be started without its pass phrase
     Given I entered the name "Sam Smith"
     And I entered the pass phrase ""
-    And I start the survey
-    When I submit my answers
+    When I start the survey
     Then I see the error "Wrong pass phrase"
+    And I am on the start screen

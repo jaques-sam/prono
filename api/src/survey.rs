@@ -315,6 +315,14 @@ pub fn check_name_parts(first: &str, last: &str) -> Result<String, Invalid> {
     Ok(name)
 }
 
+/// The pass phrase as the backend compares it: without the surrounding
+/// blanks, and `None` for a blank one.
+#[must_use]
+pub fn clean_pass_phrase(pass_phrase: &str) -> Option<String> {
+    let pass_phrase = pass_phrase.trim();
+    (!pass_phrase.is_empty()).then(|| pass_phrase.to_string())
+}
+
 impl Submission {
     /// Pairs `answers` (in question order) with `survey`'s questions.
     #[must_use]
@@ -335,8 +343,7 @@ impl Submission {
     /// one counts as none.
     #[must_use]
     pub fn with_pass_phrase(mut self, pass_phrase: &str) -> Self {
-        let pass_phrase = pass_phrase.trim();
-        self.pass_phrase = (!pass_phrase.is_empty()).then(|| pass_phrase.to_string());
+        self.pass_phrase = clean_pass_phrase(pass_phrase);
         self
     }
 
@@ -667,6 +674,8 @@ mod tests {
         let with = plain.clone().with_pass_phrase("  open sesame ");
         assert_eq!(with.pass_phrase.as_deref(), Some("open sesame"));
         assert_eq!(plain.with_pass_phrase("   ").pass_phrase, None);
+        assert_eq!(clean_pass_phrase(" open sesame\n").as_deref(), Some("open sesame"));
+        assert_eq!(clean_pass_phrase(""), None);
     }
 
     fn quiz() -> Survey {

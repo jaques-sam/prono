@@ -25,6 +25,15 @@ pub fn answers_path(survey_id: u64) -> String {
     format!("/api/surveys/{survey_id}/answers")
 }
 
+/// REST path checking the pass phrase of a survey: `POST` a JSON
+/// `Option<String>`, made with [`clean_pass_phrase`]. It answers `200` when
+/// it is right, and `403` with the error message when it is not. It sends the
+/// same API key and device id headers as a submission.
+#[must_use]
+pub fn pass_phrase_path(survey_id: u64) -> String {
+    format!("/api/surveys/{survey_id}/pass-phrase")
+}
+
 /// REST path of a scored survey's scores: `GET` returns a JSON list of
 /// [`Score`]s, best first.
 #[must_use]

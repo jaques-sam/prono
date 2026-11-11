@@ -57,7 +57,7 @@ async fn surveys_menu(repo: &dyn Repo, prompt: &mut impl Prompt) {
         let action = match choice {
             0 => SurveyAction::List,
             1 => {
-                let Some(file) = prompt.text("Path of the survey JSON file") else {
+                let Some(file) = prompt.text("Path of the survey JSON file:") else {
                     continue;
                 };
                 SurveyAction::Upload {
@@ -117,10 +117,10 @@ async fn name_list_menu(repo: &dyn Repo, prompt: &mut impl Prompt, survey: &Surv
         let action = match choice {
             0 => AccessAction::Show { survey_id },
             1 => {
-                let Some(first_name) = prompt.text("First name") else {
+                let Some(first_name) = prompt.text("First name:") else {
                     continue;
                 };
-                let Some(last_name) = prompt.text("Last name") else {
+                let Some(last_name) = prompt.text("Last name:") else {
                     continue;
                 };
                 AccessAction::Allow {
@@ -156,7 +156,7 @@ async fn name_list_menu(repo: &dyn Repo, prompt: &mut impl Prompt, survey: &Surv
 async fn pass_phrase_menu(repo: &dyn Repo, prompt: &mut impl Prompt, survey: &Survey) {
     let title = format!("Pass phrase of {} (Esc goes back)", describe(survey));
     while pick(prompt, &title, &["Set the pass phrase"]).is_some() {
-        let Some(pass_phrase) = prompt.text("The new pass phrase") else {
+        let Some(pass_phrase) = prompt.text("The new pass phrase:") else {
             continue;
         };
         let action = AccessAction::PassPhrase {

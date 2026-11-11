@@ -9,6 +9,9 @@
 
 The cli app is meant for the administrator only.
 
+Run without a command it opens an interactive menu (arrows and enter to choose, Esc to go back), for everything below.
+With a command it does just that, for scripts.
+
 It has the following functionality:
 
 - surveys (stored in table `Survey`, the backend and the apps get them from there):

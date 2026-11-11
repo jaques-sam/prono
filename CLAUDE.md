@@ -95,7 +95,7 @@ See the Architecture section of `README.md`. In short: every survey type is defi
   - `client.rs`: non-blocking REST client (`ehttp`), identical on both targets
   - No business rules in the UI: put them in `prono_api` or `state.rs`
 
-- **cli/**: admin tool on top of `prono` (surveys, users, access)
+- **cli/**: admin tool on top of `prono` (surveys, users, access): commands for scripts, and an interactive menu (`menu.rs`) when run without one; both go through `admin::run`
 
 ## Configuration
 

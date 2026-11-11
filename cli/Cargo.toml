@@ -7,6 +7,7 @@ edition = "2024"
 prono = { path = "../prono" }
 prono_api = { path = "../api" }
 clap = { version = "4", features = ["derive"] }
+inquire = { version = "0.9", default-features = false, features = ["crossterm"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 env_logger = "0.11"
 

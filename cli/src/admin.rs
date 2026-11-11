@@ -1,8 +1,10 @@
 //! Carries out a [`Commands`] against the repository. The command line and
 //! the interactive menu both end up here, so they cannot disagree.
 
+use std::iter::once;
+
 use prono::Repo;
-use prono_api::{Access, Survey, check_name_parts};
+use prono_api::{Access, Answer, Question, Results, Survey, check_name_parts};
 
 use crate::commands::{AccessAction, Commands, SurveyAction, UserAction};
 
@@ -49,7 +51,108 @@ async fn surveys(repo: &dyn Repo, action: SurveyAction) -> Result<String, String
                 scores.iter().map(|score| format!("{}: {}", score.user, score.points)),
             ))
         }
+        SurveyAction::Answers { survey_id, user } => {
+            let survey = prono::survey(repo, survey_id).await.map_err(|e| e.to_string())?;
+            let results = prono::results(repo, survey_id).await.map_err(|e| e.to_string())?;
+            answers(&survey, &results, user.as_deref())
+        }
     }
+}
+
+/// The names of everybody who answered survey `survey_id`, in order.
+///
+/// # Errors
+///
+/// A message for the administrator when the answers cannot be read.
+pub async fn participants(repo: &dyn Repo, survey_id: u64) -> Result<Vec<String>, String> {
+    let results = prono::results(repo, survey_id).await.map_err(|e| e.to_string())?;
+    Ok(participants_in(&results).into_iter().map(str::to_string).collect())
+}
+
+fn participants_in(results: &Results) -> Vec<&str> {
+    let mut users: Vec<_> = results.values().flatten().map(|found| found.user.as_str()).collect();
+    users.sort_unstable();
+    users.dedup();
+    users
+}
+
+/// The answers of `user` (matched ignoring case), or a table of everybody's.
+fn answers(survey: &Survey, results: &Results, user: Option<&str>) -> Result<String, String> {
+    let users = participants_in(results);
+    let Some(user) = user.map(str::trim) else {
+        if users.is_empty() {
+            return Ok(format!("Nobody answered survey {} yet.", survey.id));
+        }
+        return Ok(table(survey, results, &users));
+    };
+    let user = users
+        .into_iter()
+        .find(|name| name.to_lowercase() == user.to_lowercase())
+        .ok_or_else(|| format!("'{user}' did not answer survey {}", survey.id))?;
+    Ok(lines(survey.questions.iter().map(|question| {
+        format!("{}: {}", question.text, cell(answer_of(results, question, user)))
+    })))
+}
+
+/// The questions numbered, then a row per participant and a column per
+/// question (`-` where they did not answer).
+fn table(survey: &Survey, results: &Results, users: &[&str]) -> String {
+    let legend = survey
+        .questions
+        .iter()
+        .enumerate()
+        .map(|(index, question)| format!("Q{}: {}", index + 1, question.text));
+    let header: Vec<String> = once("Participant".to_string())
+        .chain((1..=survey.questions.len()).map(|number| format!("Q{number}")))
+        .collect();
+    let rows: Vec<Vec<String>> = users
+        .iter()
+        .map(|user| {
+            once((*user).to_string())
+                .chain(
+                    survey
+                        .questions
+                        .iter()
+                        .map(|question| cell(answer_of(results, question, user))),
+                )
+                .collect()
+        })
+        .collect();
+    let widths: Vec<usize> = (0..header.len())
+        .map(|column| {
+            once(&header)
+                .chain(&rows)
+                .map(|row| row[column].chars().count())
+                .max()
+                .unwrap_or_default()
+        })
+        .collect();
+    let format_row = |row: &[String]| {
+        let padded = row.iter().zip(&widths).map(|(text, width)| format!("{text:<width$}"));
+        padded.collect::<Vec<_>>().join(" | ").trim_end().to_string()
+    };
+    let separator = widths
+        .iter()
+        .map(|width| "-".repeat(*width))
+        .collect::<Vec<_>>()
+        .join("-+-");
+    let body = once(format_row(&header))
+        .chain(once(separator))
+        .chain(rows.iter().map(|row| format_row(row)));
+    format!("{}\n\n{}", lines(legend), lines(body))
+}
+
+fn answer_of<'a>(results: &'a Results, question: &Question, user: &str) -> Option<&'a Answer> {
+    let found = results.get(&question.id)?.iter().find(|found| found.user == user)?;
+    Some(&found.answer)
+}
+
+/// An answer on one line, `-` for none.
+fn cell(answer: Option<&Answer>) -> String {
+    answer.map_or_else(
+        || "-".to_string(),
+        |answer| answer.to_string().split_whitespace().collect::<Vec<_>>().join(" "),
+    )
 }
 
 /// `1: SpaceX survey (pass phrase, 4 questions, scored)`
@@ -258,6 +361,87 @@ mod tests {
         let submission = prono_api::Submission::new("Ann Lee", &survey, &[prono_api::Answer::Text("A".into())]);
         prono::submit(&repo, 3, "dev-1", &submission).await.unwrap();
         assert_eq!(ok(&repo, scores(3)).await, "Ann Lee: 1");
+    }
+
+    /// `name` on the name list of the course survey, and their two poll answers to it.
+    async fn answered_course(repo: &MemoryRepo, name: &str, device: &str, answers: [&str; 2]) {
+        let (first, last) = name.split_once(' ').unwrap();
+        repo.allow_user(2, first, last).await.unwrap();
+        let survey = prono::survey(repo, 2).await.unwrap();
+        let answers = answers.map(|answer| Answer::Poll(answer.into()));
+        let submission = prono_api::Submission::new(name, &survey, &answers);
+        prono::submit(repo, 2, device, &submission).await.unwrap();
+    }
+
+    fn answers_of(survey_id: u64, user: Option<&str>) -> Commands {
+        survey_action(SurveyAction::Answers {
+            survey_id,
+            user: user.map(Into::into),
+        })
+    }
+
+    #[tokio::test]
+    async fn answers_of_all_participants_are_a_table() {
+        let repo = repo();
+        assert_eq!(ok(&repo, answers_of(2, None)).await, "Nobody answered survey 2 yet.");
+
+        answered_course(&repo, "Bob Ray", "dev-2", ["C++", "I can't make it 😪"]).await;
+        answered_course(&repo, "Ann Lee", "dev-1", ["C", "Of course!"]).await;
+        let expected = [
+            "Q1: What is your background",
+            "Q2: I come to the course!",
+            "",
+            "Participant | Q1  | Q2",
+            "------------+-----+------------------",
+            "Ann Lee     | C   | Of course!",
+            "Bob Ray     | C++ | I can't make it 😪",
+        ];
+        assert_eq!(ok(&repo, answers_of(2, None)).await, expected.join("\n"));
+    }
+
+    #[tokio::test]
+    async fn a_missing_answer_is_a_dash_and_a_line_break_a_space() {
+        let quiz = r#"{"survey_id": 3, "description": "Quiz", "access": "name_list",
+            "questions": [{"question": "A?", "answer_type": "text"}, {"question": "B?", "answer_type": "text"}]}"#;
+        let repo = MemoryRepo::with_surveys([quiz]);
+        let survey = prono::survey(&repo, 3).await.unwrap();
+        let (a, b) = (survey.questions[0].id, survey.questions[1].id);
+        repo.save_answers("ann", "dev-1", &[(a, Answer::Text("one\ntwo".into()))])
+            .await
+            .unwrap();
+        repo.save_answers("bob", "dev-2", &[(b, Answer::Text("three".into()))])
+            .await
+            .unwrap();
+
+        let expected = [
+            "Q1: A?",
+            "Q2: B?",
+            "",
+            "Participant | Q1      | Q2",
+            "------------+---------+------",
+            "ann         | one two | -",
+            "bob         | -       | three",
+        ];
+        assert_eq!(ok(&repo, answers_of(3, None)).await, expected.join("\n"));
+        assert_eq!(ok(&repo, answers_of(3, Some("bob"))).await, "A?: -\nB?: three");
+    }
+
+    #[tokio::test]
+    async fn the_answers_of_one_participant_are_listed_by_question() {
+        let repo = repo();
+        answered_course(&repo, "Ann Lee", "dev-1", ["C", "Of course!"]).await;
+        answered_course(&repo, "Bob Ray", "dev-2", ["C++", "Of course!"]).await;
+
+        let expected = "What is your background: C\nI come to the course!: Of course!";
+        assert_eq!(ok(&repo, answers_of(2, Some("Ann Lee"))).await, expected);
+        // Names match the way they do when answering: ignoring case and surrounding spaces.
+        assert_eq!(ok(&repo, answers_of(2, Some(" ann lee "))).await, expected);
+
+        assert_eq!(
+            err(&repo, answers_of(2, Some("Cy Young"))).await,
+            "'Cy Young' did not answer survey 2"
+        );
+        assert!(err(&repo, answers_of(9, None)).await.contains("Unknown survey 9"));
     }
 
     #[tokio::test]

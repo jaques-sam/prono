@@ -36,6 +36,13 @@ pub enum SurveyAction {
     },
     /// Show who got how many answers right in a scored survey
     Scores { survey_id: u64 },
+    /// Show the answers to a survey: a table of all participants, or those of one
+    Answers {
+        survey_id: u64,
+        /// Only show the answers of this participant
+        #[arg(long)]
+        user: Option<String>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]

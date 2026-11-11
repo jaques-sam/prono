@@ -161,3 +161,4 @@ CI runs on push/PR via `.github/workflows/rust.yml`:
 - The app includes PWA support via `assets/sw.js` (append `#dev` to URL to skip caching during development)
 - Coverage excludes drawing, I/O and entry-point files per `.tarpaulin.toml`
 - Always add unit tests for all changes and bdd tests (./app/tests) for new app features
+- Bump the version in the backend/install/spk/INFO file if anything in backend is changed

@@ -85,6 +85,10 @@ cargo run --bin prono-cli -- surveys upload my_survey.json
   prediction survey can be uploaded again with them once the events happened; the answers already given are kept.
   `prono-cli surveys scores <id>` shows the ranking.
 
+- **Answers:** `prono-cli surveys answers <id>` prints a table of everybody's answers (a row per participant, a
+  column per question); add `--user "First Last"` for the answers of one participant. The interactive menu
+  (`prono-cli` without a command) offers both under Surveys.
+
 A question's id is derived from its text and answer type, and stored answers
 reference that id: editing a question's text starts it from scratch.
 

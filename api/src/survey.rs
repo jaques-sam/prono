@@ -292,6 +292,22 @@ impl Answer {
     }
 }
 
+/// The answer as a person reads it: the text itself, or a date as `DD/MM/YYYY`
+/// (`MM/YYYY` without a day).
+impl std::fmt::Display for Answer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Answer::Text(text) | Answer::Poll(text) => f.write_str(text),
+            Answer::PredictionDate {
+                day: Some(day),
+                month,
+                year,
+            } => write!(f, "{day:02}/{month:02}/{year:04}"),
+            Answer::PredictionDate { day: None, month, year } => write!(f, "{month:02}/{year:04}"),
+        }
+    }
+}
+
 /// Checks a participant's name.
 ///
 /// # Errors
@@ -698,6 +714,19 @@ mod tests {
         survey.questions[0].correct_answer = Some(date(7, 2028));
         survey.questions[1].correct_answer = Some(Answer::Text("Because".into()));
         survey
+    }
+
+    #[test]
+    fn answers_display_as_a_person_reads_them() {
+        assert_eq!(Answer::Text("Because".into()).to_string(), "Because");
+        assert_eq!(Answer::Poll("C++".into()).to_string(), "C++");
+        assert_eq!(date(7, 2028).to_string(), "07/2028");
+        let with_day = Answer::PredictionDate {
+            day: Some(3),
+            month: 7,
+            year: 2028,
+        };
+        assert_eq!(with_day.to_string(), "03/07/2028");
     }
 
     #[test]

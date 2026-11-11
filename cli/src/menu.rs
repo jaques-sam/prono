@@ -3,6 +3,7 @@
 //! exactly what the command line does. The questions go through a [`Prompt`],
 //! which the terminal implements and the tests script.
 
+use std::iter::once;
 use std::path::PathBuf;
 
 use prono::Repo;
@@ -52,6 +53,7 @@ async fn surveys_menu(repo: &dyn Repo, prompt: &mut impl Prompt) {
         "List the surveys",
         "Upload a survey file",
         "Show the scores of a survey",
+        "Show the answers of a survey",
     ];
     while let Some(choice) = pick(prompt, "Surveys (Esc goes back)", &options) {
         let action = match choice {
@@ -64,12 +66,24 @@ async fn surveys_menu(repo: &dyn Repo, prompt: &mut impl Prompt) {
                     file: PathBuf::from(file.trim()),
                 }
             }
-            _ => {
+            2 => {
                 let Some(survey) = pick_survey(repo, prompt, "Scores of which survey?", |survey| survey.scored).await
                 else {
                     continue;
                 };
                 SurveyAction::Scores { survey_id: survey.id }
+            }
+            _ => {
+                let Some(survey) = pick_survey(repo, prompt, "Answers of which survey?", |_| true).await else {
+                    continue;
+                };
+                let Some(user) = pick_participant(repo, prompt, survey.id).await else {
+                    continue;
+                };
+                SurveyAction::Answers {
+                    survey_id: survey.id,
+                    user,
+                }
             }
         };
         execute(repo, prompt, Commands::Surveys { action }).await;
@@ -167,6 +181,27 @@ async fn pass_phrase_menu(repo: &dyn Repo, prompt: &mut impl Prompt, survey: &Su
     }
 }
 
+/// Asks whose answers to show: `Some(None)` is everybody's, `None` is going
+/// back (or nobody answered).
+async fn pick_participant(repo: &dyn Repo, prompt: &mut impl Prompt, survey_id: u64) -> Option<Option<String>> {
+    let users = match admin::participants(repo, survey_id).await {
+        Ok(users) => users,
+        Err(error) => {
+            prompt.show(&format!("error: {error}"));
+            return None;
+        }
+    };
+    if users.is_empty() {
+        prompt.show("Nobody answered this survey yet.");
+        return None;
+    }
+    let labels: Vec<_> = once("Everybody (a table)".to_string())
+        .chain(users.iter().cloned())
+        .collect();
+    let index = prompt.select("Whose answers?", &labels)?;
+    Some(index.checked_sub(1).map(|user| users[user].clone()))
+}
+
 /// Asks to pick one of the surveys that pass `filter`.
 async fn pick_survey(
     repo: &dyn Repo,
@@ -205,7 +240,7 @@ mod tests {
     use std::collections::VecDeque;
 
     use prono::MemoryRepo;
-    use prono_api::samples;
+    use prono_api::{Answer, Submission, samples};
 
     use super::*;
 
@@ -359,6 +394,45 @@ mod tests {
         let script = navigate(&repo, [Pick("Surveys"), Pick("scores"), Pick("Quiz"), Back, Back]).await;
         assert_eq!(script.menus[2], ["3: Quiz (name list, 1 questions, scored)"]);
         assert_eq!(script.shown, ["Nobody answered survey 3 yet."]);
+    }
+
+    #[tokio::test]
+    async fn answers_are_shown_for_everybody_or_one_participant() {
+        let repo = repo();
+        let survey = prono::survey(&repo, 2).await.unwrap();
+        repo.allow_user(2, "Ann", "Lee").await.unwrap();
+        let answers = survey
+            .empty_answers()
+            .iter()
+            .map(|_| Answer::Poll("C".into()))
+            .collect::<Vec<_>>();
+        let submission = Submission::new("Ann Lee", &survey, &answers);
+        prono::submit(&repo, 2, "dev-1", &submission).await.unwrap();
+
+        let script = navigate(
+            &repo,
+            [
+                Pick("Surveys"),
+                Pick("answers"),
+                Pick("splendid course"),
+                Pick("Everybody"),
+                Pick("answers"),
+                Pick("splendid course"),
+                Pick("Ann Lee"),
+                Back,
+                Back,
+            ],
+        )
+        .await;
+        assert_eq!(script.menus[3], ["Everybody (a table)", "Ann Lee"]);
+        assert!(script.shown[0].contains("Participant | Q1"), "{:?}", script.shown);
+        assert_eq!(script.shown[1], "What is your background: C\nI come to the course!: C");
+    }
+
+    #[tokio::test]
+    async fn answers_of_a_survey_nobody_answered_are_not_offered() {
+        let script = navigate(&repo(), [Pick("Surveys"), Pick("answers"), Pick("SpaceX"), Back, Back]).await;
+        assert_eq!(script.shown, ["Nobody answered this survey yet."]);
     }
 
     #[tokio::test]

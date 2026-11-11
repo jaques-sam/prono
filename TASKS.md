@@ -29,7 +29,7 @@
 24. [x] Make it possible to upload a new surveys, they should not be embedded in the binary any more, put them in a fixed location
 25. [x] Make it possible to add scores to a survey, in that case all questions should have a correct answer
 26. [x] Make an interactive prono-cli with navigation
-27. [ ] The admin user should be able to see all answers through the CLI tool, per user but also a table for all users
+27. [x] The admin user should be able to see all answers through the CLI tool, per user but also a table for all users
 
 ## Technical Dept
 1. [x] Move prono-api to shared lib prono

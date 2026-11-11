@@ -127,6 +127,24 @@ mod tests {
                 action: SurveyAction::Scores { survey_id: 3 }
             })
         );
+        assert_eq!(
+            parse(&["surveys", "answers", "3"]).unwrap(),
+            Some(Commands::Surveys {
+                action: SurveyAction::Answers {
+                    survey_id: 3,
+                    user: None
+                }
+            })
+        );
+        assert_eq!(
+            parse(&["surveys", "answers", "3", "--user", "Ada Lovelace"]).unwrap(),
+            Some(Commands::Surveys {
+                action: SurveyAction::Answers {
+                    survey_id: 3,
+                    user: Some("Ada Lovelace".into())
+                }
+            })
+        );
         assert!(parse(&["surveys", "upload"]).is_err());
     }
 }

@@ -17,11 +17,6 @@ pub enum Commands {
         #[command(subcommand)]
         action: UserAction,
     },
-    /// Manage who may answer a survey
-    Access {
-        #[command(subcommand)]
-        action: AccessAction,
-    },
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
@@ -36,6 +31,9 @@ pub enum SurveyAction {
     },
     /// Show who got how many answers right in a scored survey
     Scores { survey_id: u64 },
+    /// Set the pass phrase of a survey, which is the only way to see and answer it. Surveys that
+    /// share a pass phrase are all shown to whoever enters it
+    PassPhrase { survey_id: u64, pass_phrase: String },
     /// Show the answers to a survey: a table of all participants, or those of one
     Answers {
         survey_id: u64,
@@ -54,24 +52,4 @@ pub enum UserAction {
         /// Username to delete
         name: String,
     },
-}
-
-#[derive(Debug, PartialEq, Eq, Subcommand)]
-pub enum AccessAction {
-    /// Put a participant on the name list of a survey (`"access": "name_list"`)
-    Allow {
-        survey_id: u64,
-        first_name: String,
-        last_name: String,
-    },
-    /// Take a participant off the name list of a survey
-    Disallow {
-        survey_id: u64,
-        first_name: String,
-        last_name: String,
-    },
-    /// Show the name list of a survey
-    Show { survey_id: u64 },
-    /// Set the pass phrase of a survey (`"access": "pass_phrase"`)
-    PassPhrase { survey_id: u64, pass_phrase: String },
 }

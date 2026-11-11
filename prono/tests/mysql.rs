@@ -76,31 +76,21 @@ async fn answers_round_trip_by_uuid_and_duplicates_are_refused() {
 
 #[tokio::test]
 #[ignore = "needs a dev database, see the module docs"]
-async fn survey_access_is_stored_and_matched_by_full_name() {
+async fn pass_phrases_are_stored_and_replaced_by_survey() {
     let repo = MysqlRepo::connect(&config()).await.unwrap();
-    // A survey id no real survey uses, so runs never touch real lists.
+    // A survey id no real survey uses, so runs never touch real pass phrases.
     let survey_id = u64::MAX - 1;
+    let phrase_of = async |repo: &MysqlRepo| {
+        let all = repo.pass_phrases().await.unwrap();
+        all.into_iter()
+            .find(|(id, _)| *id == survey_id)
+            .map(|(_, phrase)| phrase)
+    };
 
-    repo.allow_user(survey_id, "Ada", "Lovelace").await.unwrap();
-    repo.allow_user(survey_id, "Ada", "Lovelace").await.unwrap(); // no error, no duplicate
-    assert_eq!(
-        repo.allowed_users(survey_id).await.unwrap(),
-        [("Ada".to_string(), "Lovelace".to_string())]
-    );
-    assert_eq!(repo.listed_surveys("Ada Lovelace").await.unwrap(), [survey_id]);
-    assert_eq!(repo.listed_surveys("ada lovelace").await.unwrap(), [survey_id]);
-    assert_eq!(repo.listed_surveys("Ada Byron").await.unwrap(), Vec::<u64>::new());
-
-    repo.disallow_user(survey_id, "Ada", "Lovelace").await.unwrap();
-    assert_eq!(
-        repo.allowed_users(survey_id).await.unwrap(),
-        Vec::<(String, String)>::new()
-    );
-
-    assert_eq!(repo.pass_phrase(survey_id).await.unwrap(), None);
+    assert_eq!(phrase_of(&repo).await, None);
     repo.set_pass_phrase(survey_id, "one").await.unwrap();
     repo.set_pass_phrase(survey_id, "two").await.unwrap();
-    assert_eq!(repo.pass_phrase(survey_id).await.unwrap().as_deref(), Some("two"));
+    assert_eq!(phrase_of(&repo).await.as_deref(), Some("two"));
 }
 
 #[tokio::test]

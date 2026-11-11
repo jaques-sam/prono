@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use prono_api::{API_KEY, DEVICE_ID_HEADER, Results, Score, Submission, UserStatus};
+use prono_api::{API_KEY, DEVICE_ID_HEADER, Results, Score, Submission, Survey};
 
 pub const PROD_URL: &str = "https://prono.samagali.myds.me";
 #[cfg(target_arch = "wasm32")]
@@ -10,15 +10,14 @@ pub const DEV_URL: &str = "http://localhost:8081";
 /// return a [`Pending`] result to poll.
 pub trait Backend {
     fn submit(&self, survey_id: u64, submission: &Submission) -> Pending<()>;
-    /// Whether `pass_phrase` (see [`prono_api::clean_pass_phrase`]) is the
-    /// one of survey `survey_id`; an error says it is not.
-    fn check_pass_phrase(&self, survey_id: u64, pass_phrase: Option<&str>) -> Pending<()>;
+    /// The surveys `pass_phrase` (see [`prono_api::clean_pass_phrase`])
+    /// opens; an error says it opens none. The only source of surveys.
+    fn open_surveys(&self, pass_phrase: Option<&str>) -> Pending<Vec<Survey>>;
     fn results(&self, survey_id: u64) -> Pending<Results>;
     /// The scores of a scored survey, best first.
     fn scores(&self, survey_id: u64) -> Pending<Vec<Score>>;
-    /// Whether `user` (the full name) already filled in a survey, and the
-    /// surveys they may answer.
-    fn user_status(&self, user: &str) -> Pending<UserStatus>;
+    /// Whether `user` (the full name) already filled in a survey.
+    fn has_answered(&self, user: &str) -> Pending<bool>;
 }
 
 /// The result of a request that may still be in flight. The error is a
@@ -103,9 +102,9 @@ impl Backend for HttpBackend {
         }
     }
 
-    fn check_pass_phrase(&self, survey_id: u64, pass_phrase: Option<&str>) -> Pending<()> {
-        match ehttp::Request::post_json(self.url(&prono_api::pass_phrase_path(survey_id)), &pass_phrase) {
-            Ok(request) => self.send(self.authorized(request), |_| Ok(())),
+    fn open_surveys(&self, pass_phrase: Option<&str>) -> Pending<Vec<Survey>> {
+        match ehttp::Request::post_json(self.url(prono_api::surveys_path()), &pass_phrase) {
+            Ok(request) => self.send(self.authorized(request), parse_json),
             Err(err) => Pending::ready(Err(err.to_string())),
         }
     }
@@ -124,7 +123,7 @@ impl Backend for HttpBackend {
         )
     }
 
-    fn user_status(&self, user: &str) -> Pending<UserStatus> {
+    fn has_answered(&self, user: &str) -> Pending<bool> {
         let request = ehttp::Request::get(self.url(&prono_api::user_path(user)));
         self.send(self.authorized(request), parse_json)
     }

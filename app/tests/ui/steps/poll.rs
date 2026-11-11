@@ -5,7 +5,8 @@ use egui_kittest::kittest::{NodeT as _, Queryable as _};
 use prono_api::{Answer, samples};
 
 use crate::fake_backend::MY_DEVICE;
-use crate::steps::common::{COURSE_ID, course};
+use crate::fake_backend::{COURSE_ID, COURSE_PASS_PHRASE};
+use crate::steps::common::course;
 use crate::world::World;
 
 impl World {
@@ -58,12 +59,12 @@ impl World {
 #[given(expr = "I answer the course survey as {string}")]
 #[when(expr = "I answer the course survey as {string}")]
 fn answer_course(world: &mut World, name: String) {
-    world.answer_survey_as(&name, &course().description);
+    world.answer_survey_as(&name, &course().description, COURSE_PASS_PHRASE);
 }
 
 #[when("I start the course survey")]
 fn start_course(world: &mut World) {
-    world.start_survey(&course().description);
+    world.start_survey(&course().description, COURSE_PASS_PHRASE);
 }
 
 #[given(expr = "{string} already answered {string} to {string} from this device")]

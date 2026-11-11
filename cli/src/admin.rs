@@ -4,9 +4,9 @@
 use std::iter::once;
 
 use prono::Repo;
-use prono_api::{Access, Answer, Question, Results, Survey, check_name_parts};
+use prono_api::{Answer, Question, Results, Survey};
 
-use crate::commands::{AccessAction, Commands, SurveyAction, UserAction};
+use crate::commands::{Commands, SurveyAction, UserAction};
 
 /// Runs `command` and returns what to tell the administrator.
 ///
@@ -17,7 +17,6 @@ pub async fn run(repo: &dyn Repo, command: Commands) -> Result<String, String> {
     match command {
         Commands::Surveys { action } => surveys(repo, action).await,
         Commands::Users { action } => users(repo, action).await,
-        Commands::Access { action } => access(repo, action).await,
     }
 }
 
@@ -28,7 +27,11 @@ async fn surveys(repo: &dyn Repo, action: SurveyAction) -> Result<String, String
             if surveys.is_empty() {
                 return Ok("No surveys yet. Upload one with `surveys upload <file>`.".into());
             }
-            Ok(lines(surveys.iter().map(describe)))
+            let closed = closed_surveys(repo, &surveys).await?;
+            Ok(lines(surveys.iter().map(|survey| {
+                let note = if closed.contains(&survey.id) { CLOSED } else { "" };
+                format!("{}{note}", describe(survey))
+            })))
         }
         SurveyAction::Upload { file } => {
             let json = std::fs::read_to_string(&file).map_err(|e| format!("cannot read {}: {e}", file.display()))?;
@@ -40,8 +43,16 @@ async fn surveys(repo: &dyn Repo, action: SurveyAction) -> Result<String, String
                 .is_some();
             prono::upload_survey(repo, &json).await.map_err(|e| e.to_string())?;
             let verb = if replaced { "replaced" } else { "uploaded" };
-            Ok(format!("Survey {verb}: {}", describe(&survey)))
+            let message = format!("Survey {verb}: {}", describe(&survey));
+            if closed_surveys(repo, std::slice::from_ref(&survey)).await?.is_empty() {
+                return Ok(message);
+            }
+            Ok(format!(
+                "{message}\nNobody can open it until it has a pass phrase: `surveys pass-phrase {} <pass phrase>`.",
+                survey.id
+            ))
         }
+        SurveyAction::PassPhrase { survey_id, pass_phrase } => set_pass_phrase(repo, survey_id, &pass_phrase).await,
         SurveyAction::Scores { survey_id } => {
             let scores = prono::scores(repo, survey_id).await.map_err(|e| e.to_string())?;
             if scores.is_empty() {
@@ -57,6 +68,45 @@ async fn surveys(repo: &dyn Repo, action: SurveyAction) -> Result<String, String
             answers(&survey, &results, user.as_deref())
         }
     }
+}
+
+/// Appended to a survey that nobody can open yet.
+const CLOSED: &str = " [closed: no pass phrase]";
+
+/// The ids of those of `surveys` that have no pass phrase.
+async fn closed_surveys(repo: &dyn Repo, surveys: &[Survey]) -> Result<Vec<u64>, String> {
+    let pass_phrases = repo.pass_phrases().await.map_err(|e| e.to_string())?;
+    Ok(surveys
+        .iter()
+        .map(|survey| survey.id)
+        .filter(|id| !pass_phrases.iter().any(|(with, _)| with == id))
+        .collect())
+}
+
+/// Sets the pass phrase of survey `survey_id` and tells which surveys it
+/// opens now: those that share it are shown together.
+async fn set_pass_phrase(repo: &dyn Repo, survey_id: u64, pass_phrase: &str) -> Result<String, String> {
+    prono::survey(repo, survey_id).await.map_err(|e| e.to_string())?;
+    let pass_phrase = pass_phrase.trim();
+    if pass_phrase.is_empty() {
+        return Err("the pass phrase must not be blank".into());
+    }
+    repo.set_pass_phrase(survey_id, pass_phrase)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut opened: Vec<_> = repo
+        .pass_phrases()
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|(_, stored)| stored == pass_phrase)
+        .map(|(id, _)| id)
+        .collect();
+    opened.sort_unstable();
+    let opened = opened.iter().map(u64::to_string).collect::<Vec<_>>().join(", ");
+    Ok(format!(
+        "Pass phrase of survey {survey_id} set. It opens survey(s) {opened}."
+    ))
 }
 
 /// The names of everybody who answered survey `survey_id`, in order.
@@ -155,16 +205,12 @@ fn cell(answer: Option<&Answer>) -> String {
     )
 }
 
-/// `1: SpaceX survey (pass phrase, 4 questions, scored)`
+/// `1: SpaceX survey (4 questions, scored)`
 #[must_use]
 pub fn describe(survey: &Survey) -> String {
-    let access = match survey.access {
-        Access::PassPhrase => "pass phrase",
-        Access::NameList => "name list",
-    };
     let scored = if survey.scored { ", scored" } else { "" };
     format!(
-        "{}: {} ({access}, {} questions{scored})",
+        "{}: {} ({} questions{scored})",
         survey.id,
         survey.description,
         survey.questions.len()
@@ -184,71 +230,6 @@ async fn users(repo: &dyn Repo, action: UserAction) -> Result<String, String> {
             repo.delete_user(&name).await.map_err(|e| e.to_string())?;
             Ok(format!("User '{name}' deleted."))
         }
-    }
-}
-
-async fn access(repo: &dyn Repo, action: AccessAction) -> Result<String, String> {
-    match action {
-        AccessAction::Allow {
-            survey_id,
-            first_name,
-            last_name,
-        } => {
-            require_access(repo, survey_id, Access::NameList).await?;
-            let name = check_name_parts(&first_name, &last_name).map_err(|e| e.to_string())?;
-            repo.allow_user(survey_id, first_name.trim(), last_name.trim())
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok(format!("'{name}' may answer survey {survey_id}."))
-        }
-        AccessAction::Disallow {
-            survey_id,
-            first_name,
-            last_name,
-        } => {
-            require_access(repo, survey_id, Access::NameList).await?;
-            repo.disallow_user(survey_id, first_name.trim(), last_name.trim())
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok(format!(
-                "'{} {}' may no longer answer survey {survey_id}.",
-                first_name.trim(),
-                last_name.trim()
-            ))
-        }
-        AccessAction::Show { survey_id } => {
-            require_access(repo, survey_id, Access::NameList).await?;
-            let names = repo.allowed_users(survey_id).await.map_err(|e| e.to_string())?;
-            if names.is_empty() {
-                return Ok(format!("Nobody is on the list of survey {survey_id}."));
-            }
-            Ok(lines(names.iter().map(|(first, last)| format!("{first} {last}"))))
-        }
-        AccessAction::PassPhrase { survey_id, pass_phrase } => {
-            require_access(repo, survey_id, Access::PassPhrase).await?;
-            let pass_phrase = pass_phrase.trim();
-            if pass_phrase.is_empty() {
-                return Err("the pass phrase must not be blank".into());
-            }
-            repo.set_pass_phrase(survey_id, pass_phrase)
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok(format!("Pass phrase of survey {survey_id} set."))
-        }
-    }
-}
-
-/// Fails unless survey `survey_id` exists and uses `access`: a list or pass
-/// phrase for a survey that does not check it would silently do nothing.
-async fn require_access(repo: &dyn Repo, survey_id: u64, access: Access) -> Result<(), String> {
-    let survey = prono::survey(repo, survey_id).await.map_err(|e| e.to_string())?;
-    if survey.access == access {
-        Ok(())
-    } else {
-        Err(format!(
-            "survey {survey_id} has access {:?}, not {access:?}",
-            survey.access
-        ))
     }
 }
 
@@ -281,16 +262,11 @@ mod tests {
         Commands::Surveys { action }
     }
 
-    fn access_action(action: AccessAction) -> Commands {
-        Commands::Access { action }
-    }
-
-    fn allow(survey_id: u64, first: &str, last: &str) -> AccessAction {
-        AccessAction::Allow {
+    fn pass_phrase(survey_id: u64, pass_phrase: &str) -> Commands {
+        survey_action(SurveyAction::PassPhrase {
             survey_id,
-            first_name: first.into(),
-            last_name: last.into(),
-        }
+            pass_phrase: pass_phrase.into(),
+        })
     }
 
     /// A survey file of its own in the temp directory.
@@ -301,15 +277,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn surveys_are_listed_with_their_access() {
+    async fn surveys_are_listed_and_those_without_a_pass_phrase_say_so() {
         let empty = MemoryRepo::default();
         let message = ok(&empty, survey_action(SurveyAction::List)).await;
         assert!(message.contains("No surveys yet"), "{message}");
 
-        let listed = ok(&repo(), survey_action(SurveyAction::List)).await;
+        let repo = repo();
+        let listed = ok(&repo, survey_action(SurveyAction::List)).await;
         let expected = [
-            "1: Starship achievements survey (pass phrase, 4 questions)",
-            "2: You were chosen to follow a splendid course... (name list, 4 questions)",
+            "1: Starship achievements survey (4 questions) [closed: no pass phrase]",
+            "2: You were chosen to follow a splendid course... (4 questions) [closed: no pass phrase]",
+        ];
+        assert_eq!(listed, expected.join("\n"));
+
+        ok(&repo, pass_phrase(1, "open sesame")).await;
+        let listed = ok(&repo, survey_action(SurveyAction::List)).await;
+        let expected = [
+            "1: Starship achievements survey (4 questions)",
+            "2: You were chosen to follow a splendid course... (4 questions) [closed: no pass phrase]",
         ];
         assert_eq!(listed, expected.join("\n"));
     }
@@ -320,18 +305,22 @@ mod tests {
         let file = survey_file("upload.json", samples::STARSHIP_JSON);
         let message = ok(&repo, survey_action(SurveyAction::Upload { file: file.clone() })).await;
         assert!(message.starts_with("Survey uploaded: 1:"), "{message}");
+        assert!(message.contains("`surveys pass-phrase 1 <pass phrase>`"), "{message}");
         assert_eq!(prono::survey(&repo, 1).await.unwrap(), samples::starship());
 
+        // Replacing keeps the pass phrase, so there is nothing to remind of.
+        ok(&repo, pass_phrase(1, "open sesame")).await;
         let message = ok(&repo, survey_action(SurveyAction::Upload { file: file.clone() })).await;
         assert!(message.starts_with("Survey replaced: 1:"), "{message}");
+        assert!(!message.contains("pass-phrase"), "{message}");
         std::fs::remove_file(file).unwrap();
     }
 
     #[tokio::test]
     async fn invalid_or_missing_survey_files_are_reported() {
         let repo = MemoryRepo::default();
-        let no_access = samples::STARSHIP_JSON.replace(r#""access": "pass_phrase","#, "");
-        let file = survey_file("no-access.json", &no_access);
+        let with_access = samples::STARSHIP_JSON.replace(r#""link""#, r#""access": "pass_phrase", "link""#);
+        let file = survey_file("with-access.json", &with_access);
         let message = err(&repo, survey_action(SurveyAction::Upload { file: file.clone() })).await;
         assert!(
             message.contains("invalid survey") && message.contains("access"),
@@ -347,9 +336,10 @@ mod tests {
 
     #[tokio::test]
     async fn scores_need_a_scored_survey_and_answers() {
-        let quiz = r#"{"survey_id": 3, "description": "Quiz", "access": "name_list",
+        let quiz = r#"{"survey_id": 3, "description": "Quiz",
             "questions": [{"question": "Q?", "answer_type": "text", "correct_answer": "a"}]}"#;
         let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, quiz]);
+        repo.set_pass_phrase(3, "open sesame").await.unwrap();
         let scores = |survey_id| survey_action(SurveyAction::Scores { survey_id });
 
         assert!(err(&repo, scores(1)).await.contains("no scores"));
@@ -357,23 +347,22 @@ mod tests {
         assert_eq!(ok(&repo, scores(3)).await, "Nobody answered survey 3 yet.");
 
         let survey = prono::survey(&repo, 3).await.unwrap();
-        repo.allow_user(3, "Ann", "Lee").await.unwrap();
-        let submission = prono_api::Submission::new("Ann Lee", &survey, &[prono_api::Answer::Text("A".into())]);
+        let submission = prono_api::Submission::new("Ann Lee", &survey, &[prono_api::Answer::Text("A".into())])
+            .with_pass_phrase("open sesame");
         prono::submit(&repo, 3, "dev-1", &submission).await.unwrap();
         assert_eq!(ok(&repo, scores(3)).await, "Ann Lee: 1");
     }
 
-    /// `name` on the name list of the course survey, and their answers to it: the given
-    /// ones to the first two (poll) questions, the sample ones to the rest.
+    /// `name`'s answers to the course survey: the given ones to the first two (poll)
+    /// questions, the sample ones to the rest.
     async fn answered_course(repo: &MemoryRepo, name: &str, device: &str, answers_to_first_two: [&str; 2]) {
-        let (first, last) = name.split_once(' ').unwrap();
-        repo.allow_user(2, first, last).await.unwrap();
+        repo.set_pass_phrase(2, "rust rocks").await.unwrap();
         let survey = prono::survey(repo, 2).await.unwrap();
         let mut answers = samples::course_answers();
         for (slot, answer) in answers.iter_mut().zip(answers_to_first_two) {
             *slot = Answer::Poll(answer.into());
         }
-        let submission = prono_api::Submission::new(name, &survey, &answers);
+        let submission = prono_api::Submission::new(name, &survey, &answers).with_pass_phrase("rust rocks");
         prono::submit(repo, 2, device, &submission).await.unwrap();
     }
 
@@ -407,7 +396,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_missing_answer_is_a_dash_and_a_line_break_a_space() {
-        let quiz = r#"{"survey_id": 3, "description": "Quiz", "access": "name_list",
+        let quiz = r#"{"survey_id": 3, "description": "Quiz",
             "questions": [{"question": "A?", "answer_type": "text"}, {"question": "B?", "answer_type": "text"}]}"#;
         let repo = MemoryRepo::with_surveys([quiz]);
         let survey = prono::survey(&repo, 3).await.unwrap();
@@ -470,62 +459,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_name_list_is_filled_and_emptied() {
-        let repo = repo();
-        let show = || access_action(AccessAction::Show { survey_id: 2 });
-        assert_eq!(ok(&repo, show()).await, "Nobody is on the list of survey 2.");
-
-        let message = ok(&repo, access_action(allow(2, " Ada ", "Lovelace"))).await;
-        assert_eq!(message, "'Ada Lovelace' may answer survey 2.");
-        ok(&repo, access_action(allow(2, "Alan", "Turing"))).await;
-        assert_eq!(ok(&repo, show()).await, "Ada Lovelace\nAlan Turing");
-
-        let disallow = access_action(AccessAction::Disallow {
-            survey_id: 2,
-            first_name: "Ada".into(),
-            last_name: "Lovelace".into(),
-        });
-        assert_eq!(
-            ok(&repo, disallow).await,
-            "'Ada Lovelace' may no longer answer survey 2."
-        );
-        assert_eq!(ok(&repo, show()).await, "Alan Turing");
-    }
-
-    #[tokio::test]
-    async fn a_name_needs_both_parts() {
-        let repo = repo();
-        let message = err(&repo, access_action(allow(2, "Ada", "  "))).await;
-        assert!(message.contains("first and last name"), "{message}");
-        assert_eq!(repo.allowed_users(2).await.unwrap(), Vec::<(String, String)>::new());
-    }
-
-    #[tokio::test]
     async fn the_pass_phrase_is_set_trimmed_and_never_blank() {
         let repo = repo();
-        let set = |phrase: &str| {
-            access_action(AccessAction::PassPhrase {
-                survey_id: 1,
-                pass_phrase: phrase.into(),
-            })
-        };
-        assert_eq!(ok(&repo, set(" open sesame ")).await, "Pass phrase of survey 1 set.");
-        assert_eq!(repo.pass_phrase(1).await.unwrap().as_deref(), Some("open sesame"));
-        assert!(err(&repo, set("  ")).await.contains("blank"));
-        assert_eq!(repo.pass_phrase(1).await.unwrap().as_deref(), Some("open sesame"));
+        assert_eq!(
+            ok(&repo, pass_phrase(1, " open sesame ")).await,
+            "Pass phrase of survey 1 set. It opens survey(s) 1."
+        );
+        assert_eq!(repo.pass_phrases().await.unwrap(), [(1, "open sesame".to_string())]);
+        assert!(err(&repo, pass_phrase(1, "  ")).await.contains("blank"));
+        assert_eq!(repo.pass_phrases().await.unwrap(), [(1, "open sesame".to_string())]);
+
+        // Setting it again replaces it.
+        ok(&repo, pass_phrase(1, "new one")).await;
+        assert_eq!(repo.pass_phrases().await.unwrap(), [(1, "new one".to_string())]);
     }
 
     #[tokio::test]
-    async fn access_commands_only_fit_surveys_using_that_access() {
+    async fn setting_a_pass_phrase_tells_which_surveys_share_it() {
         let repo = repo();
-        let show = |survey_id| access_action(AccessAction::Show { survey_id });
-        assert!(err(&repo, show(1)).await.contains("PassPhrase, not NameList"));
-        assert!(err(&repo, show(999)).await.contains("Unknown survey 999"));
-        let phrase = access_action(AccessAction::PassPhrase {
-            survey_id: 2,
-            pass_phrase: "x".into(),
-        });
-        assert!(err(&repo, phrase).await.contains("NameList, not PassPhrase"));
-        assert!(repo.pass_phrase(2).await.unwrap().is_none());
+        ok(&repo, pass_phrase(1, "open sesame")).await;
+        assert_eq!(
+            ok(&repo, pass_phrase(2, "open sesame")).await,
+            "Pass phrase of survey 2 set. It opens survey(s) 1, 2."
+        );
+    }
+
+    #[tokio::test]
+    async fn only_a_survey_that_exists_gets_a_pass_phrase() {
+        let repo = repo();
+        assert!(err(&repo, pass_phrase(999, "x")).await.contains("Unknown survey 999"));
+        assert_eq!(repo.pass_phrases().await.unwrap(), Vec::<(u64, String)>::new());
     }
 }

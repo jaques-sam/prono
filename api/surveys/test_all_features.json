@@ -1,8 +1,7 @@
 {
     "survey_id": 3,
-    "description": "Test survey using every feature: all answer types, a link, an access rule and correct answers (a scored survey)",
+    "description": "Test survey using every feature: all answer types, a link and correct answers (a scored survey)",
     "link": "https://jaques-sam.github.io/prono/",
-    "access": "pass_phrase",
     "questions": [
         {
             "question": "When will the first crewed Mars landing happen?",

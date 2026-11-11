@@ -49,7 +49,7 @@ async fn run(cli: Cli) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use commands::{AccessAction, SurveyAction, UserAction};
+    use commands::{SurveyAction, UserAction};
 
     use super::*;
 
@@ -80,29 +80,28 @@ mod tests {
     }
 
     #[test]
-    fn parse_access_allow() {
+    fn parse_survey_pass_phrase() {
         assert_eq!(
-            parse(&["access", "allow", "2", "Ada", "Lovelace"]).unwrap(),
-            Some(Commands::Access {
-                action: AccessAction::Allow {
-                    survey_id: 2,
-                    first_name: "Ada".into(),
-                    last_name: "Lovelace".into()
+            parse(&["surveys", "pass-phrase", "3", "open sesame"]).unwrap(),
+            Some(Commands::Surveys {
+                action: SurveyAction::PassPhrase {
+                    survey_id: 3,
+                    pass_phrase: "open sesame".into()
                 }
             })
         );
-        assert!(parse(&["access", "allow", "2", "Ada"]).is_err());
-        assert!(parse(&["access", "allow", "x", "Ada", "L"]).is_err());
+        assert!(parse(&["surveys", "pass-phrase", "3"]).is_err());
+        assert!(parse(&["surveys", "pass-phrase", "x", "open sesame"]).is_err());
     }
 
     #[test]
-    fn parse_access_pass_phrase() {
-        assert!(matches!(
-            parse(&["access", "pass-phrase", "3", "open sesame"]).unwrap(),
-            Some(Commands::Access {
-                action: AccessAction::PassPhrase { survey_id: 3, .. }
-            })
-        ));
+    fn the_access_commands_are_gone() {
+        for command in ["allow", "disallow", "show", "pass-phrase"] {
+            assert!(
+                parse(&["access", command, "2", "Ada", "Lovelace"]).is_err(),
+                "{command}"
+            );
+        }
     }
 
     #[test]

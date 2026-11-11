@@ -7,6 +7,7 @@ use prono_app::state::NAME_CHECK_DELAY;
 
 use crate::fake_backend::PASS_PHRASE;
 use crate::world::World;
+use prono_app::state::Phase;
 
 /// The label of the pass phrase field.
 const PASS_PHRASE_LABEL: &str = "Pass phrase:";
@@ -14,9 +15,6 @@ const PASS_PHRASE_LABEL: &str = "Pass phrase:";
 /// The survey the scenarios use.
 pub const SURVEY: &str = "Starship achievements survey";
 pub const SURVEY_ID: u64 = 1;
-/// The survey with poll questions.
-pub const COURSE_ID: u64 = 2;
-
 /// The survey with poll questions.
 pub fn course() -> Survey {
     prono_api::samples::course()
@@ -53,37 +51,39 @@ impl World {
         self.type_into("Last name:", last);
     }
 
-    /// Starts the survey, after the typing of the name paused long enough for
-    /// the server to tell which surveys the name is offered.
-    pub fn start_survey(&mut self, description: &str) {
+    /// Starts the survey `description`, which `pass_phrase` opens. The
+    /// surveys are offered once the pass phrase was submitted: unless a
+    /// scenario did that already, it is submitted now.
+    pub fn start_survey(&mut self, description: &str, pass_phrase: &str) {
         self.wait(NAME_CHECK_DELAY + 0.1);
-        // The pass phrase is asked next to the surveys, so it is entered
-        // before the survey is chosen. It is the right one, unless a
-        // scenario entered another.
-        let entered = std::mem::take(&mut self.pass_phrase_entered);
-        if !entered && self.shows(PASS_PHRASE_LABEL) {
-            self.enter_pass_phrase(PASS_PHRASE);
+        if !self.has_button(description) {
+            self.submit_pass_phrase(pass_phrase);
         }
         self.click_button(description);
     }
 
-    /// Replaces whatever is in the pass phrase field with `pass_phrase`. Each
-    /// survey with a pass phrase has a field, they all show the same text.
+    /// Replaces whatever is in the pass phrase field with `pass_phrase`.
     pub fn enter_pass_phrase(&mut self, pass_phrase: &str) {
-        self.wait(NAME_CHECK_DELAY + 0.1);
-        self.harness
-            .get_all_by_role_and_label(Role::PasswordInput, PASS_PHRASE_LABEL)
-            .next()
-            .expect("there is no pass phrase field")
-            .click();
-        self.replace_focused_text(pass_phrase);
+        self.type_into_role(Role::PasswordInput, PASS_PHRASE_LABEL, pass_phrase);
     }
 
-    /// Enters `name` ("First Last") and starts the survey `description`.
-    pub fn answer_survey_as(&mut self, name: &str, description: &str) {
+    /// Enters `pass_phrase` and presses Submit.
+    pub fn submit_pass_phrase(&mut self, pass_phrase: &str) {
+        self.enter_pass_phrase(pass_phrase);
+        self.click_button("Submit");
+    }
+
+    /// Enters `name` ("First Last"), starts the survey `description` that
+    /// `pass_phrase` opens, and checks its questions show.
+    pub fn answer_survey_as(&mut self, name: &str, description: &str, pass_phrase: &str) {
         self.enter_name_parts(name);
-        self.start_survey(description);
-        assert!(self.has_button("Submit"), "the survey was not started");
+        self.start_survey(description, pass_phrase);
+        assert!(self.is_answering(), "the survey was not started");
+    }
+
+    /// Whether the questions of a survey are shown.
+    pub fn is_answering(&self) -> bool {
+        matches!(self.session().state.phase, Phase::Answering { .. })
     }
 
     /// Enters `name` ("First Last"; without a space it is a first name only).
@@ -100,7 +100,7 @@ fn app_is_open(world: &mut World) {
 
 #[given(expr = "I am answering the survey as {string}")]
 fn answering_as(world: &mut World, name: String) {
-    world.answer_survey_as(&name, SURVEY);
+    world.answer_survey_as(&name, SURVEY, PASS_PHRASE);
 }
 
 #[when(expr = "I enter the name {string}")]
@@ -123,14 +123,19 @@ fn enter_long_name(world: &mut World, length: usize, last: String) {
 #[given("I start the survey")]
 #[when("I start the survey")]
 fn start_survey(world: &mut World) {
-    world.start_survey(SURVEY);
+    world.start_survey(SURVEY, PASS_PHRASE);
 }
 
 #[given(expr = "I entered the pass phrase {string}")]
 #[when(expr = "I enter the pass phrase {string}")]
 fn enter_pass_phrase(world: &mut World, pass_phrase: String) {
     world.enter_pass_phrase(&pass_phrase);
-    world.pass_phrase_entered = true;
+}
+
+#[given("I submitted the pass phrase")]
+#[when("I submit the pass phrase")]
+fn submit_pass_phrase(world: &mut World) {
+    world.click_button("Submit");
 }
 
 #[given("I go back to change my name")]
@@ -172,8 +177,8 @@ fn on_start_screen(world: &mut World) {
 
 #[then("I am answering the survey")]
 fn is_answering(world: &mut World) {
+    assert!(world.is_answering(), "the questions are not shown");
     assert!(world.shows(SURVEY), "the survey heading is missing");
-    assert!(world.has_button("Submit"), "there is no Submit button");
 }
 
 #[then(expr = "there is no {string} button")]
@@ -211,4 +216,9 @@ fn asked_no_name(world: &mut World) {
 #[then(expr = "the server was asked only about {string}")]
 fn asked_only_about(world: &mut World, name: String) {
     assert_eq!(*world.session().backend.name_checks.borrow(), [name]);
+}
+
+#[then(expr = "the server was asked about {string} and then about {string}")]
+fn asked_about_twice(world: &mut World, first: String, second: String) {
+    assert_eq!(*world.session().backend.name_checks.borrow(), [first, second]);
 }

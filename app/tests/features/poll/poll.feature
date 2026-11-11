@@ -5,7 +5,6 @@ Feature: Poll questions
 
   Background:
     Given the Prono app is open
-    And "Sam Smith" is on the name list of the course survey
 
   Scenario: Every option is offered next to "Other"
     When I answer the course survey as "Sam Smith"

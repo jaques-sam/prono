@@ -1,21 +1,24 @@
 //! An in-memory stand-in for the Prono backend: the real use cases from the
 //! `prono` crate running on a `MemoryRepo`, so the rules (one answer per
 //! name, names bound to devices) are the server's, without any HTTP or
-//! database. Which surveys a name is offered, and may answer, follows the
-//! surveys' `access` and the name lists of the repository.
+//! database. Which surveys a pass phrase opens, and which submissions are
+//! accepted, follows the pass phrases of the repository.
 
 use std::cell::{Cell, RefCell};
 
 use futures::FutureExt as _;
 use prono::{MemoryRepo, Repo as _};
-use prono_api::{Access, Answer, AnswerKind, Question, Results, Score, Submission, UserStatus, samples};
+use prono_api::{Answer, AnswerKind, Question, Results, Score, Submission, Survey, samples};
 use prono_app::client::{Backend, Pending};
 
 /// The device the app under test runs on.
 pub const MY_DEVICE: &str = "my-device";
 
-/// The pass phrase of the surveys that have one.
+/// The pass phrase of the Starship survey and the quiz.
 pub const PASS_PHRASE: &str = "open sesame";
+/// The pass phrase of the course survey.
+pub const COURSE_PASS_PHRASE: &str = "rust rocks";
+pub const COURSE_ID: u64 = 2;
 
 /// The scored survey: both capitals are right in the options, the answers
 /// are not shown anywhere in the app.
@@ -24,7 +27,6 @@ pub const QUIZ_DESCRIPTION: &str = "Capitals quiz";
 const QUIZ_JSON: &str = r#"{
     "survey_id": 3,
     "description": "Capitals quiz",
-    "access": "pass_phrase",
     "questions": [
         {"question": "Capital of Belgium", "answer_type": "poll",
          "possible_answers": ["Brussels", "Paris"], "correct_answer": "Brussels"},
@@ -49,6 +51,8 @@ pub struct FakeBackend {
     pub results: Cell<Health>,
     /// The name of each check whether a user answered, in order.
     pub name_checks: RefCell<Vec<String>>,
+    /// The pass phrase of each request for surveys, in order.
+    pub survey_requests: RefCell<Vec<Option<String>>>,
     /// The user of each submission the app sent, in order.
     pub submitted_by: RefCell<Vec<String>>,
 }
@@ -60,34 +64,24 @@ impl FakeBackend {
             submitting: Cell::new(Health::Online),
             results: Cell::new(Health::Online),
             name_checks: RefCell::default(),
+            survey_requests: RefCell::default(),
             submitted_by: RefCell::default(),
         }
     }
 
-    /// A repository with the sample surveys and the quiz, and the pass
-    /// phrase of those that have one.
+    /// A repository with the sample surveys and the quiz, each with its pass
+    /// phrase.
     fn repo() -> MemoryRepo {
         let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON, QUIZ_JSON]);
         for survey in Self::now(prono::surveys(&repo)).expect("the surveys are valid") {
-            if survey.access == Access::PassPhrase {
-                Self::now(repo.set_pass_phrase(survey.id, PASS_PHRASE)).expect("setting succeeds");
-            }
+            Self::now(repo.set_pass_phrase(survey.id, pass_phrase_of(survey.id))).expect("setting succeeds");
         }
         repo
     }
 
-    /// Puts `user` ("First Last") on the name list of every survey that has
-    /// one.
-    pub fn put_on_name_list(&self, user: &str) {
-        let surveys = Self::now(prono::surveys(&self.repo)).expect("the surveys are valid");
-        for survey in surveys.iter().filter(|survey| survey.access == Access::NameList) {
-            self.allow(survey.id, user);
-        }
-    }
-
-    fn allow(&self, survey_id: u64, user: &str) {
-        let (first, last) = user.split_once(' ').expect("a first and a last name");
-        Self::now(self.repo.allow_user(survey_id, first, last)).expect("listing succeeds");
+    /// Replaces the pass phrase of survey `survey_id` on the server.
+    pub fn change_pass_phrase(&self, survey_id: u64, pass_phrase: &str) {
+        Self::now(self.repo.set_pass_phrase(survey_id, pass_phrase)).expect("setting succeeds");
     }
 
     /// Lets every request fail like an unreachable server.
@@ -130,11 +124,7 @@ impl FakeBackend {
     ) {
         let survey = Self::now(prono::survey(&self.repo, survey_id)).expect("the seeded survey exists");
         let answers: Vec<_> = survey.questions.iter().map(&mut answer_to).collect();
-        let mut submission = Submission::new(user, &survey, &answers);
-        match survey.access {
-            Access::NameList => self.allow(survey_id, user),
-            Access::PassPhrase => submission = submission.with_pass_phrase(PASS_PHRASE),
-        }
+        let submission = Submission::new(user, &survey, &answers).with_pass_phrase(pass_phrase_of(survey_id));
         Self::now(prono::submit(&self.repo, survey_id, device_id, &submission)).expect("seeding succeeds");
     }
 
@@ -162,12 +152,11 @@ impl Backend for FakeBackend {
         })
     }
 
-    fn check_pass_phrase(&self, survey_id: u64, pass_phrase: Option<&str>) -> Pending<()> {
+    fn open_surveys(&self, pass_phrase: Option<&str>) -> Pending<Vec<Survey>> {
+        self.survey_requests.borrow_mut().push(pass_phrase.map(str::to_string));
         // Always answers: the scenarios about a server that fails to deliver
-        // the results still start the survey.
-        Pending::ready(
-            Self::now(prono::check_pass_phrase(&self.repo, survey_id, pass_phrase)).map_err(|err| err.to_string()),
-        )
+        // the results still start a survey.
+        Pending::ready(Self::now(prono::open_surveys(&self.repo, pass_phrase)).map_err(|err| err.to_string()))
     }
 
     fn results(&self, survey_id: u64) -> Pending<Results> {
@@ -178,10 +167,19 @@ impl Backend for FakeBackend {
         Self::respond(self.results.get(), || Self::now(prono::scores(&self.repo, survey_id)))
     }
 
-    fn user_status(&self, user: &str) -> Pending<UserStatus> {
+    fn has_answered(&self, user: &str) -> Pending<bool> {
         self.name_checks.borrow_mut().push(user.to_string());
         Self::respond(self.results.get(), || {
-            Self::now(prono::user_status(&self.repo, MY_DEVICE, user))
+            Self::now(prono::has_answered(&self.repo, MY_DEVICE, user))
         })
+    }
+}
+
+/// The pass phrase of survey `survey_id`: the course has one of its own.
+pub fn pass_phrase_of(survey_id: u64) -> &'static str {
+    if survey_id == COURSE_ID {
+        COURSE_PASS_PHRASE
+    } else {
+        PASS_PHRASE
     }
 }

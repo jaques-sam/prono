@@ -132,52 +132,10 @@ impl Repo for MysqlRepo {
             .collect()
     }
 
-    async fn listed_surveys(&self, user: &str) -> Result<Vec<u64>> {
-        // The collation makes the comparison ignore case, like for user names.
-        Ok(
-            sqlx::query_scalar("SELECT survey_id FROM SurveyAllowedUser WHERE CONCAT(first_name, ' ', last_name) = ?")
-                .bind(user)
-                .fetch_all(&self.pool)
-                .await?,
-        )
-    }
-
-    async fn pass_phrase(&self, survey_id: u64) -> Result<Option<String>> {
-        Ok(
-            sqlx::query_scalar("SELECT pass_phrase FROM SurveyPassPhrase WHERE survey_id = ?")
-                .bind(survey_id)
-                .fetch_optional(&self.pool)
-                .await?,
-        )
-    }
-
-    async fn allow_user(&self, survey_id: u64, first_name: &str, last_name: &str) -> Result<()> {
-        sqlx::query("INSERT IGNORE INTO SurveyAllowedUser (survey_id, first_name, last_name) VALUES (?, ?, ?)")
-            .bind(survey_id)
-            .bind(first_name)
-            .bind(last_name)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    async fn disallow_user(&self, survey_id: u64, first_name: &str, last_name: &str) -> Result<()> {
-        sqlx::query("DELETE FROM SurveyAllowedUser WHERE survey_id = ? AND first_name = ? AND last_name = ?")
-            .bind(survey_id)
-            .bind(first_name)
-            .bind(last_name)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    async fn allowed_users(&self, survey_id: u64) -> Result<Vec<(String, String)>> {
-        Ok(sqlx::query_as(
-            "SELECT first_name, last_name FROM SurveyAllowedUser WHERE survey_id = ? ORDER BY last_name, first_name",
-        )
-        .bind(survey_id)
-        .fetch_all(&self.pool)
-        .await?)
+    async fn pass_phrases(&self) -> Result<Vec<(u64, String)>> {
+        Ok(sqlx::query_as("SELECT survey_id, pass_phrase FROM SurveyPassPhrase")
+            .fetch_all(&self.pool)
+            .await?)
     }
 
     async fn set_pass_phrase(&self, survey_id: u64, pass_phrase: &str) -> Result<()> {

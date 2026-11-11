@@ -40,3 +40,24 @@ Feature: Warning about a name that already answered
     And I see no name warning
     When I wait 1 seconds
     Then the server was asked only about "Ali Ng"
+
+  Scenario: A lookup that fails is reported once and not repeated
+    Given the server cannot deliver the results
+    When I enter the name "Sam Smith"
+    And I wait 1 seconds
+    Then I see the error "Cannot reach the server"
+    When I dismiss the error
+    And I wait 2 seconds
+    Then I see no error
+    And the server was asked only about "Sam Smith"
+
+  Scenario: A failed lookup is tried again with another name
+    Given the server cannot deliver the results
+    And I entered the name "Sam Smith"
+    And I wait 1 seconds
+    And I dismiss the error
+    And the server is back online
+    When I enter the name "Sam Jones"
+    And I wait 1 seconds
+    Then the server was asked about "Sam Smith" and then about "Sam Jones"
+    And I see no error

@@ -54,9 +54,6 @@ pub struct World {
     /// The time the app sees, in seconds. It only moves with [`World::wait`],
     /// so typing is instant and pauses are explicit.
     clock: f64,
-    /// Whether a scenario entered a pass phrase of its own, to be used by the
-    /// next [`World::start_survey`] instead of the right one.
-    pub pass_phrase_entered: bool,
 }
 
 impl fmt::Debug for World {
@@ -82,7 +79,6 @@ impl World {
         Self {
             harness,
             clock: START_TIME,
-            pass_phrase_entered: false,
         }
     }
 

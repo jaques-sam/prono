@@ -7,10 +7,10 @@ use std::iter::once;
 use std::path::PathBuf;
 
 use prono::Repo;
-use prono_api::{Access, Survey};
+use prono_api::Survey;
 
 use crate::admin::{self, describe};
-use crate::commands::{AccessAction, Commands, SurveyAction, UserAction};
+use crate::commands::{Commands, SurveyAction, UserAction};
 
 /// How the menus talk to the administrator. Going back (Esc) is `None`.
 pub trait Prompt {
@@ -26,11 +26,10 @@ pub trait Prompt {
 
 /// Shows the main menu until the administrator quits (Esc).
 pub async fn run(repo: &dyn Repo, prompt: &mut impl Prompt) {
-    while let Some(choice) = pick(prompt, "Prono admin (Esc quits)", &["Surveys", "Users", "Access"]) {
+    while let Some(choice) = pick(prompt, "Prono admin (Esc quits)", &["Surveys", "Users"]) {
         match choice {
             0 => surveys_menu(repo, prompt).await,
-            1 => users_menu(repo, prompt).await,
-            _ => access_menu(repo, prompt).await,
+            _ => users_menu(repo, prompt).await,
         }
     }
 }
@@ -52,6 +51,7 @@ async fn surveys_menu(repo: &dyn Repo, prompt: &mut impl Prompt) {
     let options = [
         "List the surveys",
         "Upload a survey file",
+        "Set the pass phrase of a survey",
         "Show the scores of a survey",
         "Show the answers of a survey",
     ];
@@ -67,6 +67,18 @@ async fn surveys_menu(repo: &dyn Repo, prompt: &mut impl Prompt) {
                 }
             }
             2 => {
+                let Some(survey) = pick_survey(repo, prompt, "Pass phrase of which survey?", |_| true).await else {
+                    continue;
+                };
+                let Some(pass_phrase) = prompt.text("The new pass phrase:") else {
+                    continue;
+                };
+                SurveyAction::PassPhrase {
+                    survey_id: survey.id,
+                    pass_phrase,
+                }
+            }
+            3 => {
                 let Some(survey) = pick_survey(repo, prompt, "Scores of which survey?", |survey| survey.scored).await
                 else {
                     continue;
@@ -111,73 +123,6 @@ async fn users_menu(repo: &dyn Repo, prompt: &mut impl Prompt) {
             UserAction::Delete { name }
         };
         execute(repo, prompt, Commands::Users { action }).await;
-    }
-}
-
-async fn access_menu(repo: &dyn Repo, prompt: &mut impl Prompt) {
-    while let Some(survey) = pick_survey(repo, prompt, "Access to which survey? (Esc goes back)", |_| true).await {
-        match survey.access {
-            Access::NameList => name_list_menu(repo, prompt, &survey).await,
-            Access::PassPhrase => pass_phrase_menu(repo, prompt, &survey).await,
-        }
-    }
-}
-
-async fn name_list_menu(repo: &dyn Repo, prompt: &mut impl Prompt, survey: &Survey) {
-    let survey_id = survey.id;
-    let title = format!("Name list of {} (Esc goes back)", describe(survey));
-    let options = ["Show the name list", "Allow a participant", "Disallow a participant"];
-    while let Some(choice) = pick(prompt, &title, &options) {
-        let action = match choice {
-            0 => AccessAction::Show { survey_id },
-            1 => {
-                let Some(first_name) = prompt.text("First name:") else {
-                    continue;
-                };
-                let Some(last_name) = prompt.text("Last name:") else {
-                    continue;
-                };
-                AccessAction::Allow {
-                    survey_id,
-                    first_name,
-                    last_name,
-                }
-            }
-            _ => {
-                let names = match repo.allowed_users(survey_id).await {
-                    Ok(names) => names,
-                    Err(error) => {
-                        prompt.show(&format!("error: {error}"));
-                        continue;
-                    }
-                };
-                let labels: Vec<_> = names.iter().map(|(first, last)| format!("{first} {last}")).collect();
-                let Some(index) = pick_index(prompt, "Disallow whom?", &labels, "Nobody is on the list.") else {
-                    continue;
-                };
-                let (first_name, last_name) = names[index].clone();
-                AccessAction::Disallow {
-                    survey_id,
-                    first_name,
-                    last_name,
-                }
-            }
-        };
-        execute(repo, prompt, Commands::Access { action }).await;
-    }
-}
-
-async fn pass_phrase_menu(repo: &dyn Repo, prompt: &mut impl Prompt, survey: &Survey) {
-    let title = format!("Pass phrase of {} (Esc goes back)", describe(survey));
-    while pick(prompt, &title, &["Set the pass phrase"]).is_some() {
-        let Some(pass_phrase) = prompt.text("The new pass phrase:") else {
-            continue;
-        };
-        let action = AccessAction::PassPhrase {
-            survey_id: survey.id,
-            pass_phrase,
-        };
-        execute(repo, prompt, Commands::Access { action }).await;
     }
 }
 
@@ -324,7 +269,7 @@ mod tests {
     #[tokio::test]
     async fn the_main_menu_ends_with_escape() {
         let script = navigate(&repo(), [Back]).await;
-        assert_eq!(script.menus, [["Surveys", "Users", "Access"]]);
+        assert_eq!(script.menus, [["Surveys", "Users"]]);
         assert_eq!(script.shown, Vec::<String>::new());
     }
 
@@ -388,11 +333,11 @@ mod tests {
         let script = navigate(&repo(), [Pick("Surveys"), Pick("scores"), Back, Back, Back]).await;
         assert_eq!(script.shown, ["No surveys to choose from."]);
 
-        let quiz = r#"{"survey_id": 3, "description": "Quiz", "access": "name_list",
+        let quiz = r#"{"survey_id": 3, "description": "Quiz",
             "questions": [{"question": "Q?", "answer_type": "text", "correct_answer": "a"}]}"#;
         let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, quiz]);
         let script = navigate(&repo, [Pick("Surveys"), Pick("scores"), Pick("Quiz"), Back, Back]).await;
-        assert_eq!(script.menus[2], ["3: Quiz (name list, 1 questions, scored)"]);
+        assert_eq!(script.menus[2], ["3: Quiz (1 questions, scored)"]);
         assert_eq!(script.shown, ["Nobody answered survey 3 yet."]);
     }
 
@@ -400,8 +345,8 @@ mod tests {
     async fn answers_are_shown_for_everybody_or_one_participant() {
         let repo = repo();
         let survey = prono::survey(&repo, 2).await.unwrap();
-        repo.allow_user(2, "Ann", "Lee").await.unwrap();
-        let submission = Submission::new("Ann Lee", &survey, &samples::course_answers());
+        repo.set_pass_phrase(2, "rust rocks").await.unwrap();
+        let submission = Submission::new("Ann Lee", &survey, &samples::course_answers()).with_pass_phrase("rust rocks");
         prono::submit(&repo, 2, "dev-1", &submission).await.unwrap();
 
         let script = navigate(
@@ -471,125 +416,56 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_name_list_of_a_survey_is_managed_in_its_menu() {
+    async fn the_pass_phrase_is_set_from_the_surveys_menu() {
         let repo = repo();
         let script = navigate(
             &repo,
             [
-                Pick("Access"),
-                Pick("name list"),
-                Pick("Allow"),
-                Type("Ada"),
-                Type("Lovelace"),
-                Pick("Show"),
-                Pick("Disallow"),
-                Pick("Ada Lovelace"),
-                Back, // the name list menu
-                Back, // the survey list
+                Pick("Surveys"),
+                Pick("pass phrase"),
+                Pick("Starship"),
+                Type("open sesame"),
+                Back, // the surveys menu
                 Back, // main
             ],
         )
         .await;
-        assert_eq!(
-            script.shown,
-            [
-                "'Ada Lovelace' may answer survey 2.",
-                "Ada Lovelace",
-                "'Ada Lovelace' may no longer answer survey 2."
-            ]
-        );
-        assert_eq!(repo.allowed_users(2).await.unwrap(), Vec::<(String, String)>::new());
+        assert_eq!(script.shown, ["Pass phrase of survey 1 set. It opens survey(s) 1."]);
+        assert_eq!(repo.pass_phrases().await.unwrap(), [(1, "open sesame".to_string())]);
     }
 
     #[tokio::test]
-    async fn only_the_actions_that_fit_the_access_are_offered() {
+    async fn cancelling_or_a_blank_pass_phrase_changes_nothing() {
+        let repo = repo();
         let script = navigate(
-            &repo(),
+            &repo,
             [
-                Pick("Access"),
+                Pick("Surveys"),
                 Pick("pass phrase"),
-                Back,
-                Pick("name list"),
-                Back,
-                Back,
-                Back,
-            ],
-        )
-        .await;
-        assert_eq!(script.menus[2], ["Set the pass phrase"]);
-        assert_eq!(
-            script.menus[4],
-            ["Show the name list", "Allow a participant", "Disallow a participant"]
-        );
-    }
-
-    #[tokio::test]
-    async fn the_pass_phrase_is_set_from_its_menu() {
-        let repo = repo();
-        let script = navigate(
-            &repo,
-            [
-                Pick("Access"),
+                Pick("Starship"),
+                Back, // no pass phrase
                 Pick("pass phrase"),
-                Pick("Set"),
-                Type("open sesame"),
-                Back,
-                Back,
-                Back,
-            ],
-        )
-        .await;
-        assert_eq!(script.shown, ["Pass phrase of survey 1 set."]);
-        assert_eq!(repo.pass_phrase(1).await.unwrap().as_deref(), Some("open sesame"));
-    }
-
-    #[tokio::test]
-    async fn cancelling_a_question_returns_to_the_menu() {
-        let repo = repo();
-        let script = navigate(
-            &repo,
-            [
-                Pick("Access"),
-                Pick("name list"),
-                Pick("Allow"),
-                Type("Ada"),
-                Back,             // no last name
-                Pick("Disallow"), // nobody on the list
-                Back,
-                Back,
-                Back,
-            ],
-        )
-        .await;
-        assert_eq!(script.shown, ["Nobody is on the list."]);
-        assert_eq!(repo.allowed_users(2).await.unwrap(), Vec::<(String, String)>::new());
-    }
-
-    #[tokio::test]
-    async fn access_with_no_surveys_says_so() {
-        let script = navigate(&MemoryRepo::default(), [Pick("Access"), Back]).await;
-        assert_eq!(script.shown, ["No surveys to choose from."]);
-    }
-
-    #[tokio::test]
-    async fn failures_are_shown_and_the_menu_goes_on() {
-        let repo = repo();
-        let script = navigate(
-            &repo,
-            [
-                Pick("Access"),
-                Pick("name list"),
-                Pick("Allow"),
-                Type("Ada"),
+                Back, // no survey
+                Pick("pass phrase"),
+                Pick("Starship"),
                 Type("  "),
-                Pick("Show"),
-                Back,
                 Back,
                 Back,
             ],
         )
         .await;
+        assert_eq!(script.shown.len(), 1);
         assert!(script.shown[0].starts_with("error:"), "{:?}", script.shown);
-        assert_eq!(script.shown[1], "Nobody is on the list of survey 2.");
+        assert_eq!(repo.pass_phrases().await.unwrap(), Vec::<(u64, String)>::new());
+    }
+
+    #[tokio::test]
+    async fn a_pass_phrase_needs_a_survey_to_choose() {
+        let script = navigate(
+            &MemoryRepo::default(),
+            [Pick("Surveys"), Pick("pass phrase"), Back, Back],
+        )
+        .await;
+        assert_eq!(script.shown, ["No surveys to choose from."]);
     }
 }

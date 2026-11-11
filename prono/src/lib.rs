@@ -14,4 +14,4 @@ pub use error::{Error, Result};
 pub use memory::MemoryRepo;
 pub use mysql::MysqlRepo;
 pub use repo::Repo;
-pub use service::{check_pass_phrase, results, scores, submit, survey, surveys, upload_survey, user_status};
+pub use service::{has_answered, open_surveys, results, scores, submit, survey, surveys, upload_survey};

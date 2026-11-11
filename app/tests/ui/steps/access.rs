@@ -1,7 +1,9 @@
-use cucumber::{given, then};
+use cucumber::{given, then, when};
+use egui::accesskit::Role;
+use egui_kittest::kittest::Queryable as _;
 
-use crate::fake_backend::QUIZ_DESCRIPTION;
-use crate::steps::common::{SURVEY, course};
+use crate::fake_backend::{PASS_PHRASE, QUIZ_DESCRIPTION};
+use crate::steps::common::{SURVEY, SURVEY_ID, course};
 use crate::world::World;
 
 /// The description of the survey a step names: `Starship`, `course` or `quiz`.
@@ -14,19 +16,46 @@ fn description(survey: &str) -> String {
     }
 }
 
-#[given(expr = "{string} is on the name list of the course survey")]
-fn on_name_list(world: &mut World, name: String) {
-    world.session().backend.put_on_name_list(&name);
+/// The number of pass phrase fields on screen.
+fn pass_phrase_fields(world: &World) -> usize {
+    world
+        .harness
+        .query_all_by_role_and_label(Role::PasswordInput, "Pass phrase:")
+        .count()
 }
 
-#[then("I am asked to fill in my first and last name")]
-fn asked_for_name(world: &mut World) {
-    assert!(world.shows("Fill in your first and last name to see your surveys."));
+#[given("the pass phrase of the Starship survey was changed on the server")]
+fn pass_phrase_changed(world: &mut World) {
+    world
+        .session()
+        .backend
+        .change_pass_phrase(SURVEY_ID, &format!("not {PASS_PHRASE} any more"));
 }
 
-#[then("I am not asked to fill in my first and last name")]
-fn not_asked_for_name(world: &mut World) {
-    assert!(!world.shows("Fill in your first and last name"), "the hint is shown");
+#[when(expr = "I click the {word} survey")]
+fn click_survey(world: &mut World, survey: String) {
+    world.click_button(&description(&survey));
+}
+
+#[then("I am asked for my pass phrase")]
+fn asked_for_pass_phrase(world: &mut World) {
+    assert_eq!(pass_phrase_fields(world), 1, "there is no pass phrase field");
+    assert!(world.shows("Enter your pass phrase and press Submit to see your surveys."));
+}
+
+#[then("I am not asked for my pass phrase")]
+fn not_asked_for_pass_phrase(world: &mut World) {
+    assert!(!world.shows("Enter your pass phrase"), "the hint is shown");
+}
+
+#[then("there is exactly one pass phrase field")]
+fn one_pass_phrase_field(world: &mut World) {
+    assert_eq!(pass_phrase_fields(world), 1);
+}
+
+#[then("there is no pass phrase field")]
+fn no_pass_phrase_field(world: &mut World) {
+    assert_eq!(pass_phrase_fields(world), 0, "there is a pass phrase field");
 }
 
 #[then(expr = "I am offered the {word} survey")]
@@ -52,12 +81,15 @@ fn offered_nothing(world: &mut World) {
     }
 }
 
-#[then("I am asked for the pass phrase")]
-fn asked_for_pass_phrase(world: &mut World) {
-    assert!(world.shows("Pass phrase:"), "there is no pass phrase field");
+#[then("the server was not asked for any surveys")]
+fn asked_for_no_surveys(world: &mut World) {
+    assert_eq!(
+        *world.session().backend.survey_requests.borrow(),
+        Vec::<Option<String>>::new()
+    );
 }
 
-#[then("I am not asked for the pass phrase")]
-fn not_asked_for_pass_phrase(world: &mut World) {
-    assert!(!world.shows("Pass phrase:"), "there is a pass phrase field");
+#[then(expr = "the server was asked for surveys {int} time(s)")]
+fn asked_for_surveys(world: &mut World, times: usize) {
+    assert_eq!(world.session().backend.survey_requests.borrow().len(), times);
 }

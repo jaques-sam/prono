@@ -55,9 +55,11 @@ The app connects to the production backend. Set `PRONO_BACKEND_URL` to use anoth
 PRONO_BACKEND_URL=http://localhost:8081 cargo run --bin prono-app
 ```
 
-`./local-prod.sh` in the repository root does this for you: it release-builds and starts the latest backend against
-the production database (see the [backend configuration](../backend/README.md#configuration)) and runs the app on it.
-`./local-prod.sh cli` runs [`prono-cli`](../cli/README.md) against the same database.
+`./local-test.sh` in the repository root does this for you, with a local copy of the production database: it copies
+the database (see the [backend configuration](../backend/README.md#configuration) for its settings) into a local
+MariaDB in `podman`, release-builds and starts the latest backend on it and runs the app. `./local-test.sh cli` runs
+[`prono-cli`](../cli/README.md) on the same local database, `./local-test.sh --keep-db` skips the copy. It needs
+`podman`, `cargo` and `python3` >= 3.11.
 
 
 ## Structure

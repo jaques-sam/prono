@@ -21,13 +21,15 @@ trunk serve --config ./app # Serves at http://127.0.0.1:8080
 # Access at http://127.0.0.1:8080/index.html#dev (the #dev skips PWA caching)
 ```
 
-**Desktop app + backend + CLI against the production database (the NAS):**
+**Everything locally (backend, app, CLI and a local copy of the production database):**
 
 ```sh
-./local-prod.sh             # release-builds all three, runs the backend locally and the app against it
-./local-prod.sh cli [args]  # release-builds, then runs prono-cli (no args: the interactive menu)
+./local-test.sh             # copies the production DB into a local MariaDB (podman), release-builds, runs backend + app
+./local-test.sh --keep-db   # the same, on the local DB as it is
+./local-test.sh cli [args]  # prono-cli on the local DB (no args: the interactive menu)
 ```
-Everything done there is written to the production database. Settings: `secure_config.toml` or `PRONO_DB_*`.
+Needs `podman`, `cargo` and `python3` >= 3.11 (no MySQL/MariaDB on the host). Production is only read, using
+`secure_config.toml`; the apps always use the local DB (`127.0.0.1:23306`). Reset it with `podman rm -f prono-local-db`.
 
 **Web (production build):**
 ```sh

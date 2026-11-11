@@ -29,6 +29,6 @@ impl Prompt for Terminal {
     }
 
     fn show(&mut self, text: &str) {
-        println!("{text}");
+        println!("\n{text}\n");
     }
 }

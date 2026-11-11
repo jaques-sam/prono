@@ -39,6 +39,28 @@ pub async fn submit(repo: &dyn Repo, survey_id: u64, device_id: &str, submission
     Ok(())
 }
 
+/// Checks the pass phrase `pass_phrase` (see [`prono_api::clean_pass_phrase`])
+/// of survey `survey_id`, so the app can refuse a wrong one before the
+/// questions open. A survey without a pass phrase, set by nobody or not
+/// asking for one, never accepts any.
+///
+/// # Errors
+///
+/// [`Error::WrongPassPhrase`], or a repository error.
+pub async fn check_pass_phrase(repo: &dyn Repo, survey_id: u64, pass_phrase: Option<&str>) -> Result<()> {
+    if pass_phrase_is_right(repo, survey_id, pass_phrase).await? {
+        Ok(())
+    } else {
+        Err(Error::WrongPassPhrase)
+    }
+}
+
+/// Whether `pass_phrase` is the one set for survey `survey_id`.
+async fn pass_phrase_is_right(repo: &dyn Repo, survey_id: u64, pass_phrase: Option<&str>) -> Result<bool> {
+    let stored = repo.pass_phrase(survey_id).await?;
+    Ok(stored.is_some() && stored.as_deref() == pass_phrase)
+}
+
 /// Whether `user` already filled in a survey, and which surveys they may
 /// answer, so the app can warn while the name is typed and only offer those
 /// surveys. Nothing else about the participants leaves the server.
@@ -147,10 +169,7 @@ async fn collect_results(repo: &dyn Repo, survey: &Survey) -> Result<Results> {
 async fn check_access(repo: &dyn Repo, survey: &Survey, submission: &Submission) -> Result<()> {
     let allowed = match survey.access {
         Access::NameList => repo.listed_surveys(&submission.user).await?.contains(&survey.id),
-        Access::PassPhrase => {
-            let stored = repo.pass_phrase(survey.id).await?;
-            stored.is_some() && stored == submission.pass_phrase
-        }
+        Access::PassPhrase => pass_phrase_is_right(repo, survey.id, submission.pass_phrase.as_deref()).await?,
     };
     match (allowed, survey.access) {
         (true, _) => Ok(()),
@@ -402,6 +421,30 @@ mod tests {
         // Setting it again replaces it.
         repo.set_pass_phrase(SURVEY_ID, "new one").await.unwrap();
         let err = submit(&repo, SURVEY_ID, "dev-2", &plain).await.unwrap_err();
+        assert_eq!(err, Error::WrongPassPhrase);
+    }
+
+    #[tokio::test]
+    async fn only_the_right_pass_phrase_is_accepted_before_answering() {
+        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON]);
+
+        // Nobody set one yet: nothing is right, not even none.
+        for attempt in [None, Some(PASS_PHRASE)] {
+            let err = check_pass_phrase(&repo, SURVEY_ID, attempt).await.unwrap_err();
+            assert_eq!(err, Error::WrongPassPhrase);
+        }
+
+        repo.set_pass_phrase(SURVEY_ID, PASS_PHRASE).await.unwrap();
+        for attempt in [None, Some("nope"), Some("Open Sesame")] {
+            let err = check_pass_phrase(&repo, SURVEY_ID, attempt).await.unwrap_err();
+            assert_eq!(err, Error::WrongPassPhrase);
+        }
+        check_pass_phrase(&repo, SURVEY_ID, Some(PASS_PHRASE)).await.unwrap();
+
+        // It is the survey's own: a survey without one accepts none.
+        let err = check_pass_phrase(&repo, LIST_SURVEY_ID, Some(PASS_PHRASE))
+            .await
+            .unwrap_err();
         assert_eq!(err, Error::WrongPassPhrase);
     }
 

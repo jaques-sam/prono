@@ -162,6 +162,14 @@ impl Backend for FakeBackend {
         })
     }
 
+    fn check_pass_phrase(&self, survey_id: u64, pass_phrase: Option<&str>) -> Pending<()> {
+        // Always answers: the scenarios about a server that fails to deliver
+        // the results still start the survey.
+        Pending::ready(
+            Self::now(prono::check_pass_phrase(&self.repo, survey_id, pass_phrase)).map_err(|err| err.to_string()),
+        )
+    }
+
     fn results(&self, survey_id: u64) -> Pending<Results> {
         Self::respond(self.results.get(), || Self::now(prono::results(&self.repo, survey_id)))
     }

@@ -10,6 +10,9 @@ pub const DEV_URL: &str = "http://localhost:8081";
 /// return a [`Pending`] result to poll.
 pub trait Backend {
     fn submit(&self, survey_id: u64, submission: &Submission) -> Pending<()>;
+    /// Whether `pass_phrase` (see [`prono_api::clean_pass_phrase`]) is the
+    /// one of survey `survey_id`; an error says it is not.
+    fn check_pass_phrase(&self, survey_id: u64, pass_phrase: Option<&str>) -> Pending<()>;
     fn results(&self, survey_id: u64) -> Pending<Results>;
     /// The scores of a scored survey, best first.
     fn scores(&self, survey_id: u64) -> Pending<Vec<Score>>;
@@ -97,6 +100,13 @@ impl Backend for HttpBackend {
         match ehttp::Request::post_json(self.url(&prono_api::answers_path(survey_id)), submission) {
             Ok(request) => self.send(self.authorized(request), |_| Ok(())),
             Err(err) => Pending(Arc::new(Mutex::new(Some(Err(err.to_string()))))),
+        }
+    }
+
+    fn check_pass_phrase(&self, survey_id: u64, pass_phrase: Option<&str>) -> Pending<()> {
+        match ehttp::Request::post_json(self.url(&prono_api::pass_phrase_path(survey_id)), &pass_phrase) {
+            Ok(request) => self.send(self.authorized(request), |_| Ok(())),
+            Err(err) => Pending::ready(Err(err.to_string())),
         }
     }
 

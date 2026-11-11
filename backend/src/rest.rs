@@ -5,10 +5,12 @@ use prono::{Error, Repo};
 use prono_api::{API_KEY, DEVICE_ID_HEADER, Submission};
 
 /// Registers the REST endpoints; their paths are [`prono_api::answers_path`],
-/// [`prono_api::scores_path`] and [`prono_api::user_path`].
+/// [`prono_api::pass_phrase_path`], [`prono_api::scores_path`] and
+/// [`prono_api::user_path`].
 pub fn routes(config: &mut web::ServiceConfig) {
     config
         .service(submit_answers)
+        .service(check_pass_phrase)
         .service(get_answers)
         .service(get_scores)
         .service(get_user);
@@ -23,6 +25,20 @@ async fn submit_answers(
 ) -> Result<HttpResponse, ApiError> {
     let device_id = authorized_device(&req)?;
     prono::submit(repo.get_ref(), *survey_id, device_id, &submission).await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+/// Whether the pass phrase is the survey's: `200`, or `403` for a wrong one.
+/// Same API key and device id as a submission.
+#[post("/api/surveys/{survey_id}/pass-phrase")]
+async fn check_pass_phrase(
+    repo: web::Data<dyn Repo>,
+    survey_id: web::Path<u64>,
+    pass_phrase: web::Json<Option<String>>,
+    req: HttpRequest,
+) -> Result<HttpResponse, ApiError> {
+    authorized_device(&req)?;
+    prono::check_pass_phrase(repo.get_ref(), *survey_id, pass_phrase.as_deref()).await?;
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -276,6 +292,43 @@ mod tests {
         let (statuses, body) = run(vec![post(SURVEY_ID, Some("dev-1"), API_KEY, &wrong)]).await;
         assert_eq!(statuses, [StatusCode::FORBIDDEN]);
         assert_eq!(body, "\"Wrong pass phrase\"");
+    }
+
+    fn check(survey_id: u64, device_id: Option<&str>, key: &str, pass_phrase: Option<&str>) -> actix_test::TestRequest {
+        let mut req = actix_test::TestRequest::post()
+            .uri(&prono_api::pass_phrase_path(survey_id))
+            .insert_header((header::AUTHORIZATION, format!("Bearer {key}")))
+            .set_json(pass_phrase);
+        if let Some(device_id) = device_id {
+            req = req.insert_header((DEVICE_ID_HEADER, device_id));
+        }
+        req
+    }
+
+    #[actix_web::test]
+    async fn the_pass_phrase_can_be_checked_before_answering() {
+        let (statuses, _) = run(vec![
+            check(SURVEY_ID, Some("dev-1"), API_KEY, Some(PASS_PHRASE)),
+            check(QUIZ_ID, Some("dev-1"), API_KEY, Some(PASS_PHRASE)),
+        ])
+        .await;
+        assert_eq!(statuses, [StatusCode::OK; 2]);
+
+        for wrong in [Some("nope"), None] {
+            let (statuses, body) = run(vec![check(SURVEY_ID, Some("dev-1"), API_KEY, wrong)]).await;
+            assert_eq!(statuses, [StatusCode::FORBIDDEN]);
+            assert_eq!(body, "\"Wrong pass phrase\"");
+        }
+    }
+
+    #[actix_web::test]
+    async fn checking_the_pass_phrase_needs_the_api_key_and_a_device_id() {
+        let (statuses, _) = run(vec![
+            check(SURVEY_ID, Some("dev-1"), "wrong-key", Some(PASS_PHRASE)),
+            check(SURVEY_ID, None, API_KEY, Some(PASS_PHRASE)),
+        ])
+        .await;
+        assert_eq!(statuses, [StatusCode::UNAUTHORIZED, StatusCode::BAD_REQUEST]);
     }
 
     #[actix_web::test]

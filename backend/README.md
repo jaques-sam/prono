@@ -22,6 +22,7 @@ The prono-backend is a REST API in front of the prono database. Both the web and
 | Method & path | Body | Response |
 | --- | --- | --- |
 | `POST /api/surveys/{survey_id}/answers` | `{"user": "...", "answers": [["<question id>", <answer>], ...]}` | `200`, or an error |
+| `POST /api/surveys/{survey_id}/pass-phrase` | `"the pass phrase"`, or `null` for none | `200` when it is the survey's, `403` with `"Wrong pass phrase"` otherwise |
 | `GET /api/surveys/{survey_id}/answers` | | `{"<question id>": [{"user": "...", "answer": <answer>}]}` |
 
 An `<answer>` is `{"PredictionDate": {"day": null, "month": 3, "year": 2026}}` or `{"Text": "..."}`.

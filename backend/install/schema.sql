@@ -1,5 +1,9 @@
 -- Tables of the prono database. Idempotent; run inside `db_prono`.
 
+-- Everything is utf8mb4: answers, names and surveys contain emoji, which the
+-- 3-byte `utf8` (`utf8mb3`) of older databases cannot store.
+ALTER DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
 CREATE TABLE IF NOT EXISTS Users (
     user_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_name TEXT NOT NULL,
@@ -42,3 +46,10 @@ CREATE TABLE IF NOT EXISTS SurveyPassPhrase (
     survey_id BIGINT UNSIGNED PRIMARY KEY,
     pass_phrase VARCHAR(255) NOT NULL
 );
+
+-- Existing tables keep the character set they were created with: convert them.
+ALTER TABLE Users CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+ALTER TABLE AnswerResponse CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+ALTER TABLE Survey CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+ALTER TABLE SurveyAllowedUser CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+ALTER TABLE SurveyPassPhrase CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;

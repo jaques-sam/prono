@@ -84,7 +84,9 @@ Question ids are UUIDs, stored in `AnswerResponse.question_id` as `BINARY(16)` (
 The surveys themselves are stored in `Survey` (their JSON definitions), uploaded with `prono-cli surveys upload`: the
 backend has none until one is uploaded. Who may answer a survey with `"access": "name_list"` or `"pass_phrase"` is
 stored in `SurveyAllowedUser` and `SurveyPassPhrase`, filled with `prono-cli access`. Run `install/schema.sql` (or `create_db.sh`) again to add
-them to an existing database; it is idempotent.
+them to an existing database; it is idempotent. It also converts a database and its tables to `utf8mb4`, which the
+emoji in surveys and answers need (`utf8mb3` fails with `Incorrect string value`); this needs a user with `ALTER`
+rights, so run it as root, like `create_db.sh` does.
 Answers are stored as text: `DD/MM/YYYY` for dates (`00` when there is no day), the text itself otherwise.
 
 

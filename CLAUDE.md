@@ -21,6 +21,16 @@ trunk serve --config ./app # Serves at http://127.0.0.1:8080
 # Access at http://127.0.0.1:8080/index.html#dev (the #dev skips PWA caching)
 ```
 
+**Everything locally (backend, app, CLI and a local copy of the production database):**
+
+```sh
+./local-test.sh             # copies the production DB into a local MariaDB (podman), release-builds, runs backend + app
+./local-test.sh --keep-db   # the same, on the local DB as it is
+./local-test.sh cli [args]  # prono-cli on the local DB (no args: the interactive menu)
+```
+Needs `podman`, `cargo` and `python3` >= 3.11 (no MySQL/MariaDB on the host). Production is only read, using
+`secure_config.toml`; the apps always use the local DB (`127.0.0.1:23306`). Reset it with `podman rm -f prono-local-db`.
+
 **Web (production build):**
 ```sh
 trunk build --release --config ./app

@@ -7,7 +7,7 @@ test-timeout = "30s"
 offline = true
 target-dir = "./target/coverage"
 # Drawing, HTTP/database I/O and entry points are verified by running them.
-exclude-files = ["target/*", "*/src/main.rs", "app/src/ui.rs", "app/src/timeline.rs", "app/src/client.rs", "app/src/device.rs", "prono/src/mysql.rs", "cli/src/terminal.rs"]
+exclude-files = ["target/*", "*/src/main.rs", "app/src/ui.rs", "app/src/background.rs","app/src/timeline.rs", "app/src/client.rs", "app/src/device.rs", "prono/src/mysql.rs", "cli/src/terminal.rs"]
 
 [report]
 out = ["Html"]

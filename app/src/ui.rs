@@ -5,7 +5,7 @@ use egui::{FontId, RichText, TextEdit};
 use prono_api::{Answer, AnswerKind, PREDICTION_YEARS, Question, Results, Score, Survey};
 
 use crate::state::{Action, CAN_RESET, Phase, State};
-use crate::{poll, timeline};
+use crate::{background, poll, timeline};
 
 pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
     egui::Panel::top("top_panel").show(ui, |ui| {
@@ -28,7 +28,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
     });
 
     egui::CentralPanel::default()
+        .frame(egui::Frame::NONE)
         .show(ui, |ui| {
+            background::paint(ui.painter(), ui.max_rect());
             card(ui, |ui| {
                 ui.heading("Prono");
                 let error_action = state.error.as_deref().and_then(|error| error_banner(ui, error));
@@ -54,6 +56,12 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
 const CARD_MAX_WIDTH: f32 = 640.0;
 /// The space inside the card, between its border and its elements.
 const CARD_PADDING: i8 = 20;
+/// The space between the card and the edge of the window.
+const CARD_MARGIN: i8 = 12;
+/// How much of the background shines through the card: `bg-pine/20`.
+const CARD_TINT_ALPHA: u8 = 51;
+/// `border-pine/50`.
+const CARD_BORDER_ALPHA: u8 = 128;
 const CARD_CORNER_RADIUS: u8 = 16;
 /// The space between the elements in the card.
 const CARD_ITEM_SPACING: egui::Vec2 = egui::vec2(12.0, 12.0);
@@ -66,7 +74,17 @@ fn card<R>(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui) -> R) -> R {
             egui::vec2(width, ui.available_height()),
             egui::Layout::top_down(egui::Align::Min),
             |ui| {
+                let visuals = ui.visuals();
+                // The light theme keeps its solid panel color, so the text stays readable.
+                let fill = if visuals.dark_mode {
+                    background::pine(CARD_TINT_ALPHA)
+                } else {
+                    visuals.panel_fill
+                };
                 egui::Frame::group(ui.style())
+                    .fill(fill)
+                    .stroke(egui::Stroke::new(1.0, background::pine(CARD_BORDER_ALPHA)))
+                    .outer_margin(egui::Margin::same(CARD_MARGIN))
                     .inner_margin(egui::Margin::same(CARD_PADDING))
                     .corner_radius(egui::CornerRadius::same(CARD_CORNER_RADIUS))
                     .show(ui, |ui| {

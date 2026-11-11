@@ -6,6 +6,7 @@
 // The modules are public for `main.rs` and the tests, not as a library API.
 #![allow(clippy::must_use_candidate)]
 
+pub mod background;
 pub mod client;
 pub mod poll;
 pub mod state;

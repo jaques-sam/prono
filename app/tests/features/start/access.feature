@@ -78,13 +78,14 @@ Feature: Surveys by access
     Then I am offered the Starship survey
     And I see no error
 
-  Scenario: A survey with a pass phrase asks for it
-    Given I am answering the survey as "Sam Smith"
-    Then I am asked for the pass phrase
+  Scenario: A survey with a pass phrase asks for it with the surveys
+    When I enter the name "Sam Smith"
+    And I wait 1 seconds
+    Then I am offered the Starship survey
+    And I am asked for the pass phrase
 
-  Scenario: A survey with a name list asks for no pass phrase
-    Given "Sam Smith" is on the name list of the course survey
-    When I answer the course survey as "Sam Smith"
+  Scenario: The questions do not ask for the pass phrase again
+    Given I am answering the survey as "Sam Smith"
     Then I am not asked for the pass phrase
 
   Scenario: The right pass phrase lets the answers in
@@ -93,14 +94,16 @@ Feature: Surveys by access
     Then I see the thanks to "Sam Smith"
 
   Scenario: A wrong pass phrase is refused
-    Given I am answering the survey as "Sam Smith"
-    And I enter the pass phrase "wrong"
+    Given I entered the name "Sam Smith"
+    And I entered the pass phrase "wrong"
+    And I start the survey
     When I submit my answers
     Then I see the error "Wrong pass phrase"
     And I am answering the survey
 
   Scenario: A survey cannot be answered without its pass phrase
-    Given I am answering the survey as "Sam Smith"
-    And I enter the pass phrase ""
+    Given I entered the name "Sam Smith"
+    And I entered the pass phrase ""
+    And I start the survey
     When I submit my answers
     Then I see the error "Wrong pass phrase"

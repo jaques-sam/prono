@@ -76,9 +76,10 @@ and create the tables once with `install/schema.sql`. For the NAS, `install/crea
 > Synology's MariaDB 10 starts with `skip_networking=1`: enable *TCP/IP connection* in the MariaDB 10 package settings
 > (DSM) before the backend or the CLI can reach it over `host`/`port`.
 >
-> MariaDB there has no SSL (`have_ssl = DISABLED`), so keep the database traffic on the NAS: the app user can only log in
-> from `localhost`/`127.0.0.1`, the backend uses `host = "127.0.0.1"`, and the CLI from another machine goes through an
-> SSH tunnel (`ssh -L 3306:127.0.0.1:3306 nas`, then `host = "127.0.0.1"`).
+> MariaDB there has no SSL (`have_ssl = DISABLED`), so keep the database traffic on the NAS and the LAN: the app user can
+> only log in from `localhost`, `127.0.0.1` and `192.168.80.%` (see `HOSTS` in `create_db.sh`, never `%`), the backend uses
+> `host = "127.0.0.1"`, and the CLI from another machine uses the LAN or an SSH tunnel (`ssh -L 3306:127.0.0.1:3306 nas`,
+> then `host = "127.0.0.1"`). `create_db.sh` also resets the app user's password to the one in `secure_config.toml`.
 
 Question ids are UUIDs, stored in `AnswerResponse.question_id` as `BINARY(16)` (`HEX(question_id)` shows them in a `mysql` session).
 The surveys themselves are stored in `Survey` (their JSON definitions), uploaded with `prono-cli surveys upload`: the

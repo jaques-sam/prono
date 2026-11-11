@@ -2,7 +2,9 @@
 #
 # Create `db_prono`, its tables and the app user on the SERVER's MariaDB, using
 # the `[db]` user/pass from the local `secure_config.toml`. The app user can
-# only log in from the NAS itself (also through an `ssh -L` tunnel).
+# only log in from the NAS itself (also through an `ssh -L` tunnel) and from
+# the LAN: remote tools (the CLI) reach MariaDB through the router's port
+# forward, which the NAS sees as a `192.168.80.x` address.
 # MariaDB on Synology only listens on its socket, so this runs over `ssh nas`;
 # you are asked for the MariaDB *root* password once.
 set -euo pipefail
@@ -12,6 +14,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 MYSQL=/usr/local/mariadb10/bin/mysql
 SOCK=/run/mysqld/mysqld10.sock
 SERVER=nas
+HOSTS=(localhost 127.0.0.1 '192.168.80.%')
 
 value() { sed -nE "s/^$1 *= *\"(.*)\"/\1/p" "$CONFIG"; }
 sql_quote() { sed -e "s/\\\\/\\\\\\\\/g" -e "s/'/\\\\'/g"; }
@@ -27,10 +30,12 @@ trap 'rm -f "$sql"; ssh $SERVER "rm -f .prono_db.sql" 2>/dev/null || true' EXIT
     echo "CREATE DATABASE IF NOT EXISTS db_prono;"
     echo "USE db_prono;"
     cat "$HERE/schema.sql"
-    # Local only: the backend runs on the NAS, remote tools go through `ssh -L`.
+    # Never open to every host: drop the wildcard user an older run or hand-made setup may have left.
     echo "DROP USER IF EXISTS '$user'@'%';"
-    for host in localhost 127.0.0.1; do
+    for host in "${HOSTS[@]}"; do
         echo "CREATE USER IF NOT EXISTS '$user'@'$host' IDENTIFIED BY '$pass';"
+        # `IF NOT EXISTS` keeps an old password (or auth plugin): always set the current one.
+        echo "ALTER USER '$user'@'$host' IDENTIFIED BY '$pass';"
         echo "GRANT SELECT, INSERT, UPDATE, DELETE ON db_prono.* TO '$user'@'$host';"
     done
 } > "$sql"

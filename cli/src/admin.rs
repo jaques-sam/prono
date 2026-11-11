@@ -308,8 +308,8 @@ mod tests {
 
         let listed = ok(&repo(), survey_action(SurveyAction::List)).await;
         let expected = [
-            "1: SpaceX Starship achievements survey (pass phrase, 4 questions)",
-            "2: You were chosen to follow a splendid course... (name list, 2 questions)",
+            "1: Starship achievements survey (pass phrase, 4 questions)",
+            "2: You were chosen to follow a splendid course... (name list, 4 questions)",
         ];
         assert_eq!(listed, expected.join("\n"));
     }
@@ -363,12 +363,16 @@ mod tests {
         assert_eq!(ok(&repo, scores(3)).await, "Ann Lee: 1");
     }
 
-    /// `name` on the name list of the course survey, and their two poll answers to it.
-    async fn answered_course(repo: &MemoryRepo, name: &str, device: &str, answers: [&str; 2]) {
+    /// `name` on the name list of the course survey, and their answers to it: the given
+    /// ones to the first two (poll) questions, the sample ones to the rest.
+    async fn answered_course(repo: &MemoryRepo, name: &str, device: &str, answers_to_first_two: [&str; 2]) {
         let (first, last) = name.split_once(' ').unwrap();
         repo.allow_user(2, first, last).await.unwrap();
         let survey = prono::survey(repo, 2).await.unwrap();
-        let answers = answers.map(|answer| Answer::Poll(answer.into()));
+        let mut answers = samples::course_answers();
+        for (slot, answer) in answers.iter_mut().zip(answers_to_first_two) {
+            *slot = Answer::Poll(answer.into());
+        }
         let submission = prono_api::Submission::new(name, &survey, &answers);
         prono::submit(repo, 2, device, &submission).await.unwrap();
     }
@@ -390,11 +394,13 @@ mod tests {
         let expected = [
             "Q1: What is your background",
             "Q2: I come to the course!",
+            "Q3: Do you have any diatery requirements or allergies?",
+            "Q4: Other requests or questions?",
             "",
-            "Participant | Q1  | Q2",
-            "------------+-----+------------------",
-            "Ann Lee     | C   | Of course!",
-            "Bob Ray     | C++ | I can't make it 😪",
+            "Participant | Q1  | Q2                | Q3 | Q4",
+            "------------+-----+-------------------+----+-----------",
+            "Ann Lee     | C   | Of course!        | no | No remarks",
+            "Bob Ray     | C++ | I can't make it 😪 | no | No remarks",
         ];
         assert_eq!(ok(&repo, answers_of(2, None)).await, expected.join("\n"));
     }
@@ -432,7 +438,7 @@ mod tests {
         answered_course(&repo, "Ann Lee", "dev-1", ["C", "Of course!"]).await;
         answered_course(&repo, "Bob Ray", "dev-2", ["C++", "Of course!"]).await;
 
-        let expected = "What is your background: C\nI come to the course!: Of course!";
+        let expected = "What is your background: C\nI come to the course!: Of course!\nDo you have any diatery requirements or allergies?: no\nOther requests or questions?: No remarks";
         assert_eq!(ok(&repo, answers_of(2, Some("Ann Lee"))).await, expected);
         // Names match the way they do when answering: ignoring case and surrounding spaces.
         assert_eq!(ok(&repo, answers_of(2, Some(" ann lee "))).await, expected);

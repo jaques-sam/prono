@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn the_shipped_surveys_parse() {
         assert_eq!(samples::starship().questions.len(), 4);
-        assert_eq!(samples::course().questions.len(), 2);
+        assert_eq!(samples::course().questions.len(), 4);
         assert_ne!(samples::starship().id, samples::course().id);
     }
 

@@ -269,16 +269,11 @@ mod tests {
     #[actix_web::test]
     async fn unlisted_name_cannot_answer_a_name_list_survey() {
         let survey = samples::course();
-        let answers: Vec<_> = survey
-            .questions
-            .iter()
-            .map(|question| Answer::Poll(question.possible_answers[0].clone()))
-            .collect();
         let (statuses, body) = run(vec![post(
             survey.id,
             Some("dev-1"),
             API_KEY,
-            &Submission::new("Ada Lovelace", &survey, &answers),
+            &Submission::new("Ada Lovelace", &survey, &samples::course_answers()),
         )])
         .await;
         assert_eq!(statuses, [StatusCode::FORBIDDEN]);

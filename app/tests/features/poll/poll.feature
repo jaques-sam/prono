@@ -81,6 +81,8 @@ Feature: Poll questions
     And I answer the course survey as "Sam Smith"
     And I choose "C" for "What is your background"
     And I choose "Of course!" for "I come to the course!"
+    And I choose "no" for "Do you have any diatery requirements or allergies?"
+    And I type the text answer "Nothing"
     When I submit my answers
     Then the poll results show "C: 2 votes (67%)"
     And the poll results show "C++: 0 votes (0%)"

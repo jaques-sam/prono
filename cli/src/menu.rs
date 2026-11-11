@@ -240,7 +240,7 @@ mod tests {
     use std::collections::VecDeque;
 
     use prono::MemoryRepo;
-    use prono_api::{Answer, Submission, samples};
+    use prono_api::{Submission, samples};
 
     use super::*;
 
@@ -343,7 +343,7 @@ mod tests {
         )
         .await;
         assert_eq!(script.shown.len(), 2);
-        assert!(script.shown[0].contains("SpaceX"), "{:?}", script.shown);
+        assert!(script.shown[0].contains("Starship"), "{:?}", script.shown);
         // Main, surveys, surveys, surveys, main.
         assert_eq!(script.menus.len(), 5);
     }
@@ -401,12 +401,7 @@ mod tests {
         let repo = repo();
         let survey = prono::survey(&repo, 2).await.unwrap();
         repo.allow_user(2, "Ann", "Lee").await.unwrap();
-        let answers = survey
-            .empty_answers()
-            .iter()
-            .map(|_| Answer::Poll("C".into()))
-            .collect::<Vec<_>>();
-        let submission = Submission::new("Ann Lee", &survey, &answers);
+        let submission = Submission::new("Ann Lee", &survey, &samples::course_answers());
         prono::submit(&repo, 2, "dev-1", &submission).await.unwrap();
 
         let script = navigate(
@@ -426,12 +421,19 @@ mod tests {
         .await;
         assert_eq!(script.menus[3], ["Everybody (a table)", "Ann Lee"]);
         assert!(script.shown[0].contains("Participant | Q1"), "{:?}", script.shown);
-        assert_eq!(script.shown[1], "What is your background: C\nI come to the course!: C");
+        assert_eq!(
+            script.shown[1],
+            "What is your background: C\nI come to the course!: Of course!\nDo you have any diatery requirements or allergies?: no\nOther requests or questions?: No remarks"
+        );
     }
 
     #[tokio::test]
     async fn answers_of_a_survey_nobody_answered_are_not_offered() {
-        let script = navigate(&repo(), [Pick("Surveys"), Pick("answers"), Pick("SpaceX"), Back, Back]).await;
+        let script = navigate(
+            &repo(),
+            [Pick("Surveys"), Pick("answers"), Pick("Starship"), Back, Back],
+        )
+        .await;
         assert_eq!(script.shown, ["Nobody answered this survey yet."]);
     }
 

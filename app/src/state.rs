@@ -1079,7 +1079,7 @@ mod tests {
         start(&mut state, LISTED_ID, &backend);
         state.pass_phrase = "left over".into();
         if let Phase::Answering { answers, .. } = &mut state.phase {
-            *answers = vec![Answer::Poll("C".into()), Answer::Poll("Of course!".into())];
+            *answers = samples::course_answers();
         }
         state.apply(Action::Submit, &backend);
         assert_eq!(backend.submissions.borrow()[0].pass_phrase, None);

@@ -2,7 +2,7 @@ use cucumber::{given, then, when};
 use egui::accesskit::{Role, Toggled};
 use egui_kittest::Node;
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
-use prono_api::Answer;
+use prono_api::{Answer, samples};
 
 use crate::fake_backend::MY_DEVICE;
 use crate::steps::common::{COURSE_ID, course};
@@ -76,16 +76,15 @@ fn answered_elsewhere(world: &mut World, name: String, answer: String, question:
     seed(world, &name, &format!("device-of-{name}"), &answer, &question);
 }
 
-/// `name` answered `question` with `answer`, and the other questions with
-/// their first option.
+/// `name` answered the poll `question` with `answer`, and the other questions
+/// with the sample answer.
 fn seed(world: &World, name: &str, device: &str, answer: &str, question: &str) {
     world.session().backend.seed_answers(COURSE_ID, name, device, |asked| {
-        let chosen = if asked.text == question {
-            answer
+        if asked.text == question {
+            Answer::Poll(answer.to_string())
         } else {
-            &asked.possible_answers[0]
-        };
-        Answer::Poll(chosen.to_string())
+            samples::answer_to(asked)
+        }
     });
 }
 
@@ -101,13 +100,30 @@ fn choose(world: &mut World, option: String, question: String) {
     world.settle();
 }
 
-#[given(expr = "I type the answer {string}")]
-#[when(expr = "I type the answer {string}")]
-fn type_answer(world: &mut World, text: String) {
-    world.harness.get_by_role(Role::TextInput).click();
+/// Types `text` into the field with the placeholder `hint`: the field of an
+/// answer of one's own, or of a text question.
+fn type_into_hinted(world: &mut World, hint: &str, text: String) {
+    world
+        .harness
+        .query_all_by_role(Role::TextInput)
+        .find(|field| field.accesskit_node().placeholder() == Some(hint))
+        .unwrap_or_else(|| panic!("no field with the hint \"{hint}\""))
+        .click();
     world.settle();
     world.harness.event(egui::Event::Text(text));
     world.settle();
+}
+
+#[given(expr = "I type the answer {string}")]
+#[when(expr = "I type the answer {string}")]
+fn type_answer(world: &mut World, text: String) {
+    type_into_hinted(world, "your own answer", text);
+}
+
+#[given(expr = "I type the text answer {string}")]
+#[when(expr = "I type the text answer {string}")]
+fn type_text_answer(world: &mut World, text: String) {
+    type_into_hinted(world, "your answer here", text);
 }
 
 #[then(expr = "the answer to {string} is {string}")]

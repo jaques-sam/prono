@@ -213,12 +213,7 @@ mod tests {
 
     fn list_submission(user: &str) -> Submission {
         let survey = samples::course();
-        let answers: Vec<_> = survey
-            .questions
-            .iter()
-            .map(|question| Answer::Poll(question.possible_answers[0].clone()))
-            .collect();
-        Submission::new(user, &survey, &answers)
+        Submission::new(user, &survey, &samples::course_answers())
     }
 
     fn ids(surveys: &[Survey]) -> Vec<u64> {
@@ -253,9 +248,8 @@ mod tests {
         ] {
             let (first, last) = user.split_once(' ').unwrap();
             repo.allow_user(LIST_SURVEY_ID, first, last).await.unwrap();
-            let mut answers = survey.empty_answers();
+            let mut answers = samples::course_answers();
             answers[0] = Answer::Poll(vote.into());
-            answers[1] = Answer::Poll(survey.questions[1].possible_answers[0].clone());
             let submission = Submission::new(user, &survey, &answers);
             submit(&repo, LIST_SURVEY_ID, device, &submission).await.unwrap();
         }
@@ -462,7 +456,7 @@ mod tests {
         assert_eq!(surveys(&repo).await.unwrap(), [starship.clone(), course]);
         assert_eq!(survey(&repo, SURVEY_ID).await.unwrap(), starship);
 
-        let renamed = samples::STARSHIP_JSON.replace("SpaceX Starship achievements survey", "Renamed");
+        let renamed = samples::STARSHIP_JSON.replace("Starship achievements survey", "Renamed");
         upload_survey(&repo, &renamed).await.unwrap();
         assert_eq!(survey(&repo, SURVEY_ID).await.unwrap().description, "Renamed");
         assert_eq!(surveys(&repo).await.unwrap().len(), 2);

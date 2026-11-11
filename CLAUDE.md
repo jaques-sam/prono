@@ -89,8 +89,8 @@ See the Architecture section of `README.md`. In short: every survey type is defi
 - **api/** (`prono_api`): the model shared by every binary, wasm-safe
   - `Survey`, `Question`, `AnswerKind`, `Answer`, `Submission`, `Results`
   - The survey definition: `Survey::from_json` (`api/src/definition.rs`). Surveys are uploaded to the backend's database (`prono-cli surveys upload`), never embedded; `api/surveys/*.json` are examples, also the test fixtures of the `samples` feature
-  - `access` is mandatory in a definition (`pass_phrase` or `name_list`, there is no open survey); `correct_answer`s (all or none) make a survey scored, and they never serialize, so they stay on the backend
-  - The rules (`Submission::validate`, `check_user_name`, `Answer::is_valid_for`) and the REST contract (`answers_path`, `API_KEY`, `DEVICE_ID_HEADER`)
+  - There is no `access` key in a definition: every survey is opened by its pass phrase (`prono-cli surveys pass-phrase`, stored in the backend's database only), and the apps get surveys solely through `POST /api/surveys` with a pass phrase; `correct_answer`s (all or none) make a survey scored, and they never serialize, so they stay on the backend
+  - The rules (`Submission::validate`, `check_user_name`, `Answer::is_valid_for`) and the REST contract (`surveys_path`, `answers_path`, `API_KEY`, `DEVICE_ID_HEADER`)
   - Question ids hash the question text and answer kind; stored answers reference them, so `existing_question_ids_are_stable` must keep passing
 
 - **prono/**: server-side core
@@ -105,7 +105,7 @@ See the Architecture section of `README.md`. In short: every survey type is defi
   - `client.rs`: non-blocking REST client (`ehttp`), identical on both targets
   - No business rules in the UI: put them in `prono_api` or `state.rs`
 
-- **cli/**: admin tool on top of `prono` (surveys, users, access): commands for scripts, and an interactive menu (`menu.rs`) when run without one; both go through `admin::run`
+- **cli/**: admin tool on top of `prono` (surveys, users): commands for scripts, and an interactive menu (`menu.rs`) when run without one; both go through `admin::run`
 
 ## Configuration
 

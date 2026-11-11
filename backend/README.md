@@ -22,7 +22,7 @@ The prono-backend is a REST API in front of the prono database. Both the web and
 | Method & path | Body | Response |
 | --- | --- | --- |
 | `POST /api/surveys/{survey_id}/answers` | `{"user": "...", "answers": [["<question id>", <answer>], ...]}` | `200`, or an error |
-| `POST /api/surveys/{survey_id}/pass-phrase` | `"the pass phrase"`, or `null` for none | `200` when it is the survey's, `403` with `"Wrong pass phrase"` otherwise |
+| `POST /api/surveys` | `"the pass phrase"`, or `null` for none | The surveys that pass phrase opens, a JSON list in survey id order; `403` with `"Wrong pass phrase"` when it opens none. This is the only way the apps get surveys |
 | `GET /api/surveys/{survey_id}/answers` | | `{"<question id>": [{"user": "...", "answer": <answer>}]}` |
 
 An `<answer>` is `{"PredictionDate": {"day": null, "month": 3, "year": 2026}}` or `{"Text": "..."}`.
@@ -83,9 +83,13 @@ and create the tables once with `install/schema.sql`. For the NAS, `install/crea
 
 Question ids are UUIDs, stored in `AnswerResponse.question_id` as `BINARY(16)` (`HEX(question_id)` shows them in a `mysql` session).
 The surveys themselves are stored in `Survey` (their JSON definitions), uploaded with `prono-cli surveys upload`: the
-backend has none until one is uploaded. Who may answer a survey with `"access": "name_list"` or `"pass_phrase"` is
-stored in `SurveyAllowedUser` and `SurveyPassPhrase`, filled with `prono-cli access`. Run `install/schema.sql` (or `create_db.sh`) again to add
-them to an existing database; it is idempotent. It also converts a database and its tables to `utf8mb4`, which the
+backend has none until one is uploaded. Every survey is opened by its pass phrase, stored in `SurveyPassPhrase` and
+set with `prono-cli surveys pass-phrase`: a participant only gets the surveys whose pass phrase they enter, and a
+survey without one stays closed. Run `install/schema.sql` (or `create_db.sh`) again when upgrading an existing
+database, **before** the new backend starts: it is idempotent, and it strips the `"access"` key that older surveys
+were uploaded with (a definition may not have it any more). The `SurveyAllowedUser` table of the removed name lists is
+left alone; drop it when you no longer need it, and give the surveys that had a name list a pass phrase. The script
+also converts a database and its tables to `utf8mb4`, which the
 emoji in surveys and answers need (`utf8mb3` fails with `Incorrect string value`); this needs a user with `ALTER`
 rights, so run it as root, like `create_db.sh` does.
 Answers are stored as text: `DD/MM/YYYY` for dates (`00` when there is no day), the text itself otherwise.

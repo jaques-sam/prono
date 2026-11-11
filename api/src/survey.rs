@@ -19,24 +19,10 @@ pub struct Survey {
     pub id: u64,
     pub description: String,
     pub link: Option<String>,
-    pub access: Access,
     /// Whether every question has a correct answer, so the participants get
     /// a [`Score`]. The correct answers themselves never leave the backend.
     pub scored: bool,
     pub questions: Vec<Question>,
-}
-
-/// Who may answer a survey. Every survey has one: nobody gets in without
-/// giving something. Enforced by the backend when answers are submitted; the
-/// secrets (the pass phrase, the names on the list) live in its database
-/// only, never in the survey definition.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Access {
-    /// Whoever knows the survey's pass phrase, see [`Submission::pass_phrase`].
-    PassPhrase,
-    /// Only the participants on the survey's name list.
-    NameList,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,20 +86,12 @@ pub enum Invalid {
 pub struct Submission {
     /// The participant's [`full_name`].
     pub user: String,
-    /// The pass phrase, for a survey with [`Access::PassPhrase`].
+    /// The survey's pass phrase: without the right one the backend refuses
+    /// the submission.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pass_phrase: Option<String>,
     /// `(question id, answer)` pairs.
     pub answers: Vec<(Uuid, Answer)>,
-}
-
-/// What the backend tells the app about a participant, found by name.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct UserStatus {
-    /// Whether the name already filled in a survey.
-    pub answered: bool,
-    /// The surveys the participant may answer, by id.
-    pub surveys: Vec<Survey>,
 }
 
 /// One participant's answer to a question.
@@ -416,7 +394,6 @@ mod tests {
             id: 7,
             description: "Test".into(),
             link: None,
-            access: Access::PassPhrase,
             scored: false,
             questions: vec![
                 Question {

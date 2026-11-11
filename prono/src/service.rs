@@ -1,5 +1,5 @@
 use log::info;
-use prono_api::{Access, Invalid, Results, Score, Submission, Survey, UserStatus, check_user_name};
+use prono_api::{Invalid, Results, Score, Submission, Survey, check_user_name};
 
 use crate::{Error, Repo, Result};
 
@@ -14,14 +14,19 @@ const MAX_DEVICE_ID_LEN: usize = 255;
 /// # Errors
 ///
 /// [`Error::Invalid`] for a bad submission, [`Error::InvalidDeviceId`],
-/// [`Error::NotListed`] or [`Error::WrongPassPhrase`] when the survey's
-/// [`Access`] is not met, [`Error::DeviceMismatch`], [`Error::DeviceInUse`],
+/// [`Error::WrongPassPhrase`] when the submission does not carry the survey's
+/// pass phrase, [`Error::DeviceMismatch`], [`Error::DeviceInUse`],
 /// [`Error::AnswerExists`] when answered before, or a repository error.
 pub async fn submit(repo: &dyn Repo, survey_id: u64, device_id: &str, submission: &Submission) -> Result<()> {
     let survey = survey(repo, survey_id).await?;
     submission.validate(&survey)?;
     check_device_id(device_id)?;
-    check_access(repo, &survey, submission).await?;
+    if !opened_by(repo, submission.pass_phrase.as_deref())
+        .await?
+        .contains(&survey_id)
+    {
+        return Err(Error::WrongPassPhrase);
+    }
 
     let user = submission.user.as_str();
     if repo.device_of(user).await?.is_some_and(|device| device != device_id) {
@@ -39,48 +44,52 @@ pub async fn submit(repo: &dyn Repo, survey_id: u64, device_id: &str, submission
     Ok(())
 }
 
-/// Checks the pass phrase `pass_phrase` (see [`prono_api::clean_pass_phrase`])
-/// of survey `survey_id`, so the app can refuse a wrong one before the
-/// questions open. A survey without a pass phrase, set by nobody or not
-/// asking for one, never accepts any.
+/// The surveys that `pass_phrase` (see [`prono_api::clean_pass_phrase`])
+/// opens, by id: the only way a participant gets to see a survey. A survey
+/// without a pass phrase, set by nobody yet, stays closed.
 ///
 /// # Errors
 ///
-/// [`Error::WrongPassPhrase`], or a repository error.
-pub async fn check_pass_phrase(repo: &dyn Repo, survey_id: u64, pass_phrase: Option<&str>) -> Result<()> {
-    if pass_phrase_is_right(repo, survey_id, pass_phrase).await? {
-        Ok(())
-    } else {
+/// [`Error::WrongPassPhrase`] if it opens none, or a repository error.
+pub async fn open_surveys(repo: &dyn Repo, pass_phrase: Option<&str>) -> Result<Vec<Survey>> {
+    let ids = opened_by(repo, pass_phrase).await?;
+    let open: Vec<_> = surveys(repo)
+        .await?
+        .into_iter()
+        .filter(|survey| ids.contains(&survey.id))
+        .collect();
+    if open.is_empty() {
         Err(Error::WrongPassPhrase)
+    } else {
+        Ok(open)
     }
 }
 
-/// Whether `pass_phrase` is the one set for survey `survey_id`.
-async fn pass_phrase_is_right(repo: &dyn Repo, survey_id: u64, pass_phrase: Option<&str>) -> Result<bool> {
-    let stored = repo.pass_phrase(survey_id).await?;
-    Ok(stored.is_some() && stored.as_deref() == pass_phrase)
+/// The ids of the surveys whose pass phrase is exactly `pass_phrase`.
+async fn opened_by(repo: &dyn Repo, pass_phrase: Option<&str>) -> Result<Vec<u64>> {
+    let Some(pass_phrase) = pass_phrase else {
+        return Ok(Vec::new());
+    };
+    Ok(repo
+        .pass_phrases()
+        .await?
+        .into_iter()
+        .filter(|(_, stored)| stored == pass_phrase)
+        .map(|(survey_id, _)| survey_id)
+        .collect())
 }
 
-/// Whether `user` already filled in a survey, and which surveys they may
-/// answer, so the app can warn while the name is typed and only offer those
-/// surveys. Nothing else about the participants leaves the server.
+/// Whether `user` already filled in a survey, so the app can warn while the
+/// name is typed. Nothing else about the participants leaves the server.
 ///
 /// # Errors
 ///
 /// [`Error::Invalid`] for a bad name, [`Error::InvalidDeviceId`], or a
 /// repository error.
-pub async fn user_status(repo: &dyn Repo, device_id: &str, user: &str) -> Result<UserStatus> {
+pub async fn has_answered(repo: &dyn Repo, device_id: &str, user: &str) -> Result<bool> {
     check_user_name(user)?;
     check_device_id(device_id)?;
-    let listed = repo.listed_surveys(user).await?;
-    Ok(UserStatus {
-        answered: repo.device_of(user).await?.is_some(),
-        surveys: surveys(repo)
-            .await?
-            .into_iter()
-            .filter(|survey| survey.access != Access::NameList || listed.contains(&survey.id))
-            .collect(),
-    })
+    Ok(repo.device_of(user).await?.is_some())
 }
 
 /// Every participant's answers to survey `survey_id`.
@@ -164,20 +173,6 @@ async fn collect_results(repo: &dyn Repo, survey: &Survey) -> Result<Results> {
     Ok(results)
 }
 
-/// Checks that the participant may answer `survey`. A survey with a pass
-/// phrase nobody set yet stays closed.
-async fn check_access(repo: &dyn Repo, survey: &Survey, submission: &Submission) -> Result<()> {
-    let allowed = match survey.access {
-        Access::NameList => repo.listed_surveys(&submission.user).await?.contains(&survey.id),
-        Access::PassPhrase => pass_phrase_is_right(repo, survey.id, submission.pass_phrase.as_deref()).await?,
-    };
-    match (allowed, survey.access) {
-        (true, _) => Ok(()),
-        (false, Access::PassPhrase) => Err(Error::WrongPassPhrase),
-        (false, Access::NameList) => Err(Error::NotListed),
-    }
-}
-
 fn check_device_id(device_id: &str) -> Result<()> {
     if device_id.trim().is_empty() || device_id.len() > MAX_DEVICE_ID_LEN {
         return Err(Error::InvalidDeviceId);
@@ -192,16 +187,16 @@ mod tests {
     use super::*;
     use crate::MemoryRepo;
 
-    /// The survey with a pass phrase.
     const SURVEY_ID: u64 = 1;
-    /// The survey with a name list.
-    const LIST_SURVEY_ID: u64 = 2;
+    const COURSE_ID: u64 = 2;
     const PASS_PHRASE: &str = "open sesame";
+    const COURSE_PASS_PHRASE: &str = "rust rocks";
 
-    /// A repository with both sample surveys, and the pass phrase of the first.
+    /// A repository with both sample surveys, each with a pass phrase of its own.
     async fn repo() -> MemoryRepo {
         let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON]);
         repo.set_pass_phrase(SURVEY_ID, PASS_PHRASE).await.unwrap();
+        repo.set_pass_phrase(COURSE_ID, COURSE_PASS_PHRASE).await.unwrap();
         repo
     }
 
@@ -211,9 +206,9 @@ mod tests {
         Submission::new(user, &survey, &survey.empty_answers()).with_pass_phrase(PASS_PHRASE)
     }
 
-    fn list_submission(user: &str) -> Submission {
+    fn course_submission(user: &str) -> Submission {
         let survey = samples::course();
-        Submission::new(user, &survey, &samples::course_answers())
+        Submission::new(user, &survey, &samples::course_answers()).with_pass_phrase(COURSE_PASS_PHRASE)
     }
 
     fn ids(surveys: &[Survey]) -> Vec<u64> {
@@ -246,15 +241,13 @@ mod tests {
             ("Alice Smith", "dev-1", option.as_str()),
             ("Bob Jones", "dev-2", "Haskell"),
         ] {
-            let (first, last) = user.split_once(' ').unwrap();
-            repo.allow_user(LIST_SURVEY_ID, first, last).await.unwrap();
             let mut answers = samples::course_answers();
             answers[0] = Answer::Poll(vote.into());
-            let submission = Submission::new(user, &survey, &answers);
-            submit(&repo, LIST_SURVEY_ID, device, &submission).await.unwrap();
+            let submission = Submission::new(user, &survey, &answers).with_pass_phrase(COURSE_PASS_PHRASE);
+            submit(&repo, COURSE_ID, device, &submission).await.unwrap();
         }
 
-        let results = results(&repo, LIST_SURVEY_ID).await.unwrap();
+        let results = results(&repo, COURSE_ID).await.unwrap();
         let votes = &results[&poll.id];
         assert_eq!(votes.len(), 2);
         assert!(votes.iter().all(|vote| vote.answer.kind() == AnswerKind::Poll));
@@ -262,9 +255,9 @@ mod tests {
         assert_eq!(tally[0], (option, 1));
         assert_eq!(tally.last().unwrap(), &("Haskell".to_string(), 1));
 
-        repo.allow_user(LIST_SURVEY_ID, "Carol", "White").await.unwrap();
-        let blank = Submission::new("Carol White", &survey, &survey.empty_answers());
-        let err = submit(&repo, LIST_SURVEY_ID, "dev-3", &blank).await.unwrap_err();
+        let blank =
+            Submission::new("Carol White", &survey, &survey.empty_answers()).with_pass_phrase(COURSE_PASS_PHRASE);
+        let err = submit(&repo, COURSE_ID, "dev-3", &blank).await.unwrap_err();
         assert!(matches!(err, Error::Invalid(Invalid::Answer(_))));
     }
 
@@ -318,23 +311,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn user_status_tells_known_names_from_new_ones() {
+    async fn has_answered_tells_known_names_from_new_ones() {
         let repo = repo().await;
-        assert!(!user_status(&repo, "dev-1", "alice").await.unwrap().answered);
+        assert!(!has_answered(&repo, "dev-1", "alice").await.unwrap());
 
         submit(&repo, SURVEY_ID, "dev-1", &submission("alice")).await.unwrap();
-        assert!(user_status(&repo, "dev-1", "alice").await.unwrap().answered);
+        assert!(has_answered(&repo, "dev-1", "alice").await.unwrap());
         // Also from another device: the name is taken.
-        assert!(user_status(&repo, "dev-2", "alice").await.unwrap().answered);
-        assert!(!user_status(&repo, "dev-2", "bob").await.unwrap().answered);
+        assert!(has_answered(&repo, "dev-2", "alice").await.unwrap());
+        assert!(!has_answered(&repo, "dev-2", "bob").await.unwrap());
     }
 
     #[tokio::test]
-    async fn user_status_rejects_bad_input() {
+    async fn has_answered_rejects_bad_input() {
         let repo = repo().await;
-        let err = user_status(&repo, "dev-1", " alice").await.unwrap_err();
+        let err = has_answered(&repo, "dev-1", " alice").await.unwrap_err();
         assert_eq!(err, Error::Invalid(Invalid::UserName));
-        let err = user_status(&repo, "", "alice").await.unwrap_err();
+        let err = has_answered(&repo, "", "alice").await.unwrap_err();
         assert_eq!(err, Error::InvalidDeviceId);
     }
 
@@ -345,48 +338,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn name_list_survey_only_takes_listed_names_ignoring_case() {
+    async fn every_survey_takes_only_its_own_pass_phrase() {
         let repo = repo().await;
-        let err = submit(&repo, LIST_SURVEY_ID, "dev-1", &list_submission("Ada Lovelace"))
+        let course = Submission::new("Ada Lovelace", &samples::course(), &samples::course_answers());
+        // The phrase of another survey does not open this one.
+        let err = submit(&repo, COURSE_ID, "dev-1", &course.clone().with_pass_phrase(PASS_PHRASE))
             .await
             .unwrap_err();
-        assert_eq!(err, Error::NotListed);
+        assert_eq!(err, Error::WrongPassPhrase);
+        let err = submit(&repo, COURSE_ID, "dev-1", &course).await.unwrap_err();
+        assert_eq!(err, Error::WrongPassPhrase);
+        assert_eq!(repo.users().await.unwrap(), Vec::<String>::new());
 
-        // Listed for another survey does not count.
-        repo.allow_user(LIST_SURVEY_ID + 1, "Ada", "Lovelace").await.unwrap();
-        assert_eq!(
-            submit(&repo, LIST_SURVEY_ID, "dev-1", &list_submission("Ada Lovelace"))
-                .await
-                .unwrap_err(),
-            Error::NotListed
-        );
-
-        repo.allow_user(LIST_SURVEY_ID, "Ada", "Lovelace").await.unwrap();
-        submit(&repo, LIST_SURVEY_ID, "dev-1", &list_submission("ada LOVELACE"))
+        submit(&repo, COURSE_ID, "dev-1", &course_submission("Ada Lovelace"))
             .await
             .unwrap();
-        // Nothing was stored for the refused attempts.
-        assert_eq!(repo.users().await.unwrap(), ["ada LOVELACE"]);
-    }
-
-    #[tokio::test]
-    async fn user_status_offers_the_surveys_the_name_may_answer() {
-        let repo = repo().await;
-        // Only the pass phrase survey: the other one has a name list.
-        let status = user_status(&repo, "dev-1", "Ada Lovelace").await.unwrap();
-        assert_eq!(ids(&status.surveys), [SURVEY_ID]);
-
-        repo.allow_user(LIST_SURVEY_ID, "Ada", "Lovelace").await.unwrap();
-        let status = user_status(&repo, "dev-1", "Ada Lovelace").await.unwrap();
-        assert_eq!(ids(&status.surveys), [SURVEY_ID, LIST_SURVEY_ID]);
-
-        // Answering does not change what is offered.
-        submit(&repo, SURVEY_ID, "dev-1", &submission("Ada Lovelace"))
-            .await
-            .unwrap();
-        let status = user_status(&repo, "dev-1", "Ada Lovelace").await.unwrap();
-        assert!(status.answered);
-        assert_eq!(ids(&status.surveys), [SURVEY_ID, LIST_SURVEY_ID]);
+        assert_eq!(repo.users().await.unwrap(), ["Ada Lovelace"]);
     }
 
     #[tokio::test]
@@ -419,27 +386,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn only_the_right_pass_phrase_is_accepted_before_answering() {
-        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON]);
+    async fn a_pass_phrase_opens_exactly_the_surveys_that_have_it() {
+        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON, QUIZ]);
 
         // Nobody set one yet: nothing is right, not even none.
         for attempt in [None, Some(PASS_PHRASE)] {
-            let err = check_pass_phrase(&repo, SURVEY_ID, attempt).await.unwrap_err();
+            let err = open_surveys(&repo, attempt).await.unwrap_err();
             assert_eq!(err, Error::WrongPassPhrase);
         }
 
         repo.set_pass_phrase(SURVEY_ID, PASS_PHRASE).await.unwrap();
-        for attempt in [None, Some("nope"), Some("Open Sesame")] {
-            let err = check_pass_phrase(&repo, SURVEY_ID, attempt).await.unwrap_err();
-            assert_eq!(err, Error::WrongPassPhrase);
+        repo.set_pass_phrase(COURSE_ID, COURSE_PASS_PHRASE).await.unwrap();
+        for attempt in [None, Some(""), Some("nope"), Some("Open Sesame"), Some(" open sesame")] {
+            let err = open_surveys(&repo, attempt).await.unwrap_err();
+            assert_eq!(err, Error::WrongPassPhrase, "{attempt:?}");
         }
-        check_pass_phrase(&repo, SURVEY_ID, Some(PASS_PHRASE)).await.unwrap();
+        assert_eq!(ids(&open_surveys(&repo, Some(PASS_PHRASE)).await.unwrap()), [SURVEY_ID]);
+        assert_eq!(
+            ids(&open_surveys(&repo, Some(COURSE_PASS_PHRASE)).await.unwrap()),
+            [COURSE_ID]
+        );
 
-        // It is the survey's own: a survey without one accepts none.
-        let err = check_pass_phrase(&repo, LIST_SURVEY_ID, Some(PASS_PHRASE))
-            .await
-            .unwrap_err();
-        assert_eq!(err, Error::WrongPassPhrase);
+        // Surveys may share a pass phrase, they all open with it, by id.
+        repo.set_pass_phrase(QUIZ_ID, PASS_PHRASE).await.unwrap();
+        let open = open_surveys(&repo, Some(PASS_PHRASE)).await.unwrap();
+        assert_eq!(ids(&open), [SURVEY_ID, QUIZ_ID]);
+        assert_eq!(open[0], samples::starship());
+
+        // A new pass phrase replaces the old one.
+        repo.set_pass_phrase(SURVEY_ID, "new one").await.unwrap();
+        assert_eq!(ids(&open_surveys(&repo, Some(PASS_PHRASE)).await.unwrap()), [QUIZ_ID]);
+        assert_eq!(ids(&open_surveys(&repo, Some("new one")).await.unwrap()), [SURVEY_ID]);
     }
 
     #[tokio::test]
@@ -465,8 +442,8 @@ mod tests {
     #[tokio::test]
     async fn an_invalid_survey_is_not_uploaded() {
         let repo = MemoryRepo::default();
-        let no_access = samples::STARSHIP_JSON.replace(r#""access": "pass_phrase","#, "");
-        for json in ["nonsense", no_access.as_str()] {
+        let with_access = samples::STARSHIP_JSON.replace(r#""link""#, r#""access": "pass_phrase", "link""#);
+        for json in ["nonsense", with_access.as_str()] {
             let err = upload_survey(&repo, json).await.unwrap_err();
             assert!(matches!(err, Error::InvalidSurvey(_)), "{json}");
         }
@@ -481,10 +458,10 @@ mod tests {
         assert!(matches!(surveys(&repo).await, Err(Error::Repository(_))));
     }
 
+    const QUIZ_ID: u64 = 3;
     const QUIZ: &str = r#"{
         "survey_id": 3,
         "description": "Quiz",
-        "access": "pass_phrase",
         "questions": [
             {"question": "Capital of Belgium", "answer_type": "text", "correct_answer": "Brussels"},
             {"question": "Best language", "answer_type": "poll", "possible_answers": ["C", "Rust"],

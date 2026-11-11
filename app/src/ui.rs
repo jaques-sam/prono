@@ -2,9 +2,9 @@
 //! live in `prono_api` and [`State`]; this module only renders.
 
 use egui::{FontId, RichText, TextEdit};
-use prono_api::{Access, Answer, AnswerKind, PREDICTION_YEARS, Question, Results, Score, Survey};
+use prono_api::{Answer, AnswerKind, PREDICTION_YEARS, Question, Results, Score, Survey};
 
-use crate::state::{Action, CAN_RESET, Phase, State, SurveyList};
+use crate::state::{Action, CAN_RESET, Phase, State};
 use crate::{poll, timeline};
 
 pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
@@ -65,12 +65,13 @@ fn error_banner(ui: &mut egui::Ui, error: &str) -> Option<Action> {
 }
 
 /// A single-line text field with a `label` the screen readers know it by.
-fn labelled_text_edit(ui: &mut egui::Ui, label: &str, hint: &str, text: &mut String, password: bool) {
+fn labelled_text_edit(ui: &mut egui::Ui, label: &str, hint: &str, text: &mut String, password: bool) -> egui::Response {
     ui.horizontal(|ui| {
         let label = ui.label(label);
         ui.add(TextEdit::singleline(text).hint_text(hint).password(password))
-            .labelled_by(label.id);
-    });
+            .labelled_by(label.id)
+    })
+    .inner
 }
 
 fn start(ui: &mut egui::Ui, state: &mut State, warning: Option<&str>) -> Option<Action> {
@@ -80,50 +81,42 @@ fn start(ui: &mut egui::Ui, state: &mut State, warning: Option<&str>) -> Option<
         ui.colored_label(ui.visuals().warn_fg_color, warning);
     }
     ui.add_space(8.0);
-    // Taken out of the state, which the survey list borrows meanwhile.
-    let mut pass_phrase = std::mem::take(&mut state.pass_phrase);
-    let action = match state.survey_list() {
-        SurveyList::NeedName => {
-            ui.label("Fill in your first and last name to see your surveys.");
-            None
-        }
-        SurveyList::Waiting => {
-            ui.spinner();
-            None
-        }
-        SurveyList::Failed => {
-            ui.label("Your surveys could not be loaded. Change your name to try again.");
-            None
-        }
-        SurveyList::Ready([]) => {
-            ui.label("No surveys are available for you.");
-            None
-        }
-        SurveyList::Ready(surveys) => {
-            ui.label("Choose a survey:");
-            let mut action = None;
-            for survey in surveys {
-                ui.horizontal(|ui| {
-                    if ui.button(&survey.description).clicked() {
-                        action = Some(Action::StartSurvey(survey.id));
-                    }
-                    // Asked here, with the choice, so it is known before the
-                    // questions open.
-                    if survey.access == Access::PassPhrase {
-                        labelled_text_edit(
-                            ui,
-                            "Pass phrase:",
-                            "The pass phrase of this survey",
-                            &mut pass_phrase,
-                            true,
-                        );
-                    }
-                });
+
+    // The one pass phrase field: what it opens is only asked from the backend
+    // on a click (or Enter), never while typing.
+    let busy = state.is_busy();
+    let mut action = ui
+        .horizontal(|ui| {
+            let field = labelled_text_edit(
+                ui,
+                "Pass phrase:",
+                "The pass phrase you were given",
+                &mut state.pass_phrase,
+                true,
+            );
+            let entered = field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+            let clicked = ui.add_enabled(!busy, egui::Button::new("Submit")).clicked();
+            if busy {
+                ui.spinner();
             }
-            action
+            (clicked || entered).then_some(Action::SubmitPassPhrase)
+        })
+        .inner;
+    ui.add_space(8.0);
+
+    match state.open_surveys() {
+        None => {
+            ui.label("Enter your pass phrase and press Submit to see your surveys.");
         }
-    };
-    state.pass_phrase = pass_phrase;
+        Some(surveys) => {
+            ui.label("Choose a survey:");
+            for survey in surveys {
+                if ui.button(&survey.description).clicked() {
+                    action = Some(Action::StartSurvey(survey.id));
+                }
+            }
+        }
+    }
     action
 }
 

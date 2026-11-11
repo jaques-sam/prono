@@ -18,8 +18,8 @@
 14. [x] Check when typing if user already exists/filld in survey, show warning
 15. [x] Show errors over the UI
 16. [ ] Add different user verification methods linking to the specific survey
-  17. [x] a given pass phrase given by me
-  18. [x] on given first + last name (list of names given by me, in a db table filled with `prono-cli access`)
+  17. [x] a given pass phrase given by me: one pass phrase field in the app shows the surveys that have it, every survey needs one
+  18. ~~[x] on given first + last name (list of names)~~ removed: anybody who knew a participant's name could answer for them
   18. [ ] is human (captcha?)
   19. [ ] login via
     20. [ ] Apple account

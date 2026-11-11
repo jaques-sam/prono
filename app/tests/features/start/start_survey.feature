@@ -6,10 +6,6 @@ Feature: Starting a survey
   Background:
     Given the Prono app is open
 
-  Scenario: Without a name I am asked for one instead of offered surveys
-    Then I am asked to fill in my first and last name
-    And I am offered no surveys
-
   Scenario: Starting a survey with a first and a last name
     When I enter the name "Sam Smith"
     And I start the survey
@@ -23,25 +19,27 @@ Feature: Starting a survey
 
   Scenario: A first name alone is not enough
     When I enter the first name "Sam" and the last name ""
-    And I wait 1 seconds
-    Then I am offered no surveys
+    And I start the survey
+    Then I see the error "Please fill in your first and last name"
+    And I am on the start screen
 
   Scenario: A last name alone is not enough
     When I enter the first name "" and the last name "Smith"
-    And I wait 1 seconds
-    Then I am offered no surveys
+    And I start the survey
+    Then I see the error "Please fill in your first and last name"
+    And I am on the start screen
 
   Scenario: Names of only spaces are refused
     When I enter the first name "   " and the last name "   "
-    And I wait 1 seconds
-    Then I am asked to fill in my first and last name
-    And I am offered no surveys
+    And I start the survey
+    Then I see the error "Please fill in your first and last name"
+    And I am on the start screen
 
   Scenario: A name that is too long is not accepted
     When I enter a first name of 63 characters and the last name "b"
-    And I wait 1 seconds
-    Then I am asked to fill in my first and last name
-    And I am offered no surveys
+    And I start the survey
+    Then I see the error "Please fill in your first and last name"
+    And I am on the start screen
 
   Scenario: The longest name is accepted
     When I enter a first name of 62 characters and the last name "b"

@@ -6,7 +6,6 @@
 //!     "survey_id": 1,
 //!     "description": "What the survey is about",
 //!     "link": "https://example.com",
-//!     "access": "pass_phrase",
 //!     "questions": [
 //!         { "question": "When?", "answer_type": "prediction_date",
 //!           "correct_answer": { "month": 7, "year": 2028 } },
@@ -19,8 +18,9 @@
 //! }
 //! ```
 //!
-//! `link` is optional. `access` is required: `pass_phrase` or `name_list`.
-//! `possible_answers` is for `poll` questions only, and so is `other_label`:
+//! `link` is optional. There is no access key: every survey is opened by its
+//! pass phrase, which is set with `prono-cli surveys pass-phrase` and lives in
+//! the backend's database, never in the definition. `possible_answers` is for `poll` questions only, and so is `other_label`:
 //! the name of the free answer, "Other" when left out. A `correct_answer`
 //! makes the survey scored, and then every question needs one.
 
@@ -29,7 +29,7 @@ use std::collections::HashSet;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{Access, Answer, AnswerKind, Question, Survey};
+use crate::{Answer, AnswerKind, Question, Survey};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -38,7 +38,6 @@ struct SurveyFile {
     description: String,
     #[serde(default)]
     link: Option<String>,
-    access: Access,
     questions: Vec<QuestionFile>,
 }
 
@@ -149,7 +148,7 @@ impl Survey {
     /// # Errors
     ///
     /// If `json` is no valid definition: malformed JSON, an unknown or
-    /// missing key (also a missing `access`), bad `possible_answers`, or
+    /// missing key (also an `access` key, which no longer exists), bad `possible_answers`, or
     /// `correct_answer`s that do not fit their questions or are not given to
     /// every question or none.
     pub fn from_json(json: &str) -> serde_json::Result<Self> {
@@ -182,7 +181,6 @@ impl Survey {
             id: file.survey_id,
             description: file.description,
             link: file.link,
-            access: file.access,
             scored: with_answer != 0,
             questions,
         })
@@ -237,7 +235,7 @@ mod tests {
     }
 
     fn survey_json(question: &str) -> String {
-        format!(r#"{{"survey_id": 1, "description": "", "access": "name_list", "questions": [{question}]}}"#)
+        format!(r#"{{"survey_id": 1, "description": "", "questions": [{question}]}}"#)
     }
 
     #[test]
@@ -300,42 +298,26 @@ mod tests {
     }
 
     #[test]
-    fn access_is_required_and_cannot_be_open() {
-        let with_access = |access: &str| {
+    fn a_definition_has_no_access_key() {
+        // Who may answer is not part of the definition: every survey has a
+        // pass phrase, kept in the backend's database.
+        let with = |access: &str| {
             Survey::from_json(&format!(
                 r#"{{"survey_id": 1, "description": "", {access} "questions": []}}"#
             ))
         };
-        assert!(with_access("").is_err(), "no access given");
-        assert!(with_access(r#""access": null,"#).is_err());
-        assert!(with_access(r#""access": "open","#).is_err());
-        assert!(with_access(r#""access": "none","#).is_err());
-        assert!(with_access(r#""access": "secret","#).is_err());
-        assert_eq!(
-            with_access(r#""access": "name_list","#).unwrap().access,
-            Access::NameList
-        );
-        assert_eq!(
-            with_access(r#""access": "pass_phrase","#).unwrap().access,
-            Access::PassPhrase
-        );
-        assert_eq!(samples::starship().access, Access::PassPhrase);
-        assert_eq!(samples::course().access, Access::NameList);
+        assert!(with("").is_ok());
+        for access in ["pass_phrase", "name_list"] {
+            let err = with(&format!(r#""access": "{access}","#)).unwrap_err();
+            assert!(err.to_string().contains("unknown field `access`"), "{err}");
+        }
     }
 
     #[test]
     fn invalid_survey_file_is_rejected() {
         assert!(Survey::from_json("nonsense").is_err());
-        assert!(
-            Survey::from_json(r#"{"survey_id": "x", "description": "", "access": "name_list", "questions": []}"#)
-                .is_err()
-        );
-        assert!(
-            Survey::from_json(
-                r#"{"survey_id": 1, "description": "", "access": "name_list", "questions": [], "typo": 1}"#
-            )
-            .is_err()
-        );
+        assert!(Survey::from_json(r#"{"survey_id": "x", "description": "", "questions": []}"#).is_err());
+        assert!(Survey::from_json(r#"{"survey_id": 1, "description": "", "questions": [], "typo": 1}"#).is_err());
     }
 
     #[test]

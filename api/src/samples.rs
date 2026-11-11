@@ -3,9 +3,9 @@
 
 use crate::{Answer, AnswerKind, Question, Survey};
 
-/// The definition of [`starship`]: a survey with a pass phrase.
+/// The definition of [`starship`].
 pub const STARSHIP_JSON: &str = include_str!("../surveys/spacex_starship.json");
-/// The definition of [`course`]: a survey with a name list.
+/// The definition of [`course`].
 pub const COURSE_JSON: &str = include_str!("../surveys/rust_course.json");
 
 /// The Starship predictions survey.

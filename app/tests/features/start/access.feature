@@ -1,108 +1,120 @@
-Feature: Surveys by access
+Feature: Surveys by pass phrase
   As a participant
-  I want to see the surveys I may answer once the server knows who I am
-  So that I am not offered surveys that are not for me
+  I want to see only the surveys my pass phrase opens
+  So that surveys that are not for me stay hidden
 
   Background:
     Given the Prono app is open
 
-  Scenario: No surveys are offered before both names are typed
-    Then I am asked to fill in my first and last name
+  Scenario: No surveys are offered before a pass phrase is submitted
+    Then I am asked for my pass phrase
     And I am offered no surveys
-    When I enter the first name "Bob" and the last name ""
-    And I wait 1 seconds
-    Then I am asked to fill in my first and last name
-    And I am offered no surveys
-    And the server was not asked about any name
+    And the server was not asked for any surveys
 
-  Scenario: The surveys appear once both names are typed
-    When I enter the name "Bob Brown"
+  Scenario: Typing the pass phrase is not submitting it
+    When I enter the pass phrase "open sesame"
     And I wait 1 seconds
-    Then I am not asked to fill in my first and last name
-    And I am offered the Starship survey
-
-  Scenario: A survey with a name list is hidden from a name that is not on it
-    When I enter the name "Alice Adams"
-    And I wait 1 seconds
-    Then I am offered the Starship survey
-    And I am not offered the course survey
-
-  Scenario: A survey with a name list is offered to a name on it
-    Given "Bob Brown" is on the name list of the course survey
-    When I enter the name "Bob Brown"
-    And I wait 1 seconds
-    Then I am offered the Starship survey
-    And I am offered the course survey
-
-  Scenario: The surveys follow the name
-    Given "Bob Brown" is on the name list of the course survey
-    And I entered the name "Bob Brown"
-    And I wait 1 seconds
-    When I enter the name "Alice Adams"
     Then I am offered no surveys
-    When I wait 1 seconds
-    Then I am not offered the course survey
-    And I am offered the Starship survey
+    And the server was not asked for any surveys
 
-  Scenario: A listed name can start the course survey
-    Given "Bob Brown" is on the name list of the course survey
-    When I answer the course survey as "Bob Brown"
-    Then I see the question "What is your background"
-
-  Scenario: The surveys of a name that answered stay in the list after submitting
-    Given I am answering the survey as "Sam Smith"
-    And I submit my answers
-    When I choose another survey
+  Scenario: The right pass phrase shows the surveys that have it
+    When I enter the pass phrase "open sesame"
+    And I submit the pass phrase
     Then I am offered the Starship survey
-    And the server was asked only about "Sam Smith"
-
-  Scenario: A lookup that fails is reported once and not repeated
-    Given the server cannot deliver the results
-    When I enter the name "Sam Smith"
-    And I wait 1 seconds
-    Then I see the error "Cannot reach the server"
-    And I am offered no surveys
-    When I dismiss the error
-    And I wait 2 seconds
-    Then I see no error
-    And the server was asked only about "Sam Smith"
-
-  Scenario: A failed lookup is tried again with another name
-    Given the server cannot deliver the results
-    And I entered the name "Sam Smith"
-    And I wait 1 seconds
-    And I dismiss the error
-    And the server is back online
-    When I enter the name "Sam Jones"
-    And I wait 1 seconds
-    Then I am offered the Starship survey
+    And I am offered the quiz survey
+    And I am not offered the course survey
+    And I am not asked for my pass phrase
     And I see no error
 
-  Scenario: A survey with a pass phrase asks for it with the surveys
-    When I enter the name "Sam Smith"
-    And I wait 1 seconds
+  Scenario: Another pass phrase shows other surveys
+    When I enter the pass phrase "rust rocks"
+    And I submit the pass phrase
+    Then I am offered the course survey
+    And I am not offered the Starship survey
+    And I am not offered the quiz survey
+
+  Scenario: Surrounding spaces of the pass phrase are ignored
+    When I enter the pass phrase "  open sesame "
+    And I submit the pass phrase
     Then I am offered the Starship survey
-    And I am asked for the pass phrase
+
+  Scenario: A wrong pass phrase shows nothing
+    When I enter the pass phrase "wrong"
+    And I submit the pass phrase
+    Then I see the error "Wrong pass phrase"
+    And I am offered no surveys
+
+  Scenario: A pass phrase has to match exactly
+    When I enter the pass phrase "Open Sesame"
+    And I submit the pass phrase
+    Then I see the error "Wrong pass phrase"
+    And I am offered no surveys
+
+  Scenario: A blank pass phrase shows nothing
+    When I enter the pass phrase ""
+    And I submit the pass phrase
+    Then I see the error "Wrong pass phrase"
+    And I am offered no surveys
+
+  Scenario: Changing the pass phrase hides the surveys until it is submitted again
+    Given I entered the pass phrase "open sesame"
+    And I submitted the pass phrase
+    When I enter the pass phrase "rust rocks"
+    Then I am offered no surveys
+    And I am asked for my pass phrase
+    When I submit the pass phrase
+    Then I am offered the course survey
+    And I am not offered the Starship survey
+
+  Scenario: A wrong pass phrase takes back the surveys of an earlier one
+    Given I entered the pass phrase "open sesame"
+    And I submitted the pass phrase
+    When I enter the pass phrase "wrong"
+    And I submit the pass phrase
+    Then I see the error "Wrong pass phrase"
+    And I am offered no surveys
+    When I dismiss the error
+    And I enter the pass phrase "open sesame"
+    Then I am asked for my pass phrase
+
+  Scenario: One pass phrase field, whatever the surveys
+    When I enter the pass phrase "open sesame"
+    And I submit the pass phrase
+    Then there is exactly one pass phrase field
+    And I am offered the Starship survey
+    And I am offered the quiz survey
+
+  Scenario: Another survey can be answered with its own pass phrase
+    When I answer the course survey as "Sam Smith"
+    Then I see the question "What is your background"
+
+  Scenario: A survey cannot be started without a name
+    Given I entered the pass phrase "open sesame"
+    And I submitted the pass phrase
+    When I click the Starship survey
+    Then I see the error "Please fill in your first and last name"
+    And I am on the start screen
 
   Scenario: The questions do not ask for the pass phrase again
     Given I am answering the survey as "Sam Smith"
-    Then I am not asked for the pass phrase
+    Then there is no pass phrase field
 
   Scenario: The right pass phrase lets the answers in
     Given I am answering the survey as "Sam Smith"
     When I submit my answers
     Then I see the thanks to "Sam Smith"
 
-  Scenario: A wrong pass phrase keeps the survey closed
-    Given I entered the name "Sam Smith"
-    And I entered the pass phrase "wrong"
-    When I start the survey
+  Scenario: A pass phrase that stopped being right refuses the answers
+    Given I am answering the survey as "Sam Smith"
+    And the pass phrase of the Starship survey was changed on the server
+    When I submit my answers
     Then I see the error "Wrong pass phrase"
-    And I am on the start screen
+    And I am answering the survey
 
-  Scenario: A survey cannot be started without its pass phrase
-    Given I entered the name "Sam Smith"
-    And I entered the pass phrase ""
-    When I start the survey
-    Then I see the error "Wrong pass phrase"
-    And I am on the start screen
+  Scenario: The surveys stay in the list after submitting
+    Given I am answering the survey as "Sam Smith"
+    And I submit my answers
+    When I choose another survey
+    Then I am offered the Starship survey
+    And the server was asked for surveys 1 time
+    And the server was asked only about "Sam Smith"

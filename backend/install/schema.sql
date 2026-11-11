@@ -30,18 +30,9 @@ CREATE TABLE IF NOT EXISTS Survey (
     definition MEDIUMTEXT NOT NULL
 );
 
--- Who may answer a survey with `"access": "name_list"`. Filled with
--- `prono-cli access allow`; a participant matches when `first_name`, a space
--- and `last_name` equal their name, ignoring case.
-CREATE TABLE IF NOT EXISTS SurveyAllowedUser (
-    survey_id BIGINT UNSIGNED NOT NULL,
-    first_name VARCHAR(255) NOT NULL,
-    last_name VARCHAR(255) NOT NULL,
-    PRIMARY KEY (survey_id, first_name, last_name)
-);
-
--- The pass phrase of a survey with `"access": "pass_phrase"`. Set with
--- `prono-cli access pass-phrase`; the survey stays closed until it is set.
+-- The pass phrase of a survey: the only way to see and answer it, several
+-- surveys may share one. Set with `prono-cli surveys pass-phrase`; the survey
+-- stays closed until it is set.
 CREATE TABLE IF NOT EXISTS SurveyPassPhrase (
     survey_id BIGINT UNSIGNED PRIMARY KEY,
     pass_phrase VARCHAR(255) NOT NULL
@@ -51,5 +42,14 @@ CREATE TABLE IF NOT EXISTS SurveyPassPhrase (
 ALTER TABLE Users CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 ALTER TABLE AnswerResponse CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 ALTER TABLE Survey CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
-ALTER TABLE SurveyAllowedUser CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 ALTER TABLE SurveyPassPhrase CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
+-- Surveys used to have an `"access"` key (a pass phrase or a name list). Every
+-- survey has a pass phrase now and the key is no longer valid in a definition:
+-- strip it from the stored ones. Run this before (or while) deploying the
+-- backend that no longer reads it. The old name lists (table
+-- `SurveyAllowedUser`) are not used any more and are left alone: drop the table
+-- when you no longer need them. Surveys that had a name list have no pass
+-- phrase: set one with `prono-cli surveys pass-phrase`.
+UPDATE Survey SET definition = JSON_REMOVE(definition, '$.access')
+    WHERE JSON_CONTAINS_PATH(definition, 'one', '$.access');

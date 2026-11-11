@@ -1,5 +1,5 @@
 package="prono-backend"
-version="0.1.0-0003"
+version="0.1.0-0004"
 os_min_ver="7.0-40000"
 description="Prono survey backend service"
 arch="x86_64"

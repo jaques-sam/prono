@@ -1,4 +1,4 @@
-use prono_api::{Access, Answer, Invalid, Results, Score, Submission, Survey, UserStatus};
+use prono_api::{Answer, Invalid, Results, Score, Submission, Survey};
 use serde::{Deserialize, Serialize};
 
 use crate::client::{Backend, Pending};
@@ -26,6 +26,8 @@ pub enum Phase {
 /// Something the participant asked for in the UI.
 #[derive(Clone, Copy)]
 pub enum Action {
+    /// Ask the backend which surveys the typed pass phrase opens.
+    SubmitPassPhrase,
     StartSurvey(u64),
     ResetAnswers,
     Submit,
@@ -36,19 +38,6 @@ pub enum Action {
     DismissError,
 }
 
-/// The surveys the start screen offers.
-pub enum SurveyList<'a> {
-    /// There is no valid first and last name yet.
-    NeedName,
-    /// The backend has not told yet which surveys the name may answer.
-    Waiting,
-    /// The backend could not tell; the error is in [`State::error`]. Changing
-    /// the name asks again.
-    Failed,
-    /// The surveys the name may answer, by id.
-    Ready(&'a [Survey]),
-}
-
 /// The app's state and flow, without any drawing: the UI shows it, edits the
 /// answers in place, and turns clicks into [`Action`]s.
 #[derive(Default, Serialize, Deserialize)]
@@ -56,9 +45,12 @@ pub enum SurveyList<'a> {
 pub struct State {
     pub first_name: String,
     pub last_name: String,
-    /// For a survey with [`Access::PassPhrase`]. A secret: never persisted.
+    /// What is typed in the pass phrase field. A secret: never persisted.
     #[serde(skip)]
     pub pass_phrase: String,
+    /// The surveys the backend opened for a submitted pass phrase.
+    #[serde(skip)]
+    unlocked: Option<Unlocked>,
     pub phase: Phase,
     #[serde(skip)]
     pub results: Option<Results>,
@@ -78,6 +70,13 @@ pub struct State {
     name_check: NameCheck,
 }
 
+/// The surveys a pass phrase opened, and that pass phrase: it is what
+/// authorizes the submissions to them.
+struct Unlocked {
+    pass_phrase: String,
+    surveys: Vec<Survey>,
+}
+
 /// Looking up whether `user` answered a survey before.
 struct Earlier {
     user: String,
@@ -85,45 +84,38 @@ struct Earlier {
 }
 
 enum Request {
-    /// Waiting for the backend to accept the pass phrase before `survey`
-    /// opens for `user`.
-    Opening {
-        survey: Survey,
-        user: String,
-        pending: Pending<()>,
+    /// Waiting for the backend to name the surveys `pass_phrase` (as the
+    /// backend gets it, blank if it was) opens.
+    Unlocking {
+        pass_phrase: String,
+        pending: Pending<Vec<Survey>>,
     },
     Submit(Pending<()>),
     Results(Pending<Results>),
     Scores(Pending<Vec<Score>>),
 }
 
-/// Finding out, while the name is typed, what the backend knows about it:
-/// whether it already filled in a survey, and which surveys it may answer.
+/// Finding out, while the name is typed, whether it already filled in a
+/// survey.
 #[derive(Default)]
 struct NameCheck {
     /// The full name as last seen, and when it changed (in seconds).
     typed: String,
     changed_at: f64,
     /// The name being asked about, and the answer to come.
-    pending: Option<(String, Pending<UserStatus>)>,
-    /// The last answer: a name and what the backend said about it, `None` if
-    /// the lookup failed.
-    answer: Option<(String, Option<UserStatus>)>,
+    pending: Option<(String, Pending<bool>)>,
+    /// The last answer: a name and whether it answered, `None` if the lookup
+    /// failed.
+    answer: Option<(String, Option<bool>)>,
 }
 
 impl State {
-    /// Drops restored state whose answers do not fit their survey. A survey
-    /// that changed on the backend since is only found out when submitting.
+    /// Drops what cannot go on after a restart: the questions being answered
+    /// need the pass phrase to be submitted, and that is never persisted. The
+    /// participant enters it again to choose a survey.
     #[must_use]
     pub fn restored(mut self) -> Self {
-        let fits = match &self.phase {
-            Phase::Start | Phase::Done { .. } => true,
-            Phase::Answering { survey, answers } => {
-                survey.questions.len() == answers.len()
-                    && survey.questions.iter().zip(answers).all(|(q, a)| q.kind == a.kind())
-            }
-        };
-        if !fits {
+        if matches!(self.phase, Phase::Answering { .. }) {
             self.phase = Phase::Start;
         }
         self
@@ -153,6 +145,7 @@ impl State {
 
     pub fn apply(&mut self, action: Action, backend: &impl Backend) {
         match action {
+            Action::SubmitPassPhrase => self.unlock(backend),
             Action::StartSurvey(survey_id) => self.start(survey_id, backend),
             Action::ResetAnswers => {
                 if CAN_RESET && let Phase::Answering { survey, answers } = &mut self.phase {
@@ -179,7 +172,6 @@ impl State {
         self.scores = None;
         self.request = None;
         self.earlier = None;
-        self.pass_phrase.clear();
     }
 
     /// Takes in finished requests, and fetches results when they are
@@ -187,10 +179,14 @@ impl State {
     pub fn poll(&mut self, backend: &impl Backend) {
         self.poll_earlier();
         match self.request.take() {
-            Some(Request::Opening { survey, user, pending }) => match pending.take() {
-                None => self.request = Some(Request::Opening { survey, user, pending }),
-                Some(Ok(())) => self.open(survey, user, backend),
-                Some(Err(err)) => self.error = Some(err),
+            Some(Request::Unlocking { pass_phrase, pending }) => match pending.take() {
+                None => self.request = Some(Request::Unlocking { pass_phrase, pending }),
+                Some(Ok(surveys)) => self.unlocked = Some(Unlocked { pass_phrase, surveys }),
+                Some(Err(err)) => {
+                    // Whatever was offered belongs to an earlier pass phrase.
+                    self.unlocked = None;
+                    self.error = Some(err);
+                }
             },
             Some(Request::Submit(pending)) => match pending.take() {
                 None => self.request = Some(Request::Submit(pending)),
@@ -236,10 +232,10 @@ impl State {
     /// but not the surveys it is offered.
     fn mark_answered(&mut self) {
         let name = prono_api::full_name(&self.first_name, &self.last_name);
-        if let Some((asked, Some(status))) = &mut self.name_check.answer
+        if let Some((asked, Some(answered))) = &mut self.name_check.answer
             && *asked == name
         {
-            status.answered = true;
+            *answered = true;
         }
     }
 
@@ -260,12 +256,11 @@ impl State {
         if survey.answers_of(&results, &earlier.user).is_some() {
             self.phase = Phase::Done { survey: survey.clone() };
             self.results = Some(results);
-            self.pass_phrase.clear();
         }
     }
 
-    /// Asks the backend what it knows about the typed name (whether it
-    /// already filled in a survey, which surveys it may answer), once the
+    /// Asks the backend whether the typed name already filled in a survey,
+    /// once the
     /// name stayed unchanged for [`NAME_CHECK_DELAY`] (`now` is in seconds).
     /// It only asks for a changed, valid name, so moving the cursor or
     /// clicking around costs nothing. A failed lookup is reported in
@@ -278,7 +273,7 @@ impl State {
         if let Some((name, pending)) = self.name_check.pending.take() {
             match pending.take() {
                 None => self.name_check.pending = Some((name, pending)),
-                Some(Ok(status)) => self.name_check.answer = Some((name, Some(status))),
+                Some(Ok(answered)) => self.name_check.answer = Some((name, Some(answered))),
                 Some(Err(err)) => {
                     self.name_check.answer = Some((name, None));
                     self.error = Some(err);
@@ -308,49 +303,44 @@ impl State {
         if wait > 0.0 {
             return Some(wait);
         }
-        let status = backend.user_status(&name);
-        check.pending = Some((name, status));
+        let answered = backend.has_answered(&name);
+        check.pending = Some((name, answered));
         None
     }
 
-    /// What the backend said about the typed name, if it has by now.
-    fn status(&self) -> Option<&UserStatus> {
+    /// A warning for the participant if the typed name already filled in a
+    /// survey, once the backend said so.
+    pub fn name_warning(&self) -> Option<String> {
         let name = self.full_name().ok()?;
         match &self.name_check.answer {
-            Some((asked, Some(status))) if *asked == name => Some(status),
+            Some((asked, Some(true))) if *asked == name => Some(format!(
+                "\"{name}\" already filled in a survey. If that was not you, please use another name."
+            )),
             _ => None,
         }
     }
 
-    /// A warning for the participant if the typed name already filled in a
-    /// survey.
-    pub fn name_warning(&self) -> Option<String> {
-        let name = prono_api::full_name(&self.first_name, &self.last_name);
-        self.status()
-            .is_some_and(|status| status.answered)
-            .then(|| format!("\"{name}\" already filled in a survey. If that was not you, please use another name."))
+    /// Asks the backend for the surveys the typed pass phrase opens: nothing
+    /// is offered before, and nothing without a right pass phrase.
+    fn unlock(&mut self, backend: &impl Backend) {
+        if self.is_busy() {
+            return;
+        }
+        self.error = None;
+        let pass_phrase = prono_api::clean_pass_phrase(&self.pass_phrase);
+        self.request = Some(Request::Unlocking {
+            pending: backend.open_surveys(pass_phrase.as_deref()),
+            pass_phrase: pass_phrase.unwrap_or_default(),
+        });
     }
 
-    /// The surveys the start screen offers: none before there is a valid
-    /// name the backend answered for.
-    pub fn survey_list(&self) -> SurveyList<'_> {
-        let Ok(name) = self.full_name() else {
-            return SurveyList::NeedName;
-        };
-        match &self.name_check.answer {
-            Some((asked, Some(status))) if *asked == name => SurveyList::Ready(&status.surveys),
-            Some((asked, None)) if *asked == name => SurveyList::Failed,
-            _ => SurveyList::Waiting,
-        }
-    }
-
-    /// The surveys the typed name may answer, by id; `None` while that is
-    /// not known.
-    pub fn available_surveys(&self) -> Option<&[Survey]> {
-        match self.survey_list() {
-            SurveyList::Ready(surveys) => Some(surveys),
-            _ => None,
-        }
+    /// The surveys the typed pass phrase opens, if the backend named them for
+    /// exactly this pass phrase: changing the field hides them until it is
+    /// submitted again.
+    pub fn open_surveys(&self) -> Option<&[Survey]> {
+        let unlocked = self.unlocked.as_ref()?;
+        let typed = prono_api::clean_pass_phrase(&self.pass_phrase)?;
+        (typed == unlocked.pass_phrase).then_some(unlocked.surveys.as_slice())
     }
 
     fn start(&mut self, survey_id: u64, backend: &impl Backend) {
@@ -365,7 +355,7 @@ impl State {
             }
         };
         let survey = self
-            .available_surveys()
+            .open_surveys()
             .and_then(|surveys| surveys.iter().find(|survey| survey.id == survey_id))
             .cloned();
         let Some(survey) = survey else {
@@ -373,17 +363,7 @@ impl State {
             return;
         };
         self.error = None;
-        if survey.access == Access::PassPhrase {
-            // A wrong pass phrase is refused here, before the questions open.
-            let pass_phrase = prono_api::clean_pass_phrase(&self.pass_phrase);
-            self.request = Some(Request::Opening {
-                pending: backend.check_pass_phrase(survey_id, pass_phrase.as_deref()),
-                survey,
-                user,
-            });
-        } else {
-            self.open(survey, user, backend);
-        }
+        self.open(survey, user, backend);
     }
 
     /// Shows the questions of `survey` to `user`.
@@ -414,7 +394,11 @@ impl State {
                 return;
             }
         };
-        let submission = Self::submission(&user, &self.pass_phrase, survey, answers);
+        let pass_phrase = self
+            .unlocked
+            .as_ref()
+            .map_or("", |unlocked| unlocked.pass_phrase.as_str());
+        let submission = Submission::new(&user, survey, answers).with_pass_phrase(pass_phrase);
         match submission.validate(survey) {
             Ok(()) => {
                 self.error = None;
@@ -423,37 +407,26 @@ impl State {
             Err(err) => self.error = Some(err.to_string()),
         }
     }
-
-    /// The answers of `user` to `survey`, with the pass phrase if the survey
-    /// asks for one.
-    fn submission(user: &str, pass_phrase: &str, survey: &Survey, answers: &[Answer]) -> Submission {
-        let submission = Submission::new(user, survey, answers);
-        if survey.access == Access::PassPhrase {
-            submission.with_pass_phrase(pass_phrase)
-        } else {
-            submission
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::cell::{Cell, RefCell};
 
-    use prono_api::{AnswerKind, Question, UserAnswer, samples};
+    use prono_api::{UserAnswer, samples};
 
     use super::*;
 
-    /// The survey with a pass phrase.
     const SURVEY_ID: u64 = 1;
-    /// The survey that only a name list may answer.
-    const LISTED_ID: u64 = 2;
+    const COURSE_ID: u64 = 2;
+    /// The pass phrase the fake backend knows.
+    const PASS_PHRASE: &str = "open sesame";
 
     /// The sample survey `id`.
     fn sample(id: u64) -> Survey {
         match id {
             SURVEY_ID => samples::starship(),
-            LISTED_ID => samples::course(),
+            COURSE_ID => samples::course(),
             _ => panic!("no sample survey {id}"),
         }
     }
@@ -462,27 +435,24 @@ mod tests {
     struct FakeBackend {
         submit_result: Option<Result<(), String>>,
         submissions: RefCell<Vec<Submission>>,
-        /// What `check_pass_phrase` says, or never answers if `None`.
-        pass_phrase_answer: Option<Result<(), String>>,
-        /// The pass phrase of each check, in order.
-        pass_phrase_checks: RefCell<Vec<Option<String>>>,
+        /// What `open_surveys` says, or never answers if `None`.
+        open_answer: Option<Result<Vec<Survey>, String>>,
+        /// The pass phrase of each request for surveys, in order.
+        open_requests: RefCell<Vec<Option<String>>>,
         results_requests: Cell<usize>,
         /// What `scores` returns, or never answers if `None`.
         scores_answer: Option<Result<Vec<Score>, String>>,
         scores_requests: Cell<usize>,
-        /// What `user_status` returns, or never answers if `None`.
-        name_answer: Option<Result<UserStatus, String>>,
+        /// What `has_answered` returns, or never answers if `None`.
+        name_answer: Option<Result<bool, String>>,
         name_requests: RefCell<Vec<String>>,
         /// What `results` returns, or never answers if `None`.
         results_answer: Option<Result<Results, String>>,
     }
 
-    /// A status offering the sample surveys with the given ids.
-    fn status(answered: bool, surveys: &[u64]) -> UserStatus {
-        UserStatus {
-            answered,
-            surveys: surveys.iter().map(|id| sample(*id)).collect(),
-        }
+    /// The sample surveys with the given ids.
+    fn surveys_of(ids: &[u64]) -> Vec<Survey> {
+        ids.iter().map(|id| sample(*id)).collect()
     }
 
     impl FakeBackend {
@@ -490,19 +460,19 @@ mod tests {
             Self {
                 submit_result,
                 submissions: RefCell::default(),
-                pass_phrase_answer: Some(Ok(())),
-                pass_phrase_checks: RefCell::default(),
+                open_answer: Some(Ok(surveys_of(&[SURVEY_ID, COURSE_ID]))),
+                open_requests: RefCell::default(),
                 results_requests: Cell::default(),
                 scores_answer: Some(Ok(Vec::new())),
                 scores_requests: Cell::default(),
-                name_answer: Some(Ok(status(false, &[SURVEY_ID, LISTED_ID]))),
+                name_answer: Some(Ok(false)),
                 name_requests: RefCell::default(),
                 results_answer: Some(Ok(Results::new())),
             }
         }
 
-        fn with_pass_phrase_answer(mut self, answer: Option<Result<(), String>>) -> Self {
-            self.pass_phrase_answer = answer;
+        fn with_open_answer(mut self, answer: Option<Result<Vec<Survey>, String>>) -> Self {
+            self.open_answer = answer;
             self
         }
 
@@ -516,14 +486,14 @@ mod tests {
             self
         }
 
-        fn with_name_answer(mut self, answer: Option<Result<UserStatus, String>>) -> Self {
+        fn with_name_answer(mut self, answer: Option<Result<bool, String>>) -> Self {
             self.name_answer = answer;
             self
         }
 
         /// Everyone already filled in a survey (or nobody did).
         fn with_answered(self, answered: bool) -> Self {
-            self.with_name_answer(Some(Ok(status(answered, &[SURVEY_ID, LISTED_ID]))))
+            self.with_name_answer(Some(Ok(answered)))
         }
     }
 
@@ -533,11 +503,9 @@ mod tests {
             self.submit_result.clone().map_or_else(Pending::never, Pending::ready)
         }
 
-        fn check_pass_phrase(&self, _survey_id: u64, pass_phrase: Option<&str>) -> Pending<()> {
-            self.pass_phrase_checks.borrow_mut().push(pass_phrase.map(Into::into));
-            self.pass_phrase_answer
-                .clone()
-                .map_or_else(Pending::never, Pending::ready)
+        fn open_surveys(&self, pass_phrase: Option<&str>) -> Pending<Vec<Survey>> {
+            self.open_requests.borrow_mut().push(pass_phrase.map(Into::into));
+            self.open_answer.clone().map_or_else(Pending::never, Pending::ready)
         }
 
         fn results(&self, _survey_id: u64) -> Pending<Results> {
@@ -550,7 +518,7 @@ mod tests {
             self.scores_answer.clone().map_or_else(Pending::never, Pending::ready)
         }
 
-        fn user_status(&self, user: &str) -> Pending<UserStatus> {
+        fn has_answered(&self, user: &str) -> Pending<bool> {
             self.name_requests.borrow_mut().push(user.into());
             self.name_answer.clone().map_or_else(Pending::never, Pending::ready)
         }
@@ -581,18 +549,23 @@ mod tests {
         state
     }
 
-    /// Starts survey `survey_id`, and takes in the backend's answer about the
-    /// pass phrase if the survey has one.
+    /// A state with `name` typed and the right pass phrase submitted, so the
+    /// backend named the surveys it opens.
+    fn unlocked(name: &str, backend: &FakeBackend) -> State {
+        let mut state = known(name, backend);
+        state.pass_phrase = PASS_PHRASE.into();
+        state.apply(Action::SubmitPassPhrase, backend);
+        state.poll(backend);
+        state
+    }
+
     fn start(state: &mut State, survey_id: u64, backend: &FakeBackend) {
         state.apply(Action::StartSurvey(survey_id), backend);
-        if state.is_busy() {
-            state.poll(backend);
-        }
     }
 
     fn answering(name: &str) -> State {
         let backend = FakeBackend::new(None);
-        let mut state = known(name, &backend);
+        let mut state = unlocked(name, &backend);
         start(&mut state, SURVEY_ID, &backend);
         state
     }
@@ -641,102 +614,92 @@ mod tests {
     }
 
     #[test]
-    fn a_survey_with_a_pass_phrase_opens_once_the_backend_accepted_it() {
-        let backend = FakeBackend::new(None).with_pass_phrase_answer(None);
+    fn nothing_is_offered_before_the_pass_phrase_is_submitted() {
+        let backend = FakeBackend::new(None);
+        let mut state = known("Sam Smith", &backend);
+        assert_eq!(ids(state.open_surveys()), None);
+        state.pass_phrase = PASS_PHRASE.into();
+        state.poll(&backend);
+        assert_eq!(ids(state.open_surveys()), None, "typing is not submitting");
+        assert!(backend.open_requests.borrow().is_empty());
+    }
+
+    #[test]
+    fn submitting_the_pass_phrase_asks_the_backend_for_its_surveys() {
+        let backend = FakeBackend::new(None).with_open_answer(None);
         let mut state = known("Sam Smith", &backend);
         state.pass_phrase = "  open sesame ".into();
 
-        start(&mut state, SURVEY_ID, &backend);
-        assert!(matches!(state.phase, Phase::Start), "still waiting for the backend");
-        assert!(state.is_busy());
-        assert_eq!(*backend.pass_phrase_checks.borrow(), [Some("open sesame".to_string())]);
-        assert_eq!(backend.results_requests.get(), 0);
+        state.apply(Action::SubmitPassPhrase, &backend);
+        state.poll(&backend);
+        assert!(state.is_busy(), "still waiting for the backend");
+        assert_eq!(ids(state.open_surveys()), None);
+        assert_eq!(*backend.open_requests.borrow(), [Some("open sesame".to_string())]);
 
-        // Nothing else starts while the backend is asked.
-        start(&mut state, LISTED_ID, &backend);
-        assert_eq!(backend.pass_phrase_checks.borrow().len(), 1);
+        // Nothing is asked twice while the backend is asked.
+        state.apply(Action::SubmitPassPhrase, &backend);
+        assert_eq!(backend.open_requests.borrow().len(), 1);
 
         let backend = FakeBackend::new(None);
-        let mut state = known("Sam Smith", &backend);
-        start(&mut state, SURVEY_ID, &backend);
-        assert!(matches!(state.phase, Phase::Answering { .. }));
+        let state = unlocked("Sam Smith", &backend);
+        assert_eq!(ids(state.open_surveys()), Some(vec![SURVEY_ID, COURSE_ID]));
         assert!(!state.is_busy());
         assert!(state.error.is_none());
     }
 
     #[test]
-    fn a_refused_pass_phrase_keeps_the_survey_closed_and_shows_the_error() {
-        let backend = FakeBackend::new(None).with_pass_phrase_answer(Some(Err("Wrong pass phrase".into())));
+    fn a_refused_pass_phrase_offers_nothing_and_shows_the_error() {
+        let backend = FakeBackend::new(None).with_open_answer(Some(Err("Wrong pass phrase".into())));
         for typed in ["wrong", "", "   "] {
             let mut state = known("Sam Smith", &backend);
             state.pass_phrase = typed.into();
-            start(&mut state, SURVEY_ID, &backend);
-            assert!(matches!(state.phase, Phase::Start), "opened with \"{typed}\"");
+            state.apply(Action::SubmitPassPhrase, &backend);
+            state.poll(&backend);
+            assert_eq!(ids(state.open_surveys()), None, "opened with \"{typed}\"");
             assert!(!state.is_busy());
             assert_eq!(state.error.as_deref(), Some("Wrong pass phrase"));
         }
         assert_eq!(
-            *backend.pass_phrase_checks.borrow(),
+            *backend.open_requests.borrow(),
             [Some("wrong".to_string()), None, None],
             "a blank phrase is sent as none"
         );
-        assert_eq!(backend.results_requests.get(), 0);
     }
 
     #[test]
-    fn a_survey_for_a_name_list_asks_for_no_pass_phrase() {
+    fn a_refused_pass_phrase_takes_back_what_an_earlier_one_opened() {
+        let mut state = unlocked("Sam Smith", &FakeBackend::new(None));
+        assert!(state.open_surveys().is_some());
+
+        let refusing = FakeBackend::new(None).with_open_answer(Some(Err("Wrong pass phrase".into())));
+        state.pass_phrase = "wrong".into();
+        state.apply(Action::SubmitPassPhrase, &refusing);
+        state.poll(&refusing);
+        state.pass_phrase = PASS_PHRASE.into();
+        assert_eq!(ids(state.open_surveys()), None);
+    }
+
+    #[test]
+    fn changing_the_pass_phrase_hides_the_surveys_until_it_is_submitted_again() {
         let backend = FakeBackend::new(None);
-        let mut state = known("Sam Smith", &backend);
-        start(&mut state, LISTED_ID, &backend);
-        assert!(matches!(state.phase, Phase::Answering { .. }));
-        assert!(backend.pass_phrase_checks.borrow().is_empty());
+        let mut state = unlocked("Sam Smith", &backend);
+        assert!(state.open_surveys().is_some());
+
+        state.pass_phrase = "open sesam".into();
+        assert_eq!(ids(state.open_surveys()), None);
+        state.pass_phrase.clear();
+        assert_eq!(ids(state.open_surveys()), None);
+        // Surrounding blanks do not matter, as for the backend.
+        state.pass_phrase = format!(" {PASS_PHRASE}\n");
+        assert!(state.open_surveys().is_some());
     }
 
     #[test]
-    fn surveys_are_unknown_until_the_backend_answered() {
-        let backend = FakeBackend::new(None).with_name_answer(None);
-        let mut state = typing("Sam");
-        assert!(matches!(state.survey_list(), SurveyList::NeedName));
-        assert_eq!(ids(state.available_surveys()), None);
-
-        state.last_name = "Smith".into();
-        assert!(matches!(state.survey_list(), SurveyList::Waiting));
-        look_up(&mut state, &backend, 0.0);
-        assert!(matches!(state.survey_list(), SurveyList::Waiting), "never answered");
-        assert_eq!(ids(state.available_surveys()), None);
-
-        // An answer for another name does not count.
-        let backend = FakeBackend::new(None);
-        let mut state = known("Sam Smith", &backend);
-        state.first_name = "Tom".into();
-        assert!(matches!(state.survey_list(), SurveyList::Waiting));
-        state.last_name.clear();
-        assert!(matches!(state.survey_list(), SurveyList::NeedName));
-    }
-
-    #[test]
-    fn only_the_surveys_the_backend_names_are_available() {
-        let all = FakeBackend::new(None);
-        assert_eq!(
-            ids(known("Sam Smith", &all).available_surveys()),
-            Some(vec![SURVEY_ID, LISTED_ID])
-        );
-
-        let open_only = FakeBackend::new(None).with_name_answer(Some(Ok(status(false, &[SURVEY_ID]))));
-        assert_eq!(
-            ids(known("Sam Smith", &open_only).available_surveys()),
-            Some(vec![SURVEY_ID])
-        );
-
-        let none = FakeBackend::new(None).with_name_answer(Some(Ok(status(false, &[]))));
-        assert_eq!(ids(known("Sam Smith", &none).available_surveys()), Some(vec![]));
-    }
-
-    #[test]
-    fn a_survey_that_is_not_available_cannot_be_started() {
-        let backend = FakeBackend::new(None).with_name_answer(Some(Ok(status(false, &[SURVEY_ID]))));
-        let mut state = known("Sam Smith", &backend);
-        start(&mut state, LISTED_ID, &backend);
+    fn a_survey_the_pass_phrase_does_not_open_cannot_be_started() {
+        let backend = FakeBackend::new(None).with_open_answer(Some(Ok(surveys_of(&[SURVEY_ID]))));
+        let mut state = unlocked("Sam Smith", &backend);
+        assert_eq!(ids(state.open_surveys()), Some(vec![SURVEY_ID]));
+        start(&mut state, COURSE_ID, &backend);
         assert!(matches!(state.phase, Phase::Start));
         assert_eq!(state.error.as_deref(), Some("This survey is not available for you"));
         assert_eq!(backend.results_requests.get(), 0);
@@ -747,16 +710,17 @@ mod tests {
     }
 
     #[test]
-    fn a_survey_cannot_be_started_before_the_backend_answered() {
+    fn a_survey_cannot_be_started_before_its_pass_phrase_was_submitted() {
         let backend = FakeBackend::new(None);
-        let mut state = typing("Sam Smith");
+        // Not even asked.
+        let mut state = known("Sam Smith", &backend);
         start(&mut state, SURVEY_ID, &backend);
         assert!(matches!(state.phase, Phase::Start));
         assert!(state.error.is_some());
 
-        // The answer is for the old name once the name changed.
-        let mut state = known("Sam Smith", &backend);
-        state.last_name = "Jones".into();
+        // The surveys are for the pass phrase that was submitted, not for the typed one.
+        let mut state = unlocked("Sam Smith", &backend);
+        state.pass_phrase = "something else".into();
         start(&mut state, SURVEY_ID, &backend);
         assert!(matches!(state.phase, Phase::Start));
         assert!(state.error.is_some());
@@ -791,6 +755,10 @@ mod tests {
         state.apply(Action::Submit, &backend);
         assert!(state.is_busy());
         assert_eq!(backend.submissions.borrow()[0].user, "Sam Smith");
+        assert_eq!(
+            backend.submissions.borrow()[0].pass_phrase.as_deref(),
+            Some(PASS_PHRASE)
+        );
 
         state.poll(&backend); // submit done, results requested
         assert!(matches!(&state.phase, Phase::Done { survey } if survey.id == SURVEY_ID));
@@ -838,46 +806,26 @@ mod tests {
     }
 
     #[test]
-    fn choosing_another_survey_returns_to_start() {
-        let mut state = State {
-            first_name: "Sam".into(),
-            last_name: "Smith".into(),
-            pass_phrase: "secret".into(),
-            phase: Phase::Done {
-                survey: sample(SURVEY_ID),
-            },
-            results: Some(Results::new()),
-            ..State::default()
+    fn choosing_another_survey_returns_to_start_and_keeps_the_offered_surveys() {
+        let backend = FakeBackend::new(None);
+        let mut state = unlocked("Sam Smith", &backend);
+        state.phase = Phase::Done {
+            survey: sample(SURVEY_ID),
         };
-        state.apply(Action::ChooseAnotherSurvey, &FakeBackend::new(None));
+        state.results = Some(Results::new());
+        state.apply(Action::ChooseAnotherSurvey, &backend);
         assert!(matches!(state.phase, Phase::Start));
         assert!(state.results.is_none());
         assert_eq!((state.first_name.as_str(), state.last_name.as_str()), ("Sam", "Smith"));
-        assert_eq!(state.pass_phrase, "");
+        assert_eq!(ids(state.open_surveys()), Some(vec![SURVEY_ID, COURSE_ID]));
     }
 
     #[test]
-    fn restored_answers_must_fit_their_survey() {
-        let stale_answers = State {
-            phase: Phase::Answering {
-                survey: sample(SURVEY_ID),
-                answers: vec![Answer::Text("old".into())],
-            },
-            ..State::default()
-        };
-        assert!(matches!(stale_answers.restored().phase, Phase::Start));
+    fn a_restart_drops_the_questions_but_keeps_the_results() {
+        // The pass phrase that submits the answers is not persisted.
+        let restored = answering("Sam Smith").restored();
+        assert!(matches!(restored.phase, Phase::Start));
 
-        let wrong_kind = State {
-            phase: Phase::Answering {
-                survey: sample(SURVEY_ID),
-                answers: vec![Answer::Text("old".into()); 4],
-            },
-            ..State::default()
-        };
-        assert!(matches!(wrong_kind.restored().phase, Phase::Start));
-
-        let valid = answering("Sam Smith").restored();
-        assert!(matches!(valid.phase, Phase::Answering { .. }));
         let done = State {
             phase: Phase::Done {
                 survey: sample(SURVEY_ID),
@@ -888,12 +836,14 @@ mod tests {
     }
 
     #[test]
-    fn the_phase_survives_persisting_without_the_correct_answers() {
+    fn persisting_keeps_the_phase_but_never_the_pass_phrase() {
         let state = answering("Sam Smith");
         let json = serde_json::to_string(&state).unwrap();
+        assert!(!json.contains(PASS_PHRASE));
         let restored: State = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.survey(), state.survey());
-        assert!(matches!(restored.restored().phase, Phase::Answering { .. }));
+        assert_eq!(restored.pass_phrase, "");
+        assert_eq!(ids(restored.open_surveys()), None);
     }
 
     #[test]
@@ -904,7 +854,7 @@ mod tests {
         let restored = State::deserialize(old).unwrap();
         assert!(restored.first_name.is_empty() && restored.last_name.is_empty());
         assert!(matches!(restored.phase, Phase::Start));
-        assert!(matches!(restored.survey_list(), SurveyList::NeedName));
+        assert_eq!(ids(restored.open_surveys()), None);
     }
 
     #[test]
@@ -970,8 +920,6 @@ mod tests {
         let mut state = known("Sam Smith", &backend);
         assert_eq!(state.error.as_deref(), Some("Cannot reach the server"));
         assert!(state.name_warning().is_none());
-        assert!(matches!(state.survey_list(), SurveyList::Failed));
-        assert_eq!(ids(state.available_surveys()), None);
 
         // Not asked again every frame while the name stays the same, and the
         // dismissed error does not come back.
@@ -1026,7 +974,7 @@ mod tests {
     #[test]
     fn submitting_marks_the_name_answered_and_keeps_the_survey_list() {
         let backend = FakeBackend::new(Some(Ok(())));
-        let mut state = known("Sam Smith", &backend);
+        let mut state = unlocked("Sam Smith", &backend);
         assert!(state.name_warning().is_none());
         start(&mut state, SURVEY_ID, &backend);
         state.apply(Action::Submit, &backend);
@@ -1034,55 +982,24 @@ mod tests {
         state.apply(Action::ChooseAnotherSurvey, &backend);
 
         // No flicker: the list stays, no new request is needed.
-        assert_eq!(ids(state.available_surveys()), Some(vec![SURVEY_ID, LISTED_ID]));
+        assert_eq!(ids(state.open_surveys()), Some(vec![SURVEY_ID, COURSE_ID]));
+        assert_eq!(backend.open_requests.borrow().len(), 1);
         assert!(state.name_warning().is_some(), "the name has answered now");
         state.check_name(&backend, 5.0);
         assert_eq!(backend.name_requests.borrow().len(), 1);
     }
 
-    fn survey_with(access: Access) -> Survey {
-        Survey {
-            id: 99,
-            description: "A survey".into(),
-            link: None,
-            access,
-            scored: false,
-            questions: vec![Question {
-                id: uuid::Uuid::nil(),
-                text: "Why".into(),
-                kind: AnswerKind::Text,
-                possible_answers: vec![],
-                other_label: None,
-                correct_answer: None,
-            }],
-        }
-    }
-
     #[test]
-    fn pass_phrase_is_only_sent_for_a_survey_that_asks_for_one() {
-        let answers = [Answer::Text("because".into())];
-        let submit = |access, pass_phrase| {
-            State::submission("Sam Smith", pass_phrase, &survey_with(access), &answers).pass_phrase
-        };
-        assert_eq!(
-            submit(Access::PassPhrase, " open sesame ").as_deref(),
-            Some("open sesame")
-        );
-        assert_eq!(submit(Access::PassPhrase, "  "), None);
-        assert_eq!(submit(Access::NameList, "open sesame"), None);
-    }
-
-    #[test]
-    fn submitting_a_name_list_survey_sends_no_pass_phrase() {
+    fn the_submission_carries_the_submitted_pass_phrase_not_the_typed_one() {
         let backend = FakeBackend::new(None);
-        let mut state = known("Sam Smith", &backend);
-        start(&mut state, LISTED_ID, &backend);
-        state.pass_phrase = "left over".into();
-        if let Phase::Answering { answers, .. } = &mut state.phase {
-            *answers = samples::course_answers();
-        }
+        let mut state = unlocked("Sam Smith", &backend);
+        start(&mut state, SURVEY_ID, &backend);
+        state.pass_phrase = "changed meanwhile".into();
         state.apply(Action::Submit, &backend);
-        assert_eq!(backend.submissions.borrow()[0].pass_phrase, None);
+        assert_eq!(
+            backend.submissions.borrow()[0].pass_phrase.as_deref(),
+            Some(PASS_PHRASE)
+        );
     }
 
     fn date(month: u8, year: u16) -> Answer {
@@ -1112,7 +1029,7 @@ mod tests {
     }
 
     fn started(user: &str, backend: &FakeBackend) -> State {
-        let mut state = known(user, backend);
+        let mut state = unlocked(user, backend);
         start(&mut state, SURVEY_ID, backend);
         state
     }
@@ -1190,7 +1107,6 @@ mod tests {
     fn changing_the_name_goes_back_to_the_start() {
         let backend = FakeBackend::new(Some(Err("This name is registered on another device".into())));
         let mut state = answering("Sam Smith");
-        state.pass_phrase = "secret".into();
         state.apply(Action::Submit, &backend);
         state.poll(&backend);
         assert!(state.error.is_some());
@@ -1199,7 +1115,7 @@ mod tests {
         assert!(matches!(state.phase, Phase::Start));
         assert!(state.error.is_none());
         assert_eq!((state.first_name.as_str(), state.last_name.as_str()), ("Sam", "Smith"));
-        assert_eq!(state.pass_phrase, "");
+        assert!(state.open_surveys().is_some(), "no need to enter the pass phrase again");
     }
 
     #[test]
@@ -1283,7 +1199,7 @@ mod tests {
     #[test]
     fn submitting_a_scored_survey_forgets_old_scores_and_going_back_clears_them() {
         let backend = FakeBackend::new(Some(Ok(())));
-        let mut state = known("Sam Smith", &backend);
+        let mut state = unlocked("Sam Smith", &backend);
         start(&mut state, SURVEY_ID, &backend);
         if let Phase::Answering { survey, .. } = &mut state.phase {
             survey.scored = true;

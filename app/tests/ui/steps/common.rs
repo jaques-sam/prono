@@ -30,6 +30,11 @@ impl World {
 
     fn type_into_role(&mut self, role: Role, label: &str, text: &str) {
         self.harness.get_by_role_and_label(role, label).click();
+        self.replace_focused_text(text);
+    }
+
+    /// Replaces the text of the field that was just clicked.
+    fn replace_focused_text(&mut self, text: &str) {
         self.settle();
         self.harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
         self.frames(1);
@@ -52,17 +57,26 @@ impl World {
     /// the server to tell which surveys the name is offered.
     pub fn start_survey(&mut self, description: &str) {
         self.wait(NAME_CHECK_DELAY + 0.1);
-        self.click_button(description);
-        // A survey with a pass phrase gets the right one, unless a scenario
-        // enters another.
-        if self.shows(PASS_PHRASE_LABEL) {
+        // The pass phrase is asked next to the surveys, so it is entered
+        // before the survey is chosen. It is the right one, unless a
+        // scenario entered another.
+        let entered = std::mem::take(&mut self.pass_phrase_entered);
+        if !entered && self.shows(PASS_PHRASE_LABEL) {
             self.enter_pass_phrase(PASS_PHRASE);
         }
+        self.click_button(description);
     }
 
-    /// Replaces whatever is in the pass phrase field with `pass_phrase`.
+    /// Replaces whatever is in the pass phrase field with `pass_phrase`. Each
+    /// survey with a pass phrase has a field, they all show the same text.
     pub fn enter_pass_phrase(&mut self, pass_phrase: &str) {
-        self.type_into_role(Role::PasswordInput, PASS_PHRASE_LABEL, pass_phrase);
+        self.wait(NAME_CHECK_DELAY + 0.1);
+        self.harness
+            .get_all_by_role_and_label(Role::PasswordInput, PASS_PHRASE_LABEL)
+            .next()
+            .expect("there is no pass phrase field")
+            .click();
+        self.replace_focused_text(pass_phrase);
     }
 
     /// Enters `name` ("First Last") and starts the survey `description`.
@@ -112,10 +126,11 @@ fn start_survey(world: &mut World) {
     world.start_survey(SURVEY);
 }
 
-#[given(expr = "I enter the pass phrase {string}")]
+#[given(expr = "I entered the pass phrase {string}")]
 #[when(expr = "I enter the pass phrase {string}")]
 fn enter_pass_phrase(world: &mut World, pass_phrase: String) {
     world.enter_pass_phrase(&pass_phrase);
+    world.pass_phrase_entered = true;
 }
 
 #[given("I go back to change my name")]

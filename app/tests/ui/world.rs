@@ -56,6 +56,9 @@ pub struct World {
     /// The time the app sees, in seconds. It only moves with [`World::wait`],
     /// so typing is instant and pauses are explicit.
     clock: f64,
+    /// Whether a scenario entered a pass phrase of its own, to be used by the
+    /// next [`World::start_survey`] instead of the right one.
+    pub pass_phrase_entered: bool,
 }
 
 impl fmt::Debug for World {
@@ -81,6 +84,7 @@ impl World {
         Self {
             harness,
             clock: START_TIME,
+            pass_phrase_entered: false,
         }
     }
 
@@ -118,7 +122,7 @@ impl World {
 
     /// Whether some label or heading contains `text`.
     pub fn shows(&self, text: &str) -> bool {
-        self.harness.query_by_label_contains(text).is_some()
+        self.harness.query_all_by_label_contains(text).next().is_some()
     }
 
     /// Whether `first` and `second` are both shown, `first` above `second`.

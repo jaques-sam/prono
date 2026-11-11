@@ -36,7 +36,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
             let warning = state.name_warning();
             let user = prono_api::full_name(&state.first_name, &state.last_name);
             let phase_action = match &mut state.phase {
-                Phase::Answering { survey, answers } => answering(ui, survey, answers, &mut state.pass_phrase, busy),
+                Phase::Answering { survey, answers } => answering(ui, survey, answers, busy),
                 Phase::Done { survey } => done(ui, survey, &user, state.results.as_ref(), state.scores.as_deref()),
                 Phase::Start => start(ui, state, warning.as_deref()),
             };
@@ -80,7 +80,9 @@ fn start(ui: &mut egui::Ui, state: &mut State, warning: Option<&str>) -> Option<
         ui.colored_label(ui.visuals().warn_fg_color, warning);
     }
     ui.add_space(8.0);
-    match state.survey_list() {
+    // Taken out of the state, which the survey list borrows meanwhile.
+    let mut pass_phrase = std::mem::take(&mut state.pass_phrase);
+    let action = match state.survey_list() {
         SurveyList::NeedName => {
             ui.label("Fill in your first and last name to see your surveys.");
             None
@@ -101,22 +103,31 @@ fn start(ui: &mut egui::Ui, state: &mut State, warning: Option<&str>) -> Option<
             ui.label("Choose a survey:");
             let mut action = None;
             for survey in surveys {
-                if ui.button(&survey.description).clicked() {
-                    action = Some(Action::StartSurvey(survey.id));
-                }
+                ui.horizontal(|ui| {
+                    if ui.button(&survey.description).clicked() {
+                        action = Some(Action::StartSurvey(survey.id));
+                    }
+                    // Asked here, with the choice, so it is known before the
+                    // questions open.
+                    if survey.access == Access::PassPhrase {
+                        labelled_text_edit(
+                            ui,
+                            "Pass phrase:",
+                            "The pass phrase of this survey",
+                            &mut pass_phrase,
+                            true,
+                        );
+                    }
+                });
             }
             action
         }
-    }
+    };
+    state.pass_phrase = pass_phrase;
+    action
 }
 
-fn answering(
-    ui: &mut egui::Ui,
-    survey: &Survey,
-    answers: &mut [Answer],
-    pass_phrase: &mut String,
-    busy: bool,
-) -> Option<Action> {
+fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: bool) -> Option<Action> {
     survey_heading(ui, survey);
 
     egui::Grid::new("questions")
@@ -129,10 +140,6 @@ fn answering(
                 ui.end_row();
             }
         });
-
-    if survey.access == Access::PassPhrase {
-        labelled_text_edit(ui, "Pass phrase:", "The pass phrase of this survey", pass_phrase, true);
-    }
 
     let action = ui
         .horizontal(|ui| {

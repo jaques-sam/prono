@@ -1,36 +1,29 @@
+//! The survey definition: the JSON an author uploads to the backend, and how
+//! it becomes a [`Survey`].
+//!
+//! ```json
+//! {
+//!     "survey_id": 1,
+//!     "description": "What the survey is about",
+//!     "link": "https://example.com",
+//!     "access": "pass_phrase",
+//!     "questions": [
+//!         { "question": "When?", "answer_type": "prediction_date" },
+//!         { "question": "Why?", "answer_type": "text" },
+//!         { "question": "Which?", "answer_type": "poll", "possible_answers": ["A", "B"] }
+//!     ]
+//! }
+//! ```
+//!
+//! `link` is optional. `access` is required: `pass_phrase` or `name_list`.
+//! `possible_answers` is for `poll` questions only.
+
 use std::collections::HashSet;
-use std::sync::LazyLock;
 
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{Access, AnswerKind, Question, Survey};
-
-/// Every survey, compiled into each binary. To add a questionnaire, drop a
-/// JSON file in `api/surveys/` and list it here.
-const SURVEY_FILES: &[&str] = &[
-    include_str!("../surveys/spacex_starship.json"),
-    include_str!("../surveys/rust_course.json"),
-];
-
-static SURVEYS: LazyLock<Vec<Survey>> = LazyLock::new(|| {
-    SURVEY_FILES
-        .iter()
-        .map(|json| parse(json).unwrap_or_else(|err| panic!("invalid survey file: {err}")))
-        .collect()
-});
-
-/// All known surveys.
-#[must_use]
-pub fn surveys() -> &'static [Survey] {
-    &SURVEYS
-}
-
-/// The survey with id `id`, if it exists.
-#[must_use]
-pub fn survey(id: u64) -> Option<&'static Survey> {
-    surveys().iter().find(|survey| survey.id == id)
-}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -39,7 +32,6 @@ struct SurveyFile {
     description: String,
     #[serde(default)]
     link: Option<String>,
-    #[serde(default)]
     access: Access,
     questions: Vec<QuestionFile>,
 }
@@ -83,15 +75,17 @@ impl QuestionFile {
     }
 }
 
-fn parse(json: &str) -> serde_json::Result<Survey> {
-    let file: SurveyFile = serde_json::from_str(json)?;
-    file.questions.iter().try_for_each(QuestionFile::check)?;
-    Ok(Survey {
-        id: file.survey_id,
-        description: file.description,
-        link: file.link,
-        access: file.access,
-        questions: file
+impl Survey {
+    /// Reads a survey definition (see the [module](self) docs).
+    ///
+    /// # Errors
+    ///
+    /// If `json` is no valid definition: malformed JSON, an unknown or
+    /// missing key (also a missing `access`), or bad `possible_answers`.
+    pub fn from_json(json: &str) -> serde_json::Result<Self> {
+        let file: SurveyFile = serde_json::from_str(json)?;
+        file.questions.iter().try_for_each(QuestionFile::check)?;
+        let questions = file
             .questions
             .into_iter()
             .map(|q| Question {
@@ -100,8 +94,15 @@ fn parse(json: &str) -> serde_json::Result<Survey> {
                 kind: q.answer_type,
                 possible_answers: q.possible_answers,
             })
-            .collect(),
-    })
+            .collect();
+        Ok(Survey {
+            id: file.survey_id,
+            description: file.description,
+            link: file.link,
+            access: file.access,
+            questions,
+        })
+    }
 }
 
 /// Stored answers are keyed by this id, so it must never change for an
@@ -117,30 +118,20 @@ fn question_id(text: &str, kind: AnswerKind) -> Uuid {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
+    use crate::samples;
 
     #[test]
-    fn every_survey_file_parses() {
-        assert_eq!(surveys().len(), SURVEY_FILES.len());
-        assert!(surveys().iter().all(|s| !s.questions.is_empty()));
-    }
-
-    #[test]
-    fn survey_and_question_ids_are_unique() {
-        let survey_ids: HashSet<_> = surveys().iter().map(|s| s.id).collect();
-        assert_eq!(survey_ids.len(), surveys().len());
-
-        let question_ids: Vec<_> = surveys().iter().flat_map(|s| &s.questions).map(|q| &q.id).collect();
-        let unique: HashSet<_> = question_ids.iter().collect();
-        assert_eq!(unique.len(), question_ids.len());
+    fn the_shipped_surveys_parse() {
+        assert_eq!(samples::starship().questions.len(), 4);
+        assert_eq!(samples::course().questions.len(), 2);
+        assert_ne!(samples::starship().id, samples::course().id);
     }
 
     #[test]
     fn existing_question_ids_are_stable() {
         // Answers already stored in the database reference these ids.
-        let ids: Vec<_> = survey(1).unwrap().questions.iter().map(|q| q.id.to_string()).collect();
+        let ids: Vec<_> = samples::starship().questions.iter().map(|q| q.id.to_string()).collect();
         assert_eq!(
             ids,
             [
@@ -162,20 +153,20 @@ mod tests {
     }
 
     fn survey_json(question: &str) -> String {
-        format!(r#"{{"survey_id": 1, "description": "", "questions": [{question}]}}"#)
+        format!(r#"{{"survey_id": 1, "description": "", "access": "name_list", "questions": [{question}]}}"#)
     }
 
     #[test]
     fn poll_questions_carry_their_possible_answers() {
         let json = survey_json(r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A", "B"]}"#);
-        let question = &parse(&json).unwrap().questions[0];
+        let question = &Survey::from_json(&json).unwrap().questions[0];
         assert_eq!(question.kind, AnswerKind::Poll);
         assert_eq!(question.possible_answers, ["A", "B"]);
         assert_eq!(question.id, question_id("Q?", AnswerKind::Poll));
 
         let text = survey_json(r#"{"question": "Q?", "answer_type": "text"}"#);
         assert_eq!(
-            parse(&text).unwrap().questions[0].possible_answers,
+            Survey::from_json(&text).unwrap().questions[0].possible_answers,
             Vec::<String>::new()
         );
     }
@@ -191,39 +182,46 @@ mod tests {
             r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A", ""]}"#,
             r#"{"question": "Q?", "answer_type": "poll", "possible_answers": [" A"]}"#,
         ] {
-            assert!(parse(&survey_json(question)).is_err(), "{question}");
+            assert!(Survey::from_json(&survey_json(question)).is_err(), "{question}");
         }
     }
 
     #[test]
-    fn access_defaults_to_open() {
-        let parse_access = |access: &str| {
-            parse(&format!(
+    fn access_is_required_and_cannot_be_open() {
+        let with_access = |access: &str| {
+            Survey::from_json(&format!(
                 r#"{{"survey_id": 1, "description": "", {access} "questions": []}}"#
             ))
         };
-        assert_eq!(parse_access("").unwrap().access, Access::Open);
+        assert!(with_access("").is_err(), "no access given");
+        assert!(with_access(r#""access": null,"#).is_err());
+        assert!(with_access(r#""access": "open","#).is_err());
+        assert!(with_access(r#""access": "none","#).is_err());
+        assert!(with_access(r#""access": "secret","#).is_err());
         assert_eq!(
-            parse_access(r#""access": "name_list","#).unwrap().access,
+            with_access(r#""access": "name_list","#).unwrap().access,
             Access::NameList
         );
         assert_eq!(
-            parse_access(r#""access": "pass_phrase","#).unwrap().access,
+            with_access(r#""access": "pass_phrase","#).unwrap().access,
             Access::PassPhrase
         );
-        assert!(parse_access(r#""access": "secret","#).is_err());
-        assert_eq!(survey(1).unwrap().access, Access::Open);
-        assert_eq!(survey(2).unwrap().access, Access::NameList);
-    }
-
-    #[test]
-    fn unknown_survey_is_none() {
-        assert!(survey(u64::MAX).is_none());
+        assert_eq!(samples::starship().access, Access::PassPhrase);
+        assert_eq!(samples::course().access, Access::NameList);
     }
 
     #[test]
     fn invalid_survey_file_is_rejected() {
-        assert!(parse(r#"{"survey_id": "x", "description": "", "questions": []}"#).is_err());
-        assert!(parse(r#"{"survey_id": 1, "description": "", "questions": [], "typo": 1}"#).is_err());
+        assert!(Survey::from_json("nonsense").is_err());
+        assert!(
+            Survey::from_json(r#"{"survey_id": "x", "description": "", "access": "name_list", "questions": []}"#)
+                .is_err()
+        );
+        assert!(
+            Survey::from_json(
+                r#"{"survey_id": 1, "description": "", "access": "name_list", "questions": [], "typo": 1}"#
+            )
+            .is_err()
+        );
     }
 }

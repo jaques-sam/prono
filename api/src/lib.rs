@@ -1,10 +1,12 @@
-//! The Prono model shared by the app, the backend and the CLI: surveys,
-//! answers, the rules a submission must follow, and the REST contract.
+//! The Prono model shared by the app, the backend and the CLI: surveys and
+//! how they are defined, answers, the rules a submission must follow, and the
+//! REST contract.
 
-mod catalog;
+mod definition;
+#[cfg(any(test, feature = "samples"))]
+pub mod samples;
 mod survey;
 
-pub use catalog::{survey, surveys};
 pub use survey::*;
 
 /// Baked-in API key for backend authentication.

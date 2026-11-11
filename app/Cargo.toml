@@ -39,9 +39,11 @@ uuid = { version = "1", features = ["v4", "js"] }
 
 [dev-dependencies]
 prono = { path = "../prono" }
+prono_api = { path = "../api", features = ["samples"] }
 
 cucumber = "0.23.0"
 egui_kittest = "0.36.2"
+serde_json = "1.0.154"
 futures = { version = "0.3.34", default-features = false, features = ["executor"] }
 
 # UI component tests: Gherkin scenarios driving the egui UI headlessly.

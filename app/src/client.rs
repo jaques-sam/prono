@@ -11,7 +11,7 @@ pub const DEV_URL: &str = "http://localhost:8081";
 pub trait Backend {
     fn submit(&self, survey_id: u64, submission: &Submission) -> Pending<()>;
     fn results(&self, survey_id: u64) -> Pending<Results>;
-    /// Whether `user` (the full name) already filled in a survey, and which
+    /// Whether `user` (the full name) already filled in a survey, and the
     /// surveys they may answer.
     fn user_status(&self, user: &str) -> Pending<UserStatus>;
 }

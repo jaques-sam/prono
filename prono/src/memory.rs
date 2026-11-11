@@ -22,9 +22,34 @@ struct State {
     allowed: Vec<(u64, String, String)>,
     /// `(survey id, pass phrase)`
     pass_phrases: Vec<(u64, String)>,
+    /// `(survey id, definition)`
+    surveys: Vec<(u64, String)>,
 }
 
 impl MemoryRepo {
+    /// A repository that already holds the surveys with the given
+    /// definitions, for tests.
+    ///
+    /// # Panics
+    ///
+    /// If a definition is not a valid survey.
+    #[must_use]
+    pub fn with_surveys<'a>(definitions: impl IntoIterator<Item = &'a str>) -> Self {
+        let surveys = definitions
+            .into_iter()
+            .map(|definition| {
+                let survey = prono_api::Survey::from_json(definition).expect("a valid survey definition");
+                (survey.id, definition.to_string())
+            })
+            .collect();
+        Self {
+            state: Mutex::new(State {
+                surveys,
+                ..State::default()
+            }),
+        }
+    }
+
     fn state(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
@@ -131,6 +156,31 @@ impl Repo for MemoryRepo {
         Ok(())
     }
 
+    async fn survey_definition(&self, survey_id: u64) -> Result<Option<String>> {
+        Ok(self
+            .state()
+            .surveys
+            .iter()
+            .find(|(id, _)| *id == survey_id)
+            .map(|(_, definition)| definition.clone()))
+    }
+
+    async fn survey_definitions(&self) -> Result<Vec<String>> {
+        Ok(self
+            .state()
+            .surveys
+            .iter()
+            .map(|(_, definition)| definition.clone())
+            .collect())
+    }
+
+    async fn save_survey_definition(&self, survey_id: u64, definition: &str) -> Result<()> {
+        let mut state = self.state();
+        state.surveys.retain(|(id, _)| *id != survey_id);
+        state.surveys.push((survey_id, definition.to_string()));
+        Ok(())
+    }
+
     async fn users(&self) -> Result<Vec<String>> {
         Ok(self.state().users.iter().map(|(u, _)| u.clone()).collect())
     }
@@ -203,5 +253,19 @@ mod tests {
         assert_eq!(repo.users().await.unwrap(), Vec::<String>::new());
         assert_eq!(repo.answers(&question(Q1)).await.unwrap(), Vec::<UserAnswer>::new());
         assert!(repo.user_of("dev-1").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn survey_definitions_are_replaced_by_id() {
+        let repo = MemoryRepo::default();
+        assert_eq!(repo.survey_definition(1).await.unwrap(), None);
+
+        repo.save_survey_definition(1, "one").await.unwrap();
+        repo.save_survey_definition(2, "two").await.unwrap();
+        repo.save_survey_definition(1, "uno").await.unwrap();
+        assert_eq!(repo.survey_definition(1).await.unwrap().as_deref(), Some("uno"));
+        let mut all = repo.survey_definitions().await.unwrap();
+        all.sort();
+        assert_eq!(all, ["two", "uno"]);
     }
 }

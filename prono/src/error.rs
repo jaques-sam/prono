@@ -25,6 +25,9 @@ pub enum Error {
     #[error("Wrong pass phrase")]
     WrongPassPhrase,
 
+    #[error("Invalid survey definition: {0}")]
+    InvalidSurvey(String),
+
     #[error("Repository error: {0}")]
     Repository(String),
 }

@@ -7,7 +7,7 @@ use crate::world::World;
 fn description(survey: &str) -> String {
     match survey {
         "Starship" => SURVEY.to_string(),
-        "course" => course().description.clone(),
+        "course" => course().description,
         other => panic!("unknown survey \"{other}\""),
     }
 }
@@ -45,11 +45,17 @@ fn not_offered(world: &mut World, survey: String) {
 
 #[then("I am offered no surveys")]
 fn offered_nothing(world: &mut World) {
-    for survey in prono_api::surveys() {
-        assert!(
-            !world.has_button(&survey.description),
-            "\"{}\" is offered",
-            survey.description
-        );
+    for description in [SURVEY.to_string(), course().description] {
+        assert!(!world.has_button(&description), "\"{description}\" is offered");
     }
+}
+
+#[then("I am asked for the pass phrase")]
+fn asked_for_pass_phrase(world: &mut World) {
+    assert!(world.shows("Pass phrase:"), "there is no pass phrase field");
+}
+
+#[then("I am not asked for the pass phrase")]
+fn not_asked_for_pass_phrase(world: &mut World) {
+    assert!(!world.shows("Pass phrase:"), "there is a pass phrase field");
 }

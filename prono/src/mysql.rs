@@ -192,6 +192,32 @@ impl Repo for MysqlRepo {
         Ok(())
     }
 
+    async fn survey_definition(&self, survey_id: u64) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar("SELECT definition FROM Survey WHERE survey_id = ?")
+            .bind(survey_id)
+            .fetch_optional(&self.pool)
+            .await?)
+    }
+
+    async fn survey_definitions(&self) -> Result<Vec<String>> {
+        Ok(sqlx::query_scalar("SELECT definition FROM Survey ORDER BY survey_id")
+            .fetch_all(&self.pool)
+            .await?)
+    }
+
+    async fn save_survey_definition(&self, survey_id: u64, definition: &str) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO Survey (survey_id, definition) VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE definition = VALUES(definition)",
+        )
+        .bind(survey_id)
+        .bind(definition)
+        .execute(&self.pool)
+        .await?;
+        info!("Stored the definition of survey {survey_id}");
+        Ok(())
+    }
+
     async fn users(&self) -> Result<Vec<String>> {
         Ok(sqlx::query_scalar("SELECT user_name FROM Users")
             .fetch_all(&self.pool)

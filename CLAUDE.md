@@ -78,12 +78,13 @@ See the Architecture section of `README.md`. In short: every survey type is defi
 
 - **api/** (`prono_api`): the model shared by every binary, wasm-safe
   - `Survey`, `Question`, `AnswerKind`, `Answer`, `Submission`, `Results`
-  - The survey catalog: JSON files in `api/surveys/`, listed in `SURVEY_FILES` (`api/src/catalog.rs`)
+  - The survey definition: `Survey::from_json` (`api/src/definition.rs`). Surveys are uploaded to the backend's database (`prono-cli surveys upload`), never embedded; `api/surveys/*.json` are examples, also the test fixtures of the `samples` feature
+  - `access` is mandatory in a definition (`pass_phrase` or `name_list`, there is no open survey)
   - The rules (`Submission::validate`, `check_user_name`, `Answer::is_valid_for`) and the REST contract (`answers_path`, `API_KEY`, `DEVICE_ID_HEADER`)
   - Question ids hash the question text and answer kind; stored answers reference them, so `existing_question_ids_are_stable` must keep passing
 
 - **prono/**: server-side core
-  - Use cases `submit` and `results` (`service.rs`)
+  - Use cases `upload_survey`, `submit` and `results` (`service.rs`); the `Repo` also stores the survey definitions
   - `Repo` trait with `MysqlRepo` (runtime `sqlx` queries, one transaction per submission) and `MemoryRepo` (tests)
   - `DbConfig::load()`: `secure_config.toml` plus `PRONO_DB_*` env overrides
 
@@ -94,7 +95,7 @@ See the Architecture section of `README.md`. In short: every survey type is defi
   - `client.rs`: non-blocking REST client (`ehttp`), identical on both targets
   - No business rules in the UI: put them in `prono_api` or `state.rs`
 
-- **cli/**: admin tool (list/delete users) on top of `prono`
+- **cli/**: admin tool on top of `prono` (surveys, users, access)
 
 ## Configuration
 
@@ -155,7 +156,8 @@ CI runs on push/PR via `.github/workflows/rust.yml`:
 
 ## Notes
 
-- Use edition 2024 for all crates
+- Use edition >=2024 for all crates
 - Target wasm32-unknown-unknown for web builds
 - The app includes PWA support via `assets/sw.js` (append `#dev` to URL to skip caching during development)
 - Coverage excludes drawing, I/O and entry-point files per `.tarpaulin.toml`
+- Always add unit tests for all changes and bdd tests (./app/tests) for new app features

@@ -76,7 +76,7 @@ async fn answers_round_trip_by_uuid_and_duplicates_are_refused() {
 #[ignore = "needs a dev database, see the module docs"]
 async fn survey_access_is_stored_and_matched_by_full_name() {
     let repo = MysqlRepo::connect(&config()).await.unwrap();
-    // A survey id no catalog survey uses, so runs never touch real lists.
+    // A survey id no real survey uses, so runs never touch real lists.
     let survey_id = u64::MAX - 1;
 
     repo.allow_user(survey_id, "Ada", "Lovelace").await.unwrap();
@@ -99,4 +99,21 @@ async fn survey_access_is_stored_and_matched_by_full_name() {
     repo.set_pass_phrase(survey_id, "one").await.unwrap();
     repo.set_pass_phrase(survey_id, "two").await.unwrap();
     assert_eq!(repo.pass_phrase(survey_id).await.unwrap().as_deref(), Some("two"));
+}
+
+#[tokio::test]
+#[ignore = "needs a dev database, see the module docs"]
+async fn survey_definitions_are_stored_and_replaced_by_id() {
+    let repo = MysqlRepo::connect(&config()).await.unwrap();
+    // A survey id no real survey uses, so runs never touch real surveys.
+    let survey_id = u64::MAX - 2;
+
+    repo.save_survey_definition(survey_id, "first").await.unwrap();
+    repo.save_survey_definition(survey_id, "second").await.unwrap();
+    assert_eq!(
+        repo.survey_definition(survey_id).await.unwrap().as_deref(),
+        Some("second")
+    );
+    assert!(repo.survey_definitions().await.unwrap().contains(&"second".to_string()));
+    assert_eq!(repo.survey_definition(survey_id - 1).await.unwrap(), None);
 }

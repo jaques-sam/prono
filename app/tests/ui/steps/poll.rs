@@ -12,12 +12,14 @@ use crate::world::World;
 const OTHER: &str = "Other";
 
 impl World {
-    /// The radio button `label` of the poll question `question`.
+    /// The radio button `label` of the poll question `question` of the
+    /// survey being answered.
     fn poll_radio(&self, question: &str, label: &str) -> Node<'_> {
+        let survey = self.session().state.survey().expect("a survey");
         // The radio buttons of all the polls follow each other: the options
         // of each question, then its "Other".
         let mut before = 0;
-        for survey_question in &course().questions {
+        for survey_question in &survey.questions {
             if survey_question.text == question {
                 let options = &survey_question.possible_answers;
                 let position = options.iter().position(|option| option == label);
@@ -34,17 +36,19 @@ impl World {
             }
             before += survey_question.possible_answers.len() + 1;
         }
-        panic!("no question \"{question}\" in the course survey");
+        panic!("no question \"{question}\" in the survey");
     }
 
     fn answer_to(&self, question: &str) -> Answer {
-        let index = course()
-            .questions
-            .iter()
-            .position(|q| q.text == question)
-            .unwrap_or_else(|| panic!("no question \"{question}\""));
         match &self.session().state.phase {
-            prono_app::state::Phase::Answering { answers, .. } => answers[index].clone(),
+            prono_app::state::Phase::Answering { survey, answers } => {
+                let index = survey
+                    .questions
+                    .iter()
+                    .position(|q| q.text == question)
+                    .unwrap_or_else(|| panic!("no question \"{question}\""));
+                answers[index].clone()
+            }
             _ => panic!("not answering a survey"),
         }
     }

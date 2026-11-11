@@ -26,18 +26,18 @@ flowchart TB
     web["web app (wasm)"] -- REST --> backend
     native["native app"] -- REST --> backend
     subgraph backend [prono-backend]
-        rest["REST endpoints"] --> core["prono: submit / results, Repo"]
+        rest["REST endpoints"] --> core["prono: surveys, submit / results, Repo"]
     end
     cli["prono-cli"] --> core
     core -- sqlx --> db[(MariaDB)]
-    api["prono_api: surveys, answers, rules, REST contract"]
+    api["prono_api: survey model and definition, answers, rules, REST contract"]
     web & native & backend & cli -.-> api
 ```
 
 | Crate | Role |
 | --- | --- |
-| `api` (`prono_api`) | The model every binary shares: the survey catalog (`api/surveys/*.json`), `Answer`, the validation rules and the REST contract. Compiles to wasm. |
-| `prono` | Server-side core: the `submit` and `results` use cases, the `Repo` trait with its MySQL and in-memory implementations, and the database config. |
+| `api` (`prono_api`) | The model every binary shares: `Survey` and how it is defined (`Survey::from_json`), `Answer`, the validation rules and the REST contract. Compiles to wasm. `api/surveys/*.json` are example definitions, not part of any binary. |
+| `prono` | Server-side core: the use cases (`upload_survey`, `submit`, `results`), the `Repo` trait with its MySQL and in-memory implementations, and the database config. |
 | `backend` | `actix-web` REST server around `prono`. |
 | `app` | egui app for desktop and web. Both talk to the backend over REST; the UI only draws a small state machine (`app/src/state.rs`). |
 | `cli` | Admin tool on top of `prono`. |
@@ -51,20 +51,32 @@ backend uses to accept it.
 
 ### Adding a questionnaire
 
-1. Add a JSON file to `api/surveys/` with a new, unique `survey_id`:
-   ```json
-   {
-       "survey_id": 2,
-       "description": "My survey",
-       "link": "https://example.com",
-       "questions": [
-           { "question": "When will it happen?", "answer_type": "prediction_date" },
-           { "question": "Why?", "answer_type": "text" }
-       ]
-   }
-   ```
-2. List it in `SURVEY_FILES` in `api/src/catalog.rs`.
-3. Redeploy the backend and the apps.
+Surveys live in the database, not in the binaries: the backend serves them to
+the apps, so a new one needs no redeploy. Write a definition and upload it
+(it replaces the survey with the same `survey_id`):
+
+```sh
+cargo run --bin prono-cli -- surveys upload my_survey.json
+```
+
+```json
+{
+    "survey_id": 3,
+    "description": "My survey",
+    "link": "https://example.com",
+    "access": "pass_phrase",
+    "questions": [
+        { "question": "When will it happen?", "answer_type": "prediction_date" },
+        { "question": "Why?", "answer_type": "text" },
+        { "question": "Which?", "answer_type": "poll", "possible_answers": ["A", "B"] }
+    ]
+}
+```
+
+- `access` is required, so that nobody fills in a survey unasked: `pass_phrase` (set it with
+  `prono-cli access pass-phrase`) or `name_list` (fill it with `prono-cli access allow`). Until a pass phrase is set,
+  the survey stays closed.
+- `link` is optional; `possible_answers` is for `poll` questions only.
 
 A question's id is derived from its text and answer type, and stored answers
 reference that id: editing a question's text starts it from scratch.

@@ -5,7 +5,11 @@ use egui_kittest::kittest::Queryable as _;
 use prono_api::Survey;
 use prono_app::state::NAME_CHECK_DELAY;
 
+use crate::fake_backend::PASS_PHRASE;
 use crate::world::World;
+
+/// The label of the pass phrase field.
+const PASS_PHRASE_LABEL: &str = "Pass phrase:";
 
 /// The survey the scenarios use.
 pub const SURVEY: &str = "SpaceX Starship achievements survey";
@@ -14,18 +18,24 @@ pub const SURVEY_ID: u64 = 1;
 pub const COURSE_ID: u64 = 2;
 
 /// The survey with poll questions.
-pub fn course() -> &'static Survey {
-    prono_api::survey(COURSE_ID).expect("the course survey exists")
+pub fn course() -> Survey {
+    prono_api::samples::course()
 }
 
 impl World {
     /// Replaces whatever is in the text field `label` with `text`.
     fn type_into(&mut self, label: &str, text: &str) {
-        self.harness.get_by_role_and_label(Role::TextInput, label).click();
+        self.type_into_role(Role::TextInput, label, text);
+    }
+
+    fn type_into_role(&mut self, role: Role, label: &str, text: &str) {
+        self.harness.get_by_role_and_label(role, label).click();
         self.settle();
         self.harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
         self.frames(1);
-        if !text.is_empty() {
+        if text.is_empty() {
+            self.harness.key_press(egui::Key::Backspace);
+        } else {
             self.harness.event(egui::Event::Text(text.to_string()));
         }
         self.settle();
@@ -43,6 +53,16 @@ impl World {
     pub fn start_survey(&mut self, description: &str) {
         self.wait(NAME_CHECK_DELAY + 0.1);
         self.click_button(description);
+        // A survey with a pass phrase gets the right one, unless a scenario
+        // enters another.
+        if self.shows(PASS_PHRASE_LABEL) {
+            self.enter_pass_phrase(PASS_PHRASE);
+        }
+    }
+
+    /// Replaces whatever is in the pass phrase field with `pass_phrase`.
+    pub fn enter_pass_phrase(&mut self, pass_phrase: &str) {
+        self.type_into_role(Role::PasswordInput, PASS_PHRASE_LABEL, pass_phrase);
     }
 
     /// Enters `name` ("First Last") and starts the survey `description`.
@@ -90,6 +110,12 @@ fn enter_long_name(world: &mut World, length: usize, last: String) {
 #[when("I start the survey")]
 fn start_survey(world: &mut World) {
     world.start_survey(SURVEY);
+}
+
+#[given(expr = "I enter the pass phrase {string}")]
+#[when(expr = "I enter the pass phrase {string}")]
+fn enter_pass_phrase(world: &mut World, pass_phrase: String) {
+    world.enter_pass_phrase(&pass_phrase);
 }
 
 #[given("I go back to change my name")]

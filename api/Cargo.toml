@@ -12,3 +12,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
 uuid = { version = "1.29.2", features = ["v5", "serde"] }
+
+[features]
+# The surveys of `api/surveys/`, for the tests of every crate.
+samples = []

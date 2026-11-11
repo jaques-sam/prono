@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::Result;
 
-/// Where participants and their answers are stored.
+/// Where surveys, participants and their answers are stored.
 ///
 /// A participant is identified by name and bound to the device that first
 /// submitted for that name.
@@ -51,6 +51,16 @@ pub trait Repo: Send + Sync {
 
     /// Sets, or replaces, the pass phrase of survey `survey_id`.
     async fn set_pass_phrase(&self, survey_id: u64, pass_phrase: &str) -> Result<()>;
+
+    /// The stored definition (the JSON text, see `prono_api::Survey::from_json`)
+    /// of survey `survey_id`, if it was uploaded.
+    async fn survey_definition(&self, survey_id: u64) -> Result<Option<String>>;
+
+    /// The stored definitions of all surveys.
+    async fn survey_definitions(&self) -> Result<Vec<String>>;
+
+    /// Stores the definition of survey `survey_id`, replacing an earlier one.
+    async fn save_survey_definition(&self, survey_id: u64, definition: &str) -> Result<()>;
 
     /// The names of all participants.
     async fn users(&self) -> Result<Vec<String>>;

@@ -1,5 +1,6 @@
-//! Server-side core of Prono: the submit and results use cases, the
-//! repository they run against, and the database configuration.
+//! Server-side core of Prono: the use cases (uploading surveys, submitting
+//! answers and results), the repository they run against, and the
+//! database configuration.
 
 mod config;
 mod error;
@@ -13,4 +14,4 @@ pub use error::{Error, Result};
 pub use memory::MemoryRepo;
 pub use mysql::MysqlRepo;
 pub use repo::Repo;
-pub use service::{results, submit, user_status};
+pub use service::{results, submit, survey, surveys, upload_survey, user_status};

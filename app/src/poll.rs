@@ -7,9 +7,6 @@ use std::collections::HashSet;
 use egui::{CornerRadius, Id, RichText, Sense, Stroke, StrokeKind, TextStyle, TextWrapMode, Vec2};
 use prono_api::{Question, UserAnswer};
 
-/// The text of the radio button for an answer outside the given options.
-const OTHER_LABEL: &str = "Other";
-
 /// The widest part of the row the labels may take.
 const MAX_LABEL_SHARE: f32 = 0.4;
 /// Space between the label, the bar and the count.
@@ -28,12 +25,15 @@ pub struct Row {
     pub votes: usize,
     /// Whether this is a typed answer, not one of the question's options.
     pub other: bool,
+    /// Whether the question names its typed answers itself, so the chart does
+    /// not need to tag them as "other".
+    pub named_other: bool,
 }
 
 impl Row {
     /// What the row is called in the chart.
     pub fn label(&self) -> String {
-        if self.other {
+        if self.other && !self.named_other {
             format!("{} (other)", self.text)
         } else {
             self.text.clone()
@@ -58,6 +58,7 @@ pub fn rows(question: &Question, answers: &[UserAnswer]) -> Vec<Row> {
             text,
             votes,
             other: index >= question.possible_answers.len(),
+            named_other: question.other_label.is_some(),
         })
         .collect()
 }
@@ -104,7 +105,7 @@ pub fn forget_other(ctx: &egui::Context) {
 }
 
 /// Draws the radio buttons of `question` and writes the choice to `answer`:
-/// the option, or whatever is typed next to "Other".
+/// the option, or whatever is typed next to the question's other label.
 pub fn input(ui: &mut egui::Ui, question: &Question, answer: &mut String) {
     let key = Id::new(question.id);
     let chosen = ui.data(|data| {
@@ -120,7 +121,7 @@ pub fn input(ui: &mut egui::Ui, question: &Question, answer: &mut String) {
                 other = false;
             }
         }
-        if ui.radio(other, OTHER_LABEL).clicked() && !other {
+        if ui.radio(other, question.other_label()).clicked() && !other {
             answer.clear();
             other = true;
         }
@@ -240,6 +241,7 @@ mod tests {
             text: "Background?".into(),
             kind: AnswerKind::Poll,
             possible_answers: vec!["C".into(), "C++".into()],
+            other_label: None,
             correct_answer: None,
         }
     }
@@ -260,17 +262,20 @@ mod tests {
                 Row {
                     text: "C".into(),
                     votes: 2,
-                    other: false
+                    other: false,
+                    named_other: false
                 },
                 Row {
                     text: "C++".into(),
                     votes: 0,
-                    other: false
+                    other: false,
+                    named_other: false
                 },
                 Row {
                     text: "Rust".into(),
                     votes: 2,
-                    other: true
+                    other: true,
+                    named_other: false
                 },
             ]
         );
@@ -291,11 +296,21 @@ mod tests {
     }
 
     #[test]
+    fn named_other_rows_are_not_tagged() {
+        let mut question = question();
+        question.other_label = Some("Yes, namely:".into());
+        let rows = rows(&question, &[vote("a", "Rust")]);
+        assert!(rows[2].other);
+        assert_eq!(rows[2].label(), "Rust");
+    }
+
+    #[test]
     fn summary_shows_votes_and_share() {
         let row = |votes| Row {
             text: String::new(),
             votes,
             other: false,
+            named_other: false,
         };
         assert_eq!(row(1).summary(4), "1 vote (25%)");
         assert_eq!(row(3).summary(4), "3 votes (75%)");

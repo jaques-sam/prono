@@ -68,7 +68,8 @@ cargo run --bin prono-cli -- surveys upload my_survey.json
     "questions": [
         { "question": "When will it happen?", "answer_type": "prediction_date" },
         { "question": "Why?", "answer_type": "text" },
-        { "question": "Which?", "answer_type": "poll", "possible_answers": ["A", "B"] }
+        { "question": "Which?", "answer_type": "poll", "possible_answers": ["A", "B"] },
+        { "question": "Any allergies?", "answer_type": "poll", "possible_answers": ["No"], "other_label": "Yes, namely:" }
     ]
 }
 ```
@@ -76,7 +77,8 @@ cargo run --bin prono-cli -- surveys upload my_survey.json
 - `access` is required, so that nobody fills in a survey unasked: `pass_phrase` (set it with
   `prono-cli access pass-phrase`) or `name_list` (fill it with `prono-cli access allow`). Until a pass phrase is set,
   the survey stays closed.
-- `link` is optional; `possible_answers` is for `poll` questions only.
+- `link` is optional; `possible_answers` is for `poll` questions only. So is `other_label`, the name of the free
+  answer next to the options (default: `Other`), for questions where that does not fit.
 - **Scores:** give every question a `correct_answer` (text or option for `text` and `poll`,
   `{"month": 7, "year": 2028}` for `prediction_date`) and the survey is scored: participants see a ranking of the
   correct answers after submitting. All questions need one, or none. The correct answers never leave the backend, so a

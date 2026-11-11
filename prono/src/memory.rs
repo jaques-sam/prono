@@ -208,6 +208,7 @@ mod tests {
             text: String::new(),
             kind: AnswerKind::Text,
             possible_answers: Vec::new(),
+            other_label: None,
             correct_answer: None,
         }
     }

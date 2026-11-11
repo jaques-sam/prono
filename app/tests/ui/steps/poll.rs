@@ -8,16 +8,13 @@ use crate::fake_backend::MY_DEVICE;
 use crate::steps::common::{COURSE_ID, course};
 use crate::world::World;
 
-/// The label of the radio button for an answer of one's own.
-const OTHER: &str = "Other";
-
 impl World {
     /// The radio button `label` of the poll question `question` of the
     /// survey being answered.
     fn poll_radio(&self, question: &str, label: &str) -> Node<'_> {
         let survey = self.session().state.survey().expect("a survey");
         // The radio buttons of all the polls follow each other: the options
-        // of each question, then its "Other".
+        // of each question, then its other label.
         let mut before = 0;
         for survey_question in &survey.questions {
             if survey_question.text == question {
@@ -25,7 +22,11 @@ impl World {
                 let position = options.iter().position(|option| option == label);
                 let index = before
                     + position.unwrap_or_else(|| {
-                        assert_eq!(label, OTHER, "no option \"{label}\" in \"{question}\"");
+                        assert_eq!(
+                            label,
+                            survey_question.other_label(),
+                            "no option \"{label}\" in \"{question}\""
+                        );
                         options.len()
                     });
                 return self

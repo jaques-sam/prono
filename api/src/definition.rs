@@ -12,14 +12,17 @@
 //!           "correct_answer": { "month": 7, "year": 2028 } },
 //!         { "question": "Why?", "answer_type": "text", "correct_answer": "because" },
 //!         { "question": "Which?", "answer_type": "poll",
-//!           "possible_answers": ["A", "B"], "correct_answer": "A" }
+//!           "possible_answers": ["A", "B"], "correct_answer": "A" },
+//!         { "question": "Any allergies?", "answer_type": "poll",
+//!           "possible_answers": ["No"], "other_label": "Yes, namely:" }
 //!     ]
 //! }
 //! ```
 //!
 //! `link` is optional. `access` is required: `pass_phrase` or `name_list`.
-//! `possible_answers` is for `poll` questions only. A `correct_answer` makes
-//! the survey scored, and then every question needs one.
+//! `possible_answers` is for `poll` questions only, and so is `other_label`:
+//! the name of the free answer, "Other" when left out. A `correct_answer`
+//! makes the survey scored, and then every question needs one.
 
 use std::collections::HashSet;
 
@@ -47,6 +50,9 @@ struct QuestionFile {
     /// The options of a `poll` question, and only of those.
     #[serde(default)]
     possible_answers: Vec<String>,
+    /// The name of the free answer of a `poll` question, and only of those.
+    #[serde(default)]
+    other_label: Option<String>,
     #[serde(default)]
     correct_answer: Option<CorrectAnswerFile>,
 }
@@ -81,6 +87,20 @@ impl QuestionFile {
             if option.trim() != option || option.is_empty() || !seen.insert(option) {
                 return Err(E::custom(format!(
                     "possible answer \"{option}\" of \"{}\" must be non-blank, trimmed and unique",
+                    self.question
+                )));
+            }
+        }
+        if let Some(label) = &self.other_label {
+            if !is_poll {
+                return Err(E::custom(format!(
+                    "question \"{}\" is not a poll, it cannot have an other_label",
+                    self.question
+                )));
+            }
+            if label.trim() != label || label.is_empty() {
+                return Err(E::custom(format!(
+                    "the other_label \"{label}\" of \"{}\" must be non-blank and trimmed",
                     self.question
                 )));
             }
@@ -146,6 +166,7 @@ impl Survey {
                     text: q.question.clone(),
                     kind: q.answer_type,
                     possible_answers: q.possible_answers.clone(),
+                    other_label: q.other_label.clone(),
                     correct_answer: q.correct_answer()?,
                 })
             })
@@ -244,6 +265,35 @@ mod tests {
             r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A", " "]}"#,
             r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A", ""]}"#,
             r#"{"question": "Q?", "answer_type": "poll", "possible_answers": [" A"]}"#,
+        ] {
+            assert!(Survey::from_json(&survey_json(question)).is_err(), "{question}");
+        }
+    }
+
+    #[test]
+    fn a_poll_may_name_its_free_answer() {
+        let with = |label: &str| {
+            let json = survey_json(&format!(
+                r#"{{"question": "Q?", "answer_type": "poll", "possible_answers": ["No"]{label}}}"#
+            ));
+            Survey::from_json(&json).map(|survey| survey.questions[0].clone())
+        };
+        let named = with(r#", "other_label": "Yes, namely:""#).unwrap();
+        assert_eq!(named.other_label.as_deref(), Some("Yes, namely:"));
+        assert_eq!(named.other_label(), "Yes, namely:");
+        // Part of the definition, not of the identity: the id stays the same.
+        let plain = with("").unwrap();
+        assert_eq!(plain.other_label, None);
+        assert_eq!(plain.other_label(), "Other");
+        assert_eq!(named.id, plain.id);
+    }
+
+    #[test]
+    fn invalid_other_labels_are_rejected() {
+        for question in [
+            r#"{"question": "Q?", "answer_type": "text", "other_label": "Else"}"#,
+            r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A"], "other_label": ""}"#,
+            r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A"], "other_label": " Else"}"#,
         ] {
             assert!(Survey::from_json(&survey_json(question)).is_err(), "{question}");
         }

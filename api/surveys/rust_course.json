@@ -1,5 +1,6 @@
 {
   "survey_id": 2,
+  "title": "Rust course",
   "description": "You were chosen to follow a splendid course...",
   "questions": [
     {

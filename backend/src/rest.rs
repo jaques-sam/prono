@@ -137,7 +137,7 @@ mod tests {
     const COURSE_PASS_PHRASE: &str = "rust rocks";
     const QUIZ_ID: u64 = 3;
     const QUIZ: &str = r#"{
-        "survey_id": 3, "description": "Quiz",
+        "survey_id": 3, "title": "Quiz", "description": "A quiz",
         "questions": [{"question": "Capital of Belgium", "answer_type": "text", "correct_answer": "Brussels"}]
     }"#;
 

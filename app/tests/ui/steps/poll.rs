@@ -59,12 +59,12 @@ impl World {
 #[given(expr = "I answer the course survey as {string}")]
 #[when(expr = "I answer the course survey as {string}")]
 fn answer_course(world: &mut World, name: String) {
-    world.answer_survey_as(&name, &course().description, COURSE_PASS_PHRASE);
+    world.answer_survey_as(&name, &course().title, COURSE_PASS_PHRASE);
 }
 
 #[when("I start the course survey")]
 fn start_course(world: &mut World) {
-    world.start_survey(&course().description, COURSE_PASS_PHRASE);
+    world.start_survey(&course().title, COURSE_PASS_PHRASE);
 }
 
 #[given(expr = "{string} already answered {string} to {string} from this device")]

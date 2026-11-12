@@ -23,9 +23,10 @@ pub const COURSE_ID: u64 = 2;
 /// The scored survey: both capitals are right in the options, the answers
 /// are not shown anywhere in the app.
 pub const QUIZ_ID: u64 = 3;
-pub const QUIZ_DESCRIPTION: &str = "Capitals quiz";
+pub const QUIZ_TITLE: &str = "Capitals";
 const QUIZ_JSON: &str = r#"{
     "survey_id": 3,
+    "title": "Capitals",
     "description": "Capitals quiz",
     "questions": [
         {"question": "Capital of Belgium", "answer_type": "poll",

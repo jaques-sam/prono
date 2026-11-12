@@ -333,7 +333,7 @@ mod tests {
         let script = navigate(&repo(), [Pick("Surveys"), Pick("scores"), Back, Back, Back]).await;
         assert_eq!(script.shown, ["No surveys to choose from."]);
 
-        let quiz = r#"{"survey_id": 3, "description": "Quiz",
+        let quiz = r#"{"survey_id": 3, "title": "Quiz", "description": "A quiz",
             "questions": [{"question": "Q?", "answer_type": "text", "correct_answer": "a"}]}"#;
         let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, quiz]);
         let script = navigate(&repo, [Pick("Surveys"), Pick("scores"), Pick("Quiz"), Back, Back]).await;
@@ -354,10 +354,10 @@ mod tests {
             [
                 Pick("Surveys"),
                 Pick("answers"),
-                Pick("splendid course"),
+                Pick("Rust course"),
                 Pick("Everybody"),
                 Pick("answers"),
-                Pick("splendid course"),
+                Pick("Rust course"),
                 Pick("Ann Lee"),
                 Back,
                 Back,

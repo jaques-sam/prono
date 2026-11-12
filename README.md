@@ -62,7 +62,8 @@ cargo run --bin prono-cli -- surveys upload my_survey.json
 ```json
 {
     "survey_id": 3,
-    "description": "My survey",
+    "title": "My survey",
+    "description": "What the survey is about",
     "link": "https://example.com",
     "questions": [
         { "question": "When will it happen?", "answer_type": "prediction_date" },

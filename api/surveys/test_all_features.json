@@ -1,5 +1,6 @@
 {
     "survey_id": 3,
+    "title": "Feature test",
     "description": "Test survey using every feature: all answer types, a link and correct answers (a scored survey)",
     "link": "https://jaques-sam.github.io/prono/",
     "questions": [

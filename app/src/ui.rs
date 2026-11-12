@@ -171,7 +171,7 @@ fn start(ui: &mut egui::Ui, state: &mut State, warning: Option<&str>) -> Option<
         Some(surveys) => {
             ui.label("Choose a survey:");
             for survey in surveys {
-                if ui.button(&survey.description).clicked() {
+                if ui.button(&survey.title).clicked() {
                     action = Some(Action::StartSurvey(survey.id));
                 }
             }
@@ -319,7 +319,8 @@ fn score_line(rank: usize, score: &Score, out_of: usize) -> String {
 }
 
 fn survey_heading(ui: &mut egui::Ui, survey: &Survey) {
-    ui.heading(&survey.description);
+    ui.heading(&survey.title);
+    ui.label(&survey.description);
     if let Some(link) = &survey.link {
         ui.hyperlink(link);
     }

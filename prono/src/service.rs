@@ -162,7 +162,7 @@ pub async fn surveys(repo: &dyn Repo) -> Result<Vec<Survey>> {
 /// A stored definition was checked when it was uploaded, so it failing to
 /// parse means the database was changed by hand.
 fn stored(definition: &str) -> Result<Survey> {
-    Survey::from_json(definition).map_err(|err| Error::Repository(format!("invalid stored survey: {err}")))
+    Survey::from_stored_json(definition).map_err(|err| Error::Repository(format!("invalid stored survey: {err}")))
 }
 
 async fn collect_results(repo: &dyn Repo, survey: &Survey) -> Result<Results> {
@@ -461,7 +461,8 @@ mod tests {
     const QUIZ_ID: u64 = 3;
     const QUIZ: &str = r#"{
         "survey_id": 3,
-        "description": "Quiz",
+        "title": "Quiz",
+        "description": "A quiz",
         "questions": [
             {"question": "Capital of Belgium", "answer_type": "text", "correct_answer": "Brussels"},
             {"question": "Best language", "answer_type": "poll", "possible_answers": ["C", "Rust"],

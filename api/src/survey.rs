@@ -17,6 +17,9 @@ pub const MAX_TEXT_ANSWER_LEN: usize = 1000;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Survey {
     pub id: u64,
+    /// The short name offered when choosing a survey.
+    pub title: String,
+    /// What the survey is about, shown once it is opened.
     pub description: String,
     pub link: Option<String>,
     /// Whether every question has a correct answer, so the participants get
@@ -392,6 +395,7 @@ mod tests {
     fn survey() -> Survey {
         Survey {
             id: 7,
+            title: "Test".into(),
             description: "Test".into(),
             link: None,
             scored: false,

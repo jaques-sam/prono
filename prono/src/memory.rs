@@ -36,7 +36,7 @@ impl MemoryRepo {
         let surveys = definitions
             .into_iter()
             .map(|definition| {
-                let survey = prono_api::Survey::from_json(definition).expect("a valid survey definition");
+                let survey = prono_api::Survey::from_stored_json(definition).expect("a valid survey definition");
                 (survey.id, definition.to_string())
             })
             .collect();

@@ -4,6 +4,7 @@
 //! ```json
 //! {
 //!     "survey_id": 1,
+//!     "title": "Short name",
 //!     "description": "What the survey is about",
 //!     "link": "https://example.com",
 //!     "questions": [
@@ -18,7 +19,8 @@
 //! }
 //! ```
 //!
-//! `link` is optional. There is no access key: every survey is opened by its
+//! `title` is the short name on the button to choose the survey; the
+//! `description` is shown once the survey is opened. `link` is optional. There is no access key: every survey is opened by its
 //! pass phrase, which is set with `prono-cli surveys pass-phrase` and lives in
 //! the backend's database, never in the definition. `possible_answers` is for `poll` questions only, and so is `other_label`:
 //! the name of the free answer, "Other" when left out. A `correct_answer`
@@ -35,6 +37,8 @@ use crate::{Answer, AnswerKind, Question, Survey};
 #[serde(deny_unknown_fields)]
 struct SurveyFile {
     survey_id: u64,
+    #[serde(default)]
+    title: Option<String>,
     description: String,
     #[serde(default)]
     link: Option<String>,
@@ -152,9 +156,31 @@ impl Survey {
     /// `correct_answer`s that do not fit their questions or are not given to
     /// every question or none.
     pub fn from_json(json: &str) -> serde_json::Result<Self> {
+        Self::parse(json, true)
+    }
+
+    /// Reads a definition as stored by the backend, which may predate the
+    /// `title`: then the `description` serves as title.
+    ///
+    /// # Errors
+    ///
+    /// As [`Survey::from_json`], except for a missing `title`.
+    pub fn from_stored_json(json: &str) -> serde_json::Result<Self> {
+        Self::parse(json, false)
+    }
+
+    fn parse(json: &str, require_title: bool) -> serde_json::Result<Self> {
         use serde::de::Error;
 
         let file: SurveyFile = serde_json::from_str(json)?;
+        let title = match file.title {
+            Some(title) if title.trim().is_empty() => {
+                return Err(serde_json::Error::custom("the title of a survey must not be blank"));
+            }
+            Some(title) => title,
+            None if require_title => return Err(serde_json::Error::custom("missing field `title`")),
+            None => file.description.clone(),
+        };
         file.questions.iter().try_for_each(QuestionFile::check)?;
         let questions = file
             .questions
@@ -179,6 +205,7 @@ impl Survey {
         }
         Ok(Survey {
             id: file.survey_id,
+            title,
             description: file.description,
             link: file.link,
             scored: with_answer != 0,
@@ -235,7 +262,40 @@ mod tests {
     }
 
     fn survey_json(question: &str) -> String {
-        format!(r#"{{"survey_id": 1, "description": "", "questions": [{question}]}}"#)
+        format!(r#"{{"survey_id": 1, "title": "T", "description": "", "questions": [{question}]}}"#)
+    }
+
+    #[test]
+    fn the_title_is_read_from_the_definition() {
+        let survey = Survey::from_json(
+            r#"{"survey_id": 1, "title": "Starship", "description": "Achievements to predict", "questions": []}"#,
+        )
+        .unwrap();
+        assert_eq!(survey.title, "Starship");
+        assert_eq!(survey.description, "Achievements to predict");
+    }
+
+    #[test]
+    fn a_missing_or_blank_title_is_rejected() {
+        let with = |title: &str| {
+            Survey::from_json(&format!(
+                r#"{{"survey_id": 1, {title} "description": "D", "questions": []}}"#
+            ))
+        };
+        assert!(with("").is_err());
+        assert!(with(r#""title": "","#).is_err());
+        assert!(with(r#""title": "  ","#).is_err());
+        assert!(with(r#""title": "T","#).is_ok());
+    }
+
+    #[test]
+    fn a_stored_definition_without_title_uses_its_description() {
+        let legacy = r#"{"survey_id": 1, "description": "Old survey", "questions": []}"#;
+        assert!(Survey::from_json(legacy).is_err());
+        assert_eq!(Survey::from_stored_json(legacy).unwrap().title, "Old survey");
+
+        let titled = r#"{"survey_id": 1, "title": "New", "description": "Old survey", "questions": []}"#;
+        assert_eq!(Survey::from_stored_json(titled).unwrap().title, "New");
     }
 
     #[test]
@@ -303,7 +363,7 @@ mod tests {
         // pass phrase, kept in the backend's database.
         let with = |access: &str| {
             Survey::from_json(&format!(
-                r#"{{"survey_id": 1, "description": "", {access} "questions": []}}"#
+                r#"{{"survey_id": 1, "title": "T", "description": "", {access} "questions": []}}"#
             ))
         };
         assert!(with("").is_ok());
@@ -317,7 +377,10 @@ mod tests {
     fn invalid_survey_file_is_rejected() {
         assert!(Survey::from_json("nonsense").is_err());
         assert!(Survey::from_json(r#"{"survey_id": "x", "description": "", "questions": []}"#).is_err());
-        assert!(Survey::from_json(r#"{"survey_id": 1, "description": "", "questions": [], "typo": 1}"#).is_err());
+        assert!(
+            Survey::from_json(r#"{"survey_id": 1, "title": "T", "description": "", "questions": [], "typo": 1}"#)
+                .is_err()
+        );
     }
 
     #[test]

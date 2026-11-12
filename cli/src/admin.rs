@@ -212,7 +212,7 @@ pub fn describe(survey: &Survey) -> String {
     format!(
         "{}: {} ({} questions{scored})",
         survey.id,
-        survey.description,
+        survey.title,
         survey.questions.len()
     )
 }
@@ -285,16 +285,16 @@ mod tests {
         let repo = repo();
         let listed = ok(&repo, survey_action(SurveyAction::List)).await;
         let expected = [
-            "1: Starship achievements survey (4 questions) [closed: no pass phrase]",
-            "2: You were chosen to follow a splendid course... (4 questions) [closed: no pass phrase]",
+            "1: SpaceX Starship (4 questions) [closed: no pass phrase]",
+            "2: Rust course (4 questions) [closed: no pass phrase]",
         ];
         assert_eq!(listed, expected.join("\n"));
 
         ok(&repo, pass_phrase(1, "open sesame")).await;
         let listed = ok(&repo, survey_action(SurveyAction::List)).await;
         let expected = [
-            "1: Starship achievements survey (4 questions)",
-            "2: You were chosen to follow a splendid course... (4 questions) [closed: no pass phrase]",
+            "1: SpaceX Starship (4 questions)",
+            "2: Rust course (4 questions) [closed: no pass phrase]",
         ];
         assert_eq!(listed, expected.join("\n"));
     }
@@ -336,7 +336,7 @@ mod tests {
 
     #[tokio::test]
     async fn scores_need_a_scored_survey_and_answers() {
-        let quiz = r#"{"survey_id": 3, "description": "Quiz",
+        let quiz = r#"{"survey_id": 3, "title": "Quiz", "description": "A quiz",
             "questions": [{"question": "Q?", "answer_type": "text", "correct_answer": "a"}]}"#;
         let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, quiz]);
         repo.set_pass_phrase(3, "open sesame").await.unwrap();
@@ -396,7 +396,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_missing_answer_is_a_dash_and_a_line_break_a_space() {
-        let quiz = r#"{"survey_id": 3, "description": "Quiz",
+        let quiz = r#"{"survey_id": 3, "title": "Quiz", "description": "A quiz",
             "questions": [{"question": "A?", "answer_type": "text"}, {"question": "B?", "answer_type": "text"}]}"#;
         let repo = MemoryRepo::with_surveys([quiz]);
         let survey = prono::survey(&repo, 3).await.unwrap();

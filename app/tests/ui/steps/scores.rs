@@ -3,13 +3,13 @@ use std::cell::Cell;
 use cucumber::{given, then, when};
 use prono_api::Answer;
 
-use crate::fake_backend::{PASS_PHRASE, QUIZ_DESCRIPTION, QUIZ_ID};
+use crate::fake_backend::{PASS_PHRASE, QUIZ_ID, QUIZ_TITLE};
 use crate::world::World;
 
 #[given(expr = "I answer the quiz as {string}")]
 #[when(expr = "I answer the quiz as {string}")]
 fn answer_quiz(world: &mut World, name: String) {
-    world.answer_survey_as(&name, QUIZ_DESCRIPTION, PASS_PHRASE);
+    world.answer_survey_as(&name, QUIZ_TITLE, PASS_PHRASE);
 }
 
 #[given(expr = "{string} already got {int} answers of the quiz right from another device")]

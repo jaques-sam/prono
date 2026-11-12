@@ -66,8 +66,16 @@ const CARD_CORNER_RADIUS: u8 = 16;
 /// The space between the elements in the card.
 const CARD_ITEM_SPACING: egui::Vec2 = egui::vec2(12.0, 12.0);
 
-/// Draws `content` in a rounded square, centered in the available space.
+/// Draws `content` in a rounded square, centered in the available space. When
+/// the window is smaller than the card, the window scrolls vertically.
 fn card<R>(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    egui::ScrollArea::vertical()
+        .auto_shrink(false)
+        .show(ui, |ui| centered_card(ui, content))
+        .inner
+}
+
+fn centered_card<R>(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let width = ui.available_width().min(CARD_MAX_WIDTH);
     ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
         ui.allocate_ui_with_layout(
@@ -372,5 +380,32 @@ mod tests {
             "{content:?}"
         );
         assert!(content.width() < window, "{content:?}");
+    }
+
+    #[test]
+    fn card_scrolls_when_the_window_is_smaller_than_its_content() {
+        let top = Rc::new(Cell::new(0.0_f32));
+        let seen = Rc::clone(&top);
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(600.0, 300.0))
+            .build_ui(move |ui| {
+                card(ui, |ui| {
+                    ui.allocate_space(egui::vec2(10.0, 1000.0));
+                    seen.set(ui.min_rect().top());
+                });
+            });
+        harness.run();
+        let before = top.get();
+
+        harness.hover_at(egui::pos2(300.0, 150.0));
+        harness.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -200.0),
+            phase: egui::TouchPhase::Move,
+            modifiers: egui::Modifiers::NONE,
+        });
+        harness.run();
+
+        assert!(top.get() < before - 100.0, "before: {before}, after: {}", top.get());
     }
 }

@@ -12,6 +12,7 @@ const ADDRESS: (&str, u16) = ("0.0.0.0", 8081);
 const ALLOWED_ORIGINS: &[&str] = &[
     "https://jaques-sam.github.io",
     "https://prono-app.samagali.myds.me",
+    "https://kr8ium.com/survey",
     "http://127.0.0.1:8080",
     "http://localhost:8080",
     "http://127.0.0.1:8888",

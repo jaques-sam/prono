@@ -36,4 +36,4 @@ Feature: Changing my name
     Given I am answering the survey as "Sam Smith"
     And the server does not respond
     When I submit my answers
-    Then the "Change name" button is disabled
+    Then the "Other survey" button is disabled

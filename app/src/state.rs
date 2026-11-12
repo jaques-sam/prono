@@ -32,9 +32,10 @@ pub enum Action {
     ResetAnswers,
     Submit,
     ChooseAnotherSurvey,
-    /// Back from the questions to the name fields, e.g. after the name was
-    /// refused.
-    ChangeName,
+    /// Back from the questions to the start screen (the "Other survey"
+    /// button), e.g. after the name was refused; ignored while a request is in
+    /// flight.
+    OtherSurvey,
     DismissError,
 }
 
@@ -154,7 +155,7 @@ impl State {
             }
             Action::Submit => self.submit(backend),
             Action::ChooseAnotherSurvey => self.back_to_start(),
-            Action::ChangeName => {
+            Action::OtherSurvey => {
                 // Only while nothing is in flight: a submission must not
                 // finish unseen.
                 if !self.is_busy() {
@@ -1094,7 +1095,7 @@ mod tests {
     fn lookup_does_not_outlive_the_questions() {
         let backend = FakeBackend::new(None).with_results(Some(Ok(results_of("Sam Smith", 4, 2033))));
         let mut state = started("Sam Smith", &backend);
-        state.apply(Action::ChangeName, &backend);
+        state.apply(Action::OtherSurvey, &backend);
         state.poll(&backend);
         assert!(matches!(state.phase, Phase::Start));
         start(&mut state, SURVEY_ID, &backend);
@@ -1111,7 +1112,7 @@ mod tests {
         state.poll(&backend);
         assert!(state.error.is_some());
 
-        state.apply(Action::ChangeName, &backend);
+        state.apply(Action::OtherSurvey, &backend);
         assert!(matches!(state.phase, Phase::Start));
         assert!(state.error.is_none());
         assert_eq!((state.first_name.as_str(), state.last_name.as_str()), ("Sam", "Smith"));
@@ -1123,7 +1124,7 @@ mod tests {
         let backend = FakeBackend::new(None);
         let mut state = answering("Sam Smith");
         state.apply(Action::Submit, &backend);
-        state.apply(Action::ChangeName, &backend);
+        state.apply(Action::OtherSurvey, &backend);
         assert!(matches!(state.phase, Phase::Answering { .. }));
         assert!(state.is_busy());
     }

@@ -141,7 +141,7 @@ fn submit_pass_phrase(world: &mut World) {
 #[given("I go back to change my name")]
 #[when("I go back to change my name")]
 fn change_name(world: &mut World) {
-    world.click_button("Change name");
+    world.click_button("Other survey");
 }
 
 #[then(expr = "the name fields show {string} and {string}")]

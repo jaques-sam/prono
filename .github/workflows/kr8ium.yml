@@ -1,46 +1,53 @@
 name: Deploy to kr8ium.com
 
-# Keeps https://kr8ium.com/$KR8_REMOTE_DIR in sync with the release branch.
+# Keeps https://kr8ium.com/$KR8_URL_PATH in sync with the release branch.
 #
-# Repository secrets (Settings > Secrets and variables > Actions):
-#   KR8_SSH_KEY          private key (OpenSSH format) of the deploy user
-#   KR8_SSH_HOST     the ssh host
-#   KR8_SSH_USER     the ssh user
-#   KR8_KNOWN_HOSTS  the host's line(s) of `ssh-keyscan <host>`, to pin the host key
-#   KR8_REMOTE_DIR   directory on the server (relative to the ssh login dir) = path on kr8ium.com
-#                    (may be a repository variable instead of a secret)
+# Configured in the `kr8ium` environment (Settings > Environments), which only allows the release branch:
+#   KR8_SSH_KEY      secret: private key (OpenSSH format) of the deploy user
+#   KR8_SSH_HOST     secret: the ssh host
+#   KR8_SSH_USER     secret: the ssh user
+#   KR8_KNOWN_HOSTS  secret: the host's line(s) of `ssh-keyscan <host>`, to pin the host key
+#   KR8_REMOTE_DIR   variable: directory on the server, relative to the ssh login dir (the web root + the app dir)
+#   KR8_URL_PATH     variable: the same directory as seen from the web, i.e. the path after `kr8ium.com/`
 on:
   push:
     branches:
       - release
   workflow_dispatch:
 
+# Two overlapping `rsync --delete` runs would leave a mix of builds; never cancel one halfway either.
 concurrency:
   group: kr8ium-deploy
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: read # checkout only: the upload goes over ssh, not with the GITHUB_TOKEN
 
 jobs:
   deploy:
     name: Build and upload
     runs-on: ubuntu-latest
+    environment: kr8ium
     env:
-      KR8_REMOTE_DIR: ${{ secrets.KR8_REMOTE_DIR || vars.KR8_REMOTE_DIR }}
+      KR8_REMOTE_DIR: ${{ vars.KR8_REMOTE_DIR }}
+      KR8_URL_PATH: ${{ vars.KR8_URL_PATH }}
     steps:
       - uses: actions/checkout@v4
-      - name: Validate the remote directory
-        # rsync --delete into an empty, absolute or `..` path would wipe the wrong directory
+      - name: Validate the paths
+        # `rsync --delete` into an empty, absolute or `..` path would wipe the wrong directory, and a wildcard
+        # (`?`, `*`) would be expanded by the remote shell: only plain relative paths are accepted.
         run: |
-          dir="${KR8_REMOTE_DIR%/}"
-          case "$dir" in
-            ''|/*|*..*) echo "::error::KR8_REMOTE_DIR must be a non-empty relative path without '..'"; exit 1 ;;
-          esac
+          for name in KR8_REMOTE_DIR KR8_URL_PATH; do
+            value="${!name%/}"
+            if [[ ! "$value" =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ || "$value" == *..* ]]; then
+              echo "::error::$name must be a relative path of letters, digits, '.', '_', '-' and '/' (no '..'), got '$value'"
+              exit 1
+            fi
+          done
       - name: Build
         uses: ./.github/actions/trunk-build
         with:
-          public-url: "https://kr8ium.com/${{ env.KR8_REMOTE_DIR }}/"
+          public-url: "https://kr8ium.com/${{ env.KR8_URL_PATH }}/"
       - name: Set up ssh
         run: |
           install -m 700 -d ~/.ssh

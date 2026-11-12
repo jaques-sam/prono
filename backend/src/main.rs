@@ -12,7 +12,7 @@ const ADDRESS: (&str, u16) = ("0.0.0.0", 8081);
 const ALLOWED_ORIGINS: &[&str] = &[
     "https://jaques-sam.github.io",
     "https://prono-app.samagali.myds.me",
-    "https://kr8ium.com/survey",
+    "https://kr8ium.com",
     "http://127.0.0.1:8080",
     "http://localhost:8080",
     "http://127.0.0.1:8888",
@@ -52,4 +52,18 @@ async fn run() -> Result<(), String> {
     .run()
     .await
     .map_err(|err| err.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ALLOWED_ORIGINS;
+
+    /// A browser sends `scheme://host[:port]` as `Origin`, never a path, so an entry with a path never matches.
+    #[test]
+    fn allowed_origins_have_no_path() {
+        for origin in ALLOWED_ORIGINS {
+            let (_, authority) = origin.split_once("://").expect("origin has a scheme");
+            assert!(!authority.contains('/'), "origin {origin} must not contain a path");
+        }
+    }
 }

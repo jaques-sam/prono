@@ -346,6 +346,7 @@ mod tests {
         let repo = repo();
         let survey = prono::survey(&repo, 2).await.unwrap();
         repo.set_pass_phrase(2, "rust rocks").await.unwrap();
+        repo.allow_user(2, "Ann", "Lee").await.unwrap();
         let submission = Submission::new("Ann Lee", &survey, &samples::course_answers()).with_pass_phrase("rust rocks");
         prono::submit(&repo, 2, "dev-1", &submission).await.unwrap();
 

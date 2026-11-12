@@ -4,9 +4,9 @@
 use std::iter::once;
 
 use prono::Repo;
-use prono_api::{Answer, Question, Results, Survey};
+use prono_api::{Answer, Question, Results, Survey, check_name_parts};
 
-use crate::commands::{Commands, SurveyAction, UserAction};
+use crate::commands::{Commands, NameAction, SurveyAction, UserAction};
 
 /// Runs `command` and returns what to tell the administrator.
 ///
@@ -53,6 +53,7 @@ async fn surveys(repo: &dyn Repo, action: SurveyAction) -> Result<String, String
             ))
         }
         SurveyAction::PassPhrase { survey_id, pass_phrase } => set_pass_phrase(repo, survey_id, &pass_phrase).await,
+        SurveyAction::Names { action } => names(repo, action).await,
         SurveyAction::Scores { survey_id } => {
             let scores = prono::scores(repo, survey_id).await.map_err(|e| e.to_string())?;
             if scores.is_empty() {
@@ -107,6 +108,59 @@ async fn set_pass_phrase(repo: &dyn Repo, survey_id: u64, pass_phrase: &str) -> 
     Ok(format!(
         "Pass phrase of survey {survey_id} set. It opens survey(s) {opened}."
     ))
+}
+
+/// Changes or shows the name list of a survey that has one.
+async fn names(repo: &dyn Repo, action: NameAction) -> Result<String, String> {
+    match action {
+        NameAction::Allow {
+            survey_id,
+            first_name,
+            last_name,
+        } => {
+            require_name_list(repo, survey_id).await?;
+            let name = check_name_parts(&first_name, &last_name).map_err(|e| e.to_string())?;
+            repo.allow_user(survey_id, first_name.trim(), last_name.trim())
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(format!("'{name}' may answer survey {survey_id}."))
+        }
+        NameAction::Disallow {
+            survey_id,
+            first_name,
+            last_name,
+        } => {
+            require_name_list(repo, survey_id).await?;
+            let name = check_name_parts(&first_name, &last_name).map_err(|e| e.to_string())?;
+            repo.disallow_user(survey_id, first_name.trim(), last_name.trim())
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(format!("'{name}' may no longer answer survey {survey_id}."))
+        }
+        NameAction::Show { survey_id } => {
+            require_name_list(repo, survey_id).await?;
+            let names = repo.allowed_users(survey_id).await.map_err(|e| e.to_string())?;
+            if names.is_empty() {
+                return Ok(format!("Nobody is on the list of survey {survey_id}."));
+            }
+            Ok(lines(names.iter().map(|(first_name, last_name)| {
+                prono_api::full_name(first_name, last_name)
+            })))
+        }
+    }
+}
+
+/// Fails unless survey `survey_id` exists and has a name list: a list of a
+/// survey that does not check it would silently do nothing.
+async fn require_name_list(repo: &dyn Repo, survey_id: u64) -> Result<(), String> {
+    let survey = prono::survey(repo, survey_id).await.map_err(|e| e.to_string())?;
+    if survey.name_list {
+        Ok(())
+    } else {
+        Err(format!(
+            "survey {survey_id} has no name list: add `\"name_list\": true` to its definition and upload it again"
+        ))
+    }
 }
 
 /// The names of everybody who answered survey `survey_id`, in order.
@@ -334,6 +388,82 @@ mod tests {
         assert_eq!(prono::surveys(&repo).await.unwrap(), Vec::<Survey>::new());
     }
 
+    fn names(action: NameAction) -> Commands {
+        survey_action(SurveyAction::Names { action })
+    }
+
+    fn allow(survey_id: u64, first_name: &str, last_name: &str) -> Commands {
+        names(NameAction::Allow {
+            survey_id,
+            first_name: first_name.into(),
+            last_name: last_name.into(),
+        })
+    }
+
+    fn disallow(survey_id: u64, first_name: &str, last_name: &str) -> Commands {
+        names(NameAction::Disallow {
+            survey_id,
+            first_name: first_name.into(),
+            last_name: last_name.into(),
+        })
+    }
+
+    #[tokio::test]
+    async fn names_are_put_on_and_taken_off_the_list_of_a_name_list_survey() {
+        let repo = repo();
+        let show = || names(NameAction::Show { survey_id: 2 });
+        assert_eq!(ok(&repo, show()).await, "Nobody is on the list of survey 2.");
+
+        assert_eq!(
+            ok(&repo, allow(2, "Ada", "Lovelace")).await,
+            "'Ada Lovelace' may answer survey 2."
+        );
+        // Surrounding spaces are not part of a name, and doing it twice is no problem.
+        ok(&repo, allow(2, " Bob ", "Ray ")).await;
+        ok(&repo, allow(2, "Bob", "Ray")).await;
+        assert_eq!(ok(&repo, show()).await, "Ada Lovelace\nBob Ray");
+
+        assert_eq!(
+            ok(&repo, disallow(2, "Ada", "Lovelace")).await,
+            "'Ada Lovelace' may no longer answer survey 2."
+        );
+        assert_eq!(ok(&repo, show()).await, "Bob Ray");
+    }
+
+    #[tokio::test]
+    async fn the_list_lets_a_name_answer_the_survey() {
+        let repo = repo();
+        repo.set_pass_phrase(2, "rust rocks").await.unwrap();
+        let survey = samples::course();
+        let submission = prono_api::Submission::new("Ada Lovelace", &survey, &samples::course_answers())
+            .with_pass_phrase("rust rocks");
+        assert!(prono::submit(&repo, 2, "dev-1", &submission).await.is_err());
+
+        ok(&repo, allow(2, "Ada", "Lovelace")).await;
+        prono::submit(&repo, 2, "dev-1", &submission).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_name_list_needs_a_survey_that_has_one_and_a_proper_name() {
+        let repo = repo();
+        // Survey 1 does not check a name list, so a list would silently do nothing.
+        for command in [
+            allow(1, "Ada", "Lovelace"),
+            disallow(1, "Ada", "Lovelace"),
+            names(NameAction::Show { survey_id: 1 }),
+        ] {
+            let message = err(&repo, command).await;
+            assert!(message.contains("survey 1 has no name list"), "{message}");
+        }
+        assert!(err(&repo, allow(9, "Ada", "Lovelace")).await.contains("Unknown survey"));
+
+        for (first, last) in [("Ada", " "), ("", "Lovelace")] {
+            let message = err(&repo, allow(2, first, last)).await;
+            assert!(message.contains("name"), "{message}");
+        }
+        assert_eq!(repo.allowed_users(2).await.unwrap().len(), 0);
+    }
+
     #[tokio::test]
     async fn scores_need_a_scored_survey_and_answers() {
         let quiz = r#"{"survey_id": 3, "title": "Quiz", "description": "A quiz",
@@ -357,6 +487,8 @@ mod tests {
     /// questions, the sample ones to the rest.
     async fn answered_course(repo: &MemoryRepo, name: &str, device: &str, answers_to_first_two: [&str; 2]) {
         repo.set_pass_phrase(2, "rust rocks").await.unwrap();
+        let (first, last) = name.split_once(' ').unwrap();
+        repo.allow_user(2, first, last).await.unwrap();
         let survey = prono::survey(repo, 2).await.unwrap();
         let mut answers = samples::course_answers();
         for (slot, answer) in answers.iter_mut().zip(answers_to_first_two) {

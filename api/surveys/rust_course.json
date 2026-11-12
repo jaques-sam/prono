@@ -2,6 +2,7 @@
   "survey_id": 2,
   "title": "Rust course",
   "description": "You were chosen to follow a splendid course...",
+  "name_list": true,
   "questions": [
     {
       "question": "What is your background",

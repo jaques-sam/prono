@@ -59,6 +59,7 @@ impl World {
 #[given(expr = "I answer the course survey as {string}")]
 #[when(expr = "I answer the course survey as {string}")]
 fn answer_course(world: &mut World, name: String) {
+    world.session().backend.allow(COURSE_ID, &name);
     world.answer_survey_as(&name, &course().title, COURSE_PASS_PHRASE);
 }
 

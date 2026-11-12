@@ -78,6 +78,10 @@ cargo run --bin prono-cli -- surveys upload my_survey.json
   definition (there is no `access` key): set it with `prono-cli surveys pass-phrase <survey id> <pass phrase>`. A
   participant enters one pass phrase in the app and gets every survey that has it, so surveys for the same group can
   share one. Until a survey has a pass phrase it stays closed.
+- `name_list` is optional (default `false`). With `"name_list": true` only the participants on the survey's name list
+  may answer it, on top of the pass phrase, which is always needed: put names on it with
+  `prono-cli surveys names allow <survey id> <first name> <last name>` (names are matched ignoring case). A name that
+  is not on the list is refused when the answers are submitted.
 - `link` is optional; `possible_answers` is for `poll` questions only. So is `other_label`, the name of the free
   answer next to the options (default: `Other`), for questions where that does not fit.
 - **Scores:** give every question a `correct_answer` (text or option for `text` and `poll`,

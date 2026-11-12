@@ -22,7 +22,9 @@
 //! `title` is the short name on the button to choose the survey; the
 //! `description` is shown once the survey is opened. `link` is optional. There is no access key: every survey is opened by its
 //! pass phrase, which is set with `prono-cli surveys pass-phrase` and lives in
-//! the backend's database, never in the definition. `possible_answers` is for `poll` questions only, and so is `other_label`:
+//! the backend's database, never in the definition. `name_list` is optional (`false`):
+//! when `true`, only the names on the survey's list (`prono-cli surveys names`) may answer it,
+//! on top of the pass phrase, which is always needed. `possible_answers` is for `poll` questions only, and so is `other_label`:
 //! the name of the free answer, "Other" when left out. A `correct_answer`
 //! makes the survey scored, and then every question needs one.
 
@@ -42,6 +44,8 @@ struct SurveyFile {
     description: String,
     #[serde(default)]
     link: Option<String>,
+    #[serde(default)]
+    name_list: bool,
     questions: Vec<QuestionFile>,
 }
 
@@ -208,6 +212,7 @@ impl Survey {
             title,
             description: file.description,
             link: file.link,
+            name_list: file.name_list,
             scored: with_answer != 0,
             questions,
         })
@@ -296,6 +301,23 @@ mod tests {
 
         let titled = r#"{"survey_id": 1, "title": "New", "description": "Old survey", "questions": []}"#;
         assert_eq!(Survey::from_stored_json(titled).unwrap().title, "New");
+    }
+
+    #[test]
+    fn a_survey_has_a_name_list_only_when_it_says_so() {
+        let with = |key: &str| {
+            Survey::from_json(&format!(
+                r#"{{"survey_id": 1, "title": "T", "description": "", {key} "questions": []}}"#
+            ))
+        };
+        assert!(!with("").unwrap().name_list);
+        assert!(!with(r#""name_list": false,"#).unwrap().name_list);
+        assert!(with(r#""name_list": true,"#).unwrap().name_list);
+        for bad in [r#""name_list": "yes","#, r#""name_list": null,"#, r#""name_list": 1,"#] {
+            assert!(with(bad).is_err(), "{bad}");
+        }
+        assert!(samples::course().name_list);
+        assert!(!samples::starship().name_list);
     }
 
     #[test]

@@ -101,7 +101,9 @@ impl ResponseError for ApiError {
             ApiError::MissingDeviceId => StatusCode::BAD_REQUEST,
             ApiError::Prono(err) => match err {
                 Error::Invalid(_) | Error::InvalidDeviceId | Error::InvalidSurvey(_) => StatusCode::BAD_REQUEST,
-                Error::DeviceMismatch | Error::DeviceInUse | Error::WrongPassPhrase => StatusCode::FORBIDDEN,
+                Error::DeviceMismatch | Error::DeviceInUse | Error::NotListed | Error::WrongPassPhrase => {
+                    StatusCode::FORBIDDEN
+                }
                 Error::AnswerExists => StatusCode::CONFLICT,
                 Error::Repository(_) => StatusCode::INTERNAL_SERVER_ERROR,
             },
@@ -163,6 +165,7 @@ mod tests {
         let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON, QUIZ]);
         repo.set_pass_phrase(SURVEY_ID, PASS_PHRASE).await.unwrap();
         repo.set_pass_phrase(COURSE_ID, COURSE_PASS_PHRASE).await.unwrap();
+        repo.allow_user(COURSE_ID, "Ada", "Lovelace").await.unwrap();
         repo.set_pass_phrase(QUIZ_ID, PASS_PHRASE).await.unwrap();
         let repo: web::Data<dyn Repo> = web::Data::from(Arc::new(repo) as Arc<dyn Repo>);
         let app = actix_test::init_service(App::new().app_data(repo).configure(routes)).await;
@@ -273,6 +276,16 @@ mod tests {
         .await;
         assert_eq!(statuses, [StatusCode::FORBIDDEN, StatusCode::OK]);
         assert_eq!(body, "");
+    }
+
+    #[actix_web::test]
+    async fn a_name_list_survey_refuses_a_name_that_is_not_on_its_list() {
+        let survey = samples::course();
+        let submission =
+            Submission::new("Bob Ray", &survey, &samples::course_answers()).with_pass_phrase(COURSE_PASS_PHRASE);
+        let (statuses, body) = run(vec![post(COURSE_ID, Some("dev-1"), API_KEY, &submission)]).await;
+        assert_eq!(statuses, [StatusCode::FORBIDDEN]);
+        assert_eq!(body, "\"You are not on the list for this survey\"");
     }
 
     #[actix_web::test]

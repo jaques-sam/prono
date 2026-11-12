@@ -22,6 +22,11 @@ pub struct Survey {
     /// What the survey is about, shown once it is opened.
     pub description: String,
     pub link: Option<String>,
+    /// Whether, besides the pass phrase, the participant's name has to be on
+    /// the survey's name list (`prono-cli surveys names`). The list itself
+    /// never leaves the backend.
+    #[serde(default)]
+    pub name_list: bool,
     /// Whether every question has a correct answer, so the participants get
     /// a [`Score`]. The correct answers themselves never leave the backend.
     pub scored: bool,
@@ -398,6 +403,7 @@ mod tests {
             title: "Test".into(),
             description: "Test".into(),
             link: None,
+            name_list: false,
             scored: false,
             questions: vec![
                 Question {

@@ -85,6 +85,13 @@ impl FakeBackend {
         Self::now(self.repo.set_pass_phrase(survey_id, pass_phrase)).expect("setting succeeds");
     }
 
+    /// The administrator puts `user` ("First Last") on the name list of survey
+    /// `survey_id`.
+    pub fn allow(&self, survey_id: u64, user: &str) {
+        let (first, last) = user.split_once(' ').expect("a first and a last name");
+        Self::now(self.repo.allow_user(survey_id, first, last)).expect("listing succeeds");
+    }
+
     /// Lets every request fail like an unreachable server.
     pub fn go_offline(&self) {
         self.submitting.set(Health::Unreachable);
@@ -115,7 +122,8 @@ impl FakeBackend {
     }
 
     /// `user` answered every question of survey `survey_id` earlier, from
-    /// `device_id`, with the answer `answer_to` gives for each question.
+    /// `device_id`, with the answer `answer_to` gives for each question. A
+    /// survey with a name list had them on it.
     pub fn seed_answers(
         &self,
         survey_id: u64,
@@ -125,6 +133,9 @@ impl FakeBackend {
     ) {
         let survey = Self::now(prono::survey(&self.repo, survey_id)).expect("the seeded survey exists");
         let answers: Vec<_> = survey.questions.iter().map(&mut answer_to).collect();
+        if survey.name_list {
+            self.allow(survey_id, user);
+        }
         let submission = Submission::new(user, &survey, &answers).with_pass_phrase(pass_phrase_of(survey_id));
         Self::now(prono::submit(&self.repo, survey_id, device_id, &submission)).expect("seeding succeeds");
     }

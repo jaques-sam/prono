@@ -38,18 +38,28 @@ CREATE TABLE IF NOT EXISTS SurveyPassPhrase (
     pass_phrase VARCHAR(255) NOT NULL
 );
 
+-- The name list of a survey with `"name_list": true`: besides the pass phrase,
+-- only these participants may answer it. Set with `prono-cli surveys names`.
+CREATE TABLE IF NOT EXISTS SurveyAllowedUser (
+    survey_id BIGINT UNSIGNED NOT NULL,
+    first_name VARCHAR(255) NOT NULL,
+    last_name VARCHAR(255) NOT NULL,
+    PRIMARY KEY (survey_id, first_name, last_name)
+);
+
 -- Existing tables keep the character set they were created with: convert them.
 ALTER TABLE Users CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 ALTER TABLE AnswerResponse CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 ALTER TABLE Survey CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+ALTER TABLE SurveyAllowedUser CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 ALTER TABLE SurveyPassPhrase CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
 -- Surveys used to have an `"access"` key (a pass phrase or a name list). Every
 -- survey has a pass phrase now and the key is no longer valid in a definition:
 -- strip it from the stored ones. Run this before (or while) deploying the
--- backend that no longer reads it. The old name lists (table
--- `SurveyAllowedUser`) are not used any more and are left alone: drop the table
--- when you no longer need them. Surveys that had a name list have no pass
--- phrase: set one with `prono-cli surveys pass-phrase`.
+-- backend that no longer reads it. The name lists (table `SurveyAllowedUser`)
+-- are used again, by the surveys that say `"name_list": true`: re-upload those
+-- surveys with that key. Surveys that had a name list have no pass phrase: set
+-- one with `prono-cli surveys pass-phrase`.
 UPDATE Survey SET definition = JSON_REMOVE(definition, '$.access')
     WHERE JSON_CONTAINS_PATH(definition, 'one', '$.access');

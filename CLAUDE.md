@@ -89,7 +89,7 @@ See the Architecture section of `README.md`. In short: every survey type is defi
 - **api/** (`prono_api`): the model shared by every binary, wasm-safe
   - `Survey`, `Question`, `AnswerKind`, `Answer`, `Submission`, `Results`
   - The survey definition: `Survey::from_json` (`api/src/definition.rs`). Surveys are uploaded to the backend's database (`prono-cli surveys upload`), never embedded; `api/surveys/*.json` are examples, also the test fixtures of the `samples` feature
-  - There is no `access` key in a definition: every survey is opened by its pass phrase (`prono-cli surveys pass-phrase`, stored in the backend's database only), and the apps get surveys solely through `POST /api/surveys` with a pass phrase; `correct_answer`s (all or none) make a survey scored, and they never serialize, so they stay on the backend
+  - There is no `access` key in a definition: every survey is opened by its pass phrase (`prono-cli surveys pass-phrase`, stored in the backend's database only), and the apps get surveys solely through `POST /api/surveys` with a pass phrase; `correct_answer`s (all or none) make a survey scored, and they never serialize, so they stay on the backend; the optional `name_list` boolean additionally restricts a survey to the names on its list (`prono-cli surveys names`, table `SurveyAllowedUser`), checked by `submit`, never replacing the pass phrase
   - The rules (`Submission::validate`, `check_user_name`, `Answer::is_valid_for`) and the REST contract (`surveys_path`, `answers_path`, `API_KEY`, `DEVICE_ID_HEADER`)
   - Question ids hash the question text and answer kind; stored answers reference them, so `existing_question_ids_are_stable` must keep passing
 

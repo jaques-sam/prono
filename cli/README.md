@@ -20,6 +20,9 @@ It has the following functionality:
     it replaces the survey with the same id
   - `surveys pass-phrase <survey id> <phrase>`: the pass phrase that opens a survey, stored in `SurveyPassPhrase`
     (the survey stays closed until it is set; surveys with the same pass phrase are shown together)
+  - `surveys names allow|disallow <survey id> <first name> <last name>` and `surveys names show <survey id>`: the
+    name list of a survey with `"name_list": true`, stored in `SurveyAllowedUser`; besides the pass phrase, only those
+    names (compared ignoring case) may answer it
   - `surveys scores <survey id>`: the ranking of a scored survey
 - users:
   - show all

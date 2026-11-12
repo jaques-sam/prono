@@ -15,7 +15,8 @@ const MAX_DEVICE_ID_LEN: usize = 255;
 ///
 /// [`Error::Invalid`] for a bad submission, [`Error::InvalidDeviceId`],
 /// [`Error::WrongPassPhrase`] when the submission does not carry the survey's
-/// pass phrase, [`Error::DeviceMismatch`], [`Error::DeviceInUse`],
+/// pass phrase, [`Error::NotListed`] when the survey has a name list that
+/// lacks the participant, [`Error::DeviceMismatch`], [`Error::DeviceInUse`],
 /// [`Error::AnswerExists`] when answered before, or a repository error.
 pub async fn submit(repo: &dyn Repo, survey_id: u64, device_id: &str, submission: &Submission) -> Result<()> {
     let survey = survey(repo, survey_id).await?;
@@ -26,6 +27,9 @@ pub async fn submit(repo: &dyn Repo, survey_id: u64, device_id: &str, submission
         .contains(&survey_id)
     {
         return Err(Error::WrongPassPhrase);
+    }
+    if survey.name_list && !repo.listed_surveys(&submission.user).await?.contains(&survey_id) {
+        return Err(Error::NotListed);
     }
 
     let user = submission.user.as_str();
@@ -237,13 +241,15 @@ mod tests {
         let option = poll.possible_answers[0].clone();
 
         let repo = repo().await;
-        for (user, device, vote) in [
-            ("Alice Smith", "dev-1", option.as_str()),
-            ("Bob Jones", "dev-2", "Haskell"),
+        for (first, last, device, vote) in [
+            ("Alice", "Smith", "dev-1", option.as_str()),
+            ("Bob", "Jones", "dev-2", "Haskell"),
         ] {
+            repo.allow_user(COURSE_ID, first, last).await.unwrap();
+            let user = format!("{first} {last}");
             let mut answers = samples::course_answers();
             answers[0] = Answer::Poll(vote.into());
-            let submission = Submission::new(user, &survey, &answers).with_pass_phrase(COURSE_PASS_PHRASE);
+            let submission = Submission::new(&user, &survey, &answers).with_pass_phrase(COURSE_PASS_PHRASE);
             submit(&repo, COURSE_ID, device, &submission).await.unwrap();
         }
 
@@ -338,8 +344,69 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_name_list_survey_needs_the_name_on_its_list_besides_the_pass_phrase() {
+        let repo = repo().await;
+        let attempt = |user: &str| course_submission(user);
+        let err = submit(&repo, COURSE_ID, "dev-1", &attempt("Ada Lovelace"))
+            .await
+            .unwrap_err();
+        assert_eq!(err, Error::NotListed);
+
+        // The list is the survey's own: being on another one does not count.
+        repo.allow_user(SURVEY_ID, "Ada", "Lovelace").await.unwrap();
+        let err = submit(&repo, COURSE_ID, "dev-1", &attempt("Ada Lovelace"))
+            .await
+            .unwrap_err();
+        assert_eq!(err, Error::NotListed);
+
+        // Being listed is not enough: the pass phrase is always needed, and a
+        // wrong one does not tell whether the name is listed.
+        repo.allow_user(COURSE_ID, "Ada", "Lovelace").await.unwrap();
+        for phrase in [PASS_PHRASE, ""] {
+            let wrong = attempt("Ada Lovelace").with_pass_phrase(phrase);
+            let err = submit(&repo, COURSE_ID, "dev-1", &wrong).await.unwrap_err();
+            assert_eq!(err, Error::WrongPassPhrase);
+        }
+        let err = submit(
+            &repo,
+            COURSE_ID,
+            "dev-1",
+            &attempt("Bob Ray").with_pass_phrase(PASS_PHRASE),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err, Error::WrongPassPhrase);
+        // Nothing was stored for the refused attempts.
+        assert_eq!(repo.users().await.unwrap(), Vec::<String>::new());
+
+        submit(&repo, COURSE_ID, "dev-1", &attempt("ada LOVELACE"))
+            .await
+            .unwrap();
+        assert_eq!(repo.users().await.unwrap(), ["ada LOVELACE"]);
+    }
+
+    #[tokio::test]
+    async fn a_survey_without_a_name_list_takes_any_name() {
+        let repo = repo().await;
+        repo.allow_user(COURSE_ID, "Ada", "Lovelace").await.unwrap();
+        submit(&repo, SURVEY_ID, "dev-1", &submission("Bob Ray")).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn names_can_be_taken_off_a_list() {
+        let repo = repo().await;
+        repo.allow_user(COURSE_ID, "Ada", "Lovelace").await.unwrap();
+        repo.disallow_user(COURSE_ID, "Ada", "Lovelace").await.unwrap();
+        let err = submit(&repo, COURSE_ID, "dev-1", &course_submission("Ada Lovelace"))
+            .await
+            .unwrap_err();
+        assert_eq!(err, Error::NotListed);
+    }
+
+    #[tokio::test]
     async fn every_survey_takes_only_its_own_pass_phrase() {
         let repo = repo().await;
+        repo.allow_user(COURSE_ID, "Ada", "Lovelace").await.unwrap();
         let course = Submission::new("Ada Lovelace", &samples::course(), &samples::course_answers());
         // The phrase of another survey does not open this one.
         let err = submit(&repo, COURSE_ID, "dev-1", &course.clone().with_pass_phrase(PASS_PHRASE))

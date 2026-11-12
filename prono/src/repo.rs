@@ -31,6 +31,21 @@ pub trait Repo: Send + Sync {
     /// so the question's kind tells how to decode them.
     async fn answers(&self, question: &Question) -> Result<Vec<UserAnswer>>;
 
+    /// The ids of the surveys whose name list holds `user`, given as the
+    /// participant's [`prono_api::full_name`] (compared like user names).
+    async fn listed_surveys(&self, user: &str) -> Result<Vec<u64>>;
+
+    /// Puts a participant on the name list of survey `survey_id`; a no-op if
+    /// already there.
+    async fn allow_user(&self, survey_id: u64, first_name: &str, last_name: &str) -> Result<()>;
+
+    /// Takes a participant off the name list of survey `survey_id`.
+    async fn disallow_user(&self, survey_id: u64, first_name: &str, last_name: &str) -> Result<()>;
+
+    /// The `(first name, last name)` pairs on the name list of survey
+    /// `survey_id`.
+    async fn allowed_users(&self, survey_id: u64) -> Result<Vec<(String, String)>>;
+
     /// The pass phrase of every survey that has one, as `(survey id, pass
     /// phrase)` pairs. Compare them exactly: the database's collation would
     /// ignore case.

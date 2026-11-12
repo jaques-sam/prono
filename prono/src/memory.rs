@@ -18,6 +18,8 @@ struct State {
     users: Vec<(String, String)>,
     /// `(user, question id, answer)`
     answers: Vec<(String, Uuid, Answer)>,
+    /// `(survey id, first name, last name)`
+    allowed: Vec<(u64, String, String)>,
     /// `(survey id, pass phrase)`
     pass_phrases: Vec<(u64, String)>,
     /// `(survey id, definition)`
@@ -98,6 +100,43 @@ impl Repo for MemoryRepo {
                 user: user.clone(),
                 answer: answer.clone(),
             })
+            .collect())
+    }
+
+    async fn listed_surveys(&self, user: &str) -> Result<Vec<u64>> {
+        // Like the database, names are compared ignoring case.
+        Ok(self
+            .state()
+            .allowed
+            .iter()
+            .filter(|(_, first, last)| prono_api::full_name(first, last).to_lowercase() == user.to_lowercase())
+            .map(|(survey_id, _, _)| *survey_id)
+            .collect())
+    }
+
+    async fn allow_user(&self, survey_id: u64, first_name: &str, last_name: &str) -> Result<()> {
+        let mut state = self.state();
+        let entry = (survey_id, first_name.to_string(), last_name.to_string());
+        if !state.allowed.contains(&entry) {
+            state.allowed.push(entry);
+        }
+        Ok(())
+    }
+
+    async fn disallow_user(&self, survey_id: u64, first_name: &str, last_name: &str) -> Result<()> {
+        self.state()
+            .allowed
+            .retain(|(id, first, last)| !(*id == survey_id && first == first_name && last == last_name));
+        Ok(())
+    }
+
+    async fn allowed_users(&self, survey_id: u64) -> Result<Vec<(String, String)>> {
+        Ok(self
+            .state()
+            .allowed
+            .iter()
+            .filter(|(id, _, _)| *id == survey_id)
+            .map(|(_, first, last)| (first.clone(), last.clone()))
             .collect())
     }
 

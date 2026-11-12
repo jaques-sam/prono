@@ -87,8 +87,10 @@ backend has none until one is uploaded. Every survey is opened by its pass phras
 set with `prono-cli surveys pass-phrase`: a participant only gets the surveys whose pass phrase they enter, and a
 survey without one stays closed. Run `install/schema.sql` (or `create_db.sh`) again when upgrading an existing
 database, **before** the new backend starts: it is idempotent, and it strips the `"access"` key that older surveys
-were uploaded with (a definition may not have it any more). The `SurveyAllowedUser` table of the removed name lists is
-left alone; drop it when you no longer need it, and give the surveys that had a name list a pass phrase. The script
+were uploaded with (a definition may not have it any more). The `SurveyAllowedUser` table holds the name lists of the
+surveys with `"name_list": true` (set with `prono-cli surveys names`): besides the pass phrase, a submission is only
+accepted from a listed name, else `403` with `"You are not on the list for this survey"`. Names left in that table by
+an earlier version count again as soon as the survey says `"name_list": true`. The script
 also converts a database and its tables to `utf8mb4`, which the
 emoji in surveys and answers need (`utf8mb3` fails with `Incorrect string value`); this needs a user with `ALTER`
 rights, so run it as root, like `create_db.sh` does.

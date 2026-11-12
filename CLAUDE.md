@@ -162,7 +162,7 @@ CI runs on push/PR via `.github/workflows/rust.yml`:
 - Checks, tests (with 80% coverage requirement), fmt, clippy, audit
 - Builds for multiple targets: Linux (x86_64, arm), macOS (x86_64, aarch64), Windows
 - Wasm32 validation and trunk build
-- Web deployment to GitHub Pages on `release` branch updates
+- Web deployment to GitHub Pages (`pages.yml`) on `main` branch updates, and to kr8ium.com (`kr8ium.yml`, over SSH) on `release` branch updates
 
 ## Notes
 

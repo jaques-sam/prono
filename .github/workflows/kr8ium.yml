@@ -1,0 +1,60 @@
+name: Deploy to kr8ium.com
+
+# Keeps https://kr8ium.com/$KR8_REMOTE_DIR in sync with the release branch.
+#
+# Repository secrets (Settings > Secrets and variables > Actions):
+#   KR8_SSH_KEY          private key (OpenSSH format) of the deploy user
+#   KR8_SSH_HOST     the ssh host
+#   KR8_SSH_USER     the ssh user
+#   KR8_KNOWN_HOSTS  the host's line(s) of `ssh-keyscan <host>`, to pin the host key
+#   KR8_REMOTE_DIR   directory on the server (relative to the ssh login dir) = path on kr8ium.com
+#                    (may be a repository variable instead of a secret)
+on:
+  push:
+    branches:
+      - release
+  workflow_dispatch:
+
+concurrency:
+  group: kr8ium-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build and upload
+    runs-on: ubuntu-latest
+    env:
+      KR8_REMOTE_DIR: ${{ secrets.KR8_REMOTE_DIR || vars.KR8_REMOTE_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the remote directory
+        # rsync --delete into an empty, absolute or `..` path would wipe the wrong directory
+        run: |
+          dir="${KR8_REMOTE_DIR%/}"
+          case "$dir" in
+            ''|/*|*..*) echo "::error::KR8_REMOTE_DIR must be a non-empty relative path without '..'"; exit 1 ;;
+          esac
+      - name: Build
+        uses: ./.github/actions/trunk-build
+        with:
+          public-url: "https://kr8ium.com/${{ env.KR8_REMOTE_DIR }}/"
+      - name: Set up ssh
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "$KR8_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          echo "$KR8_KNOWN_HOSTS" > ~/.ssh/known_hosts
+        env:
+          KR8_SSH_KEY: ${{ secrets.KR8_SSH_KEY }}
+          KR8_KNOWN_HOSTS: ${{ secrets.KR8_KNOWN_HOSTS }}
+      - name: Upload
+        run: |
+          rsync -rlptz --delete --human-readable --stats \
+            -e "ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            app/dist/ "$KR8_SSH_USER@$KR8_SSH_HOST:${KR8_REMOTE_DIR%/}/"
+        env:
+          KR8_SSH_USER: ${{ secrets.KR8_SSH_USER }}
+          KR8_SSH_HOST: ${{ secrets.KR8_SSH_HOST }}

@@ -1,0 +1,30 @@
+name: Trunk release build
+description: Builds the web app (`app/dist`) with Trunk for the given public URL.
+
+inputs:
+  public-url:
+    description: The URL the app is served from; Trunk prefixes every asset path with it.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Setup toolchain for wasm
+      shell: bash
+      run: |
+        rustup update stable
+        rustup default stable
+        rustup set profile minimal
+        rustup target add wasm32-unknown-unknown
+    - name: Rust Cache # cache the rust build artefacts
+      uses: Swatinem/rust-cache@v2
+    - name: Download and install Trunk binary
+      shell: bash
+      run: wget -qO- https://github.com/thedodd/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
+    - name: Build
+      shell: bash
+      # --public-url makes Trunk rewrite the hrefs (favicon.ico -> <public url>/favicon.ico); without it a page
+      # served from a sub path would request the assets from the host root and get a 404.
+      run: ./trunk build --release --config ./app --public-url "$PUBLIC_URL"
+      env:
+        PUBLIC_URL: ${{ inputs.public-url }}

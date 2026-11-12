@@ -10,7 +10,7 @@ use prono::Repo;
 use prono_api::Survey;
 
 use crate::admin::{self, describe};
-use crate::commands::{Commands, SurveyAction, UserAction};
+use crate::commands::{Commands, NameAction, SurveyAction, UserAction};
 
 /// How the menus talk to the administrator. Going back (Esc) is `None`.
 pub trait Prompt {
@@ -52,6 +52,7 @@ async fn surveys_menu(repo: &dyn Repo, prompt: &mut impl Prompt) {
         "List the surveys",
         "Upload a survey file",
         "Set the pass phrase of a survey",
+        "Manage the name list of a survey",
         "Show the scores of a survey",
         "Show the answers of a survey",
     ];
@@ -79,6 +80,12 @@ async fn surveys_menu(repo: &dyn Repo, prompt: &mut impl Prompt) {
                 }
             }
             3 => {
+                let Some(action) = name_list_action(repo, prompt).await else {
+                    continue;
+                };
+                SurveyAction::Names { action }
+            }
+            4 => {
                 let Some(survey) = pick_survey(repo, prompt, "Scores of which survey?", |survey| survey.scored).await
                 else {
                     continue;
@@ -99,6 +106,53 @@ async fn surveys_menu(repo: &dyn Repo, prompt: &mut impl Prompt) {
             }
         };
         execute(repo, prompt, Commands::Surveys { action }).await;
+    }
+}
+
+/// Asks which survey with a name list, and what to do with its list.
+async fn name_list_action(repo: &dyn Repo, prompt: &mut impl Prompt) -> Option<NameAction> {
+    let survey = pick_survey(repo, prompt, "Name list of which survey?", |survey| survey.name_list).await?;
+    let survey_id = survey.id;
+    match pick(
+        prompt,
+        "The name list (Esc goes back)",
+        &["Show the names", "Add a name", "Remove a name"],
+    )? {
+        0 => Some(NameAction::Show { survey_id }),
+        1 => {
+            let first_name = prompt.text("First name:")?;
+            let last_name = prompt.text("Last name:")?;
+            Some(NameAction::Allow {
+                survey_id,
+                first_name,
+                last_name,
+            })
+        }
+        _ => {
+            let names = match repo.allowed_users(survey_id).await {
+                Ok(names) => names,
+                Err(error) => {
+                    prompt.show(&format!("error: {error}"));
+                    return None;
+                }
+            };
+            let labels: Vec<String> = names
+                .iter()
+                .map(|(first_name, last_name)| prono_api::full_name(first_name, last_name))
+                .collect();
+            let index = pick_index(
+                prompt,
+                "Remove which name?",
+                &labels,
+                &format!("Nobody is on the list of survey {survey_id}."),
+            )?;
+            let (first_name, last_name) = names.into_iter().nth(index)?;
+            Some(NameAction::Disallow {
+                survey_id,
+                first_name,
+                last_name,
+            })
+        }
     }
 }
 
@@ -414,6 +468,75 @@ mod tests {
     async fn deleting_with_no_users_says_so() {
         let script = navigate(&repo(), [Pick("Users"), Pick("Delete"), Back, Back]).await;
         assert_eq!(script.shown, ["No users found."]);
+    }
+
+    #[tokio::test]
+    async fn the_name_list_is_managed_from_the_surveys_menu() {
+        let script = navigate(
+            &repo(),
+            [
+                Pick("Surveys"),
+                Pick("name list"),
+                Pick("Rust course"),
+                Pick("Add"),
+                Type("Ada"),
+                Type("Lovelace"),
+                Pick("name list"),
+                Pick("Rust course"),
+                Pick("Show"),
+                Pick("name list"),
+                Pick("Rust course"),
+                Pick("Remove"),
+                Pick("Ada Lovelace"),
+                Pick("name list"),
+                Pick("Rust course"),
+                Pick("Show"),
+                Back,
+                Back,
+            ],
+        )
+        .await;
+        // Only the surveys that have a name list are offered.
+        assert_eq!(script.menus[2], ["2: Rust course (4 questions)"]);
+        assert_eq!(script.menus[3], ["Show the names", "Add a name", "Remove a name"]);
+        assert_eq!(
+            script.shown,
+            [
+                "'Ada Lovelace' may answer survey 2.",
+                "Ada Lovelace",
+                "'Ada Lovelace' may no longer answer survey 2.",
+                "Nobody is on the list of survey 2.",
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn the_name_list_menu_changes_nothing_when_left_halfway() {
+        let repo = repo();
+        let script = navigate(
+            &repo,
+            [
+                Pick("Surveys"),
+                Pick("name list"),
+                Pick("Rust course"),
+                Pick("Add"),
+                Type("Ada"),
+                Back, // no last name
+                Pick("name list"),
+                Pick("Rust course"),
+                Pick("Remove"), // nobody to remove
+                Back,
+                Back,
+            ],
+        )
+        .await;
+        assert_eq!(script.shown, ["Nobody is on the list of survey 2."]);
+        assert_eq!(repo.allowed_users(2).await.unwrap(), Vec::<(String, String)>::new());
+
+        // Starship has no name list, so there is nothing to choose from.
+        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON]);
+        let script = navigate(&repo, [Pick("Surveys"), Pick("name list"), Back, Back]).await;
+        assert_eq!(script.shown, ["No surveys to choose from."]);
     }
 
     #[tokio::test]

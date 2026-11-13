@@ -172,3 +172,4 @@ CI runs on push/PR via `.github/workflows/rust.yml`:
 - Coverage excludes drawing, I/O and entry-point files per `.tarpaulin.toml`
 - Always add unit tests for all changes and bdd tests (./app/tests) for new app features
 - Bump the version in the backend/install/spk/INFO file if anything in backend is changed
+- No ticket number is needed in the commits, only if it would reference a github issue

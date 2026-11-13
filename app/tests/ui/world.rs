@@ -24,6 +24,10 @@ pub struct Session {
 /// follow-up (fetching the results) to arrive.
 const SETTLE_FRAMES: usize = 5;
 
+/// The size of the window, in points, unless a scenario resizes it.
+const WINDOW_WIDTH: f32 = 700.0;
+const WINDOW_HEIGHT: f32 = 1000.0;
+
 /// Where the app's clock starts, in seconds.
 const START_TIME: f64 = 100.0;
 
@@ -54,6 +58,8 @@ pub struct World {
     /// The time the app sees, in seconds. It only moves with [`World::wait`],
     /// so typing is instant and pauses are explicit.
     clock: f64,
+    /// Where the left side of the form was, before a scroll.
+    pub form_left: f32,
 }
 
 impl fmt::Debug for World {
@@ -72,14 +78,23 @@ impl World {
             state: State::default(),
             backend: FakeBackend::new(),
         };
-        let harness = Harness::builder().with_size(vec2(700.0, 1000.0)).build_ui_state(
-            |ui, session: &mut Session| prono_app::frame(ui, &mut session.state, &session.backend),
-            session,
-        );
+        let harness = Harness::builder()
+            .with_size(vec2(WINDOW_WIDTH, WINDOW_HEIGHT))
+            .build_ui_state(
+                |ui, session: &mut Session| prono_app::frame(ui, &mut session.state, &session.backend),
+                session,
+            );
         Self {
             harness,
             clock: START_TIME,
+            form_left: 0.0,
         }
+    }
+
+    /// Makes the window `width` points wide.
+    pub fn resize(&mut self, width: f32) {
+        self.harness.set_size(vec2(width, WINDOW_HEIGHT));
+        self.settle();
     }
 
     pub fn session(&self) -> &Session {

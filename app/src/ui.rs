@@ -54,6 +54,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) -> Option<Action> {
 
 /// The widest the card gets; on a wider window it stays centered.
 const CARD_MAX_WIDTH: f32 = 640.0;
+/// The narrowest the card gets; a narrower window scrolls sideways instead of
+/// squashing the content.
+const CARD_MIN_WIDTH: f32 = 480.0;
 /// The space inside the card, between its border and its elements.
 const CARD_PADDING: i8 = 20;
 /// The space between the card and the edge of the window.
@@ -67,11 +70,17 @@ const CARD_CORNER_RADIUS: u8 = 16;
 const CARD_ITEM_SPACING: egui::Vec2 = egui::vec2(12.0, 12.0);
 
 /// Draws `content` in a rounded square, centered in the available space. When
-/// the window is smaller than the card, the window scrolls vertically.
+/// the window is smaller than the card, the window scrolls, vertically and
+/// horizontally.
 fn card<R>(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui) -> R) -> R {
-    egui::ScrollArea::vertical()
+    // Inside a horizontal scroll area the available width is unbounded.
+    let window_width = ui.available_width();
+    egui::ScrollArea::both()
         .auto_shrink(false)
-        .show(ui, |ui| centered_card(ui, content))
+        .show(ui, |ui| {
+            ui.set_width(window_width.max(CARD_MIN_WIDTH));
+            centered_card(ui, content)
+        })
         .inner
 }
 
@@ -373,7 +382,7 @@ mod tests {
 
     #[test]
     fn card_fills_a_narrow_window() {
-        let window = 400.0;
+        let window = CARD_MIN_WIDTH + 40.0;
         let content = content_rect(window);
 
         assert!(
@@ -381,6 +390,36 @@ mod tests {
             "{content:?}"
         );
         assert!(content.width() < window, "{content:?}");
+    }
+
+    #[test]
+    fn card_is_not_squashed_below_its_minimum_width() {
+        let narrow = content_rect(CARD_MIN_WIDTH - 150.0);
+        let minimum = content_rect(CARD_MIN_WIDTH);
+
+        assert!((narrow.width() - minimum.width()).abs() < 1.0, "{narrow:?} {minimum:?}");
+    }
+
+    #[test]
+    fn card_scrolls_sideways_when_the_window_is_narrower_than_its_minimum_width() {
+        let left = Rc::new(Cell::new(0.0_f32));
+        let seen = Rc::clone(&left);
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(CARD_MIN_WIDTH - 150.0, 300.0))
+            .build_ui(move |ui| card(ui, |ui| seen.set(ui.min_rect().left())));
+        harness.run();
+        let before = left.get();
+
+        harness.hover_at(egui::pos2(100.0, 150.0));
+        harness.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(-100.0, 0.0),
+            phase: egui::TouchPhase::Move,
+            modifiers: egui::Modifiers::NONE,
+        });
+        harness.run();
+
+        assert!(left.get() < before - 50.0, "before: {before}, after: {}", left.get());
     }
 
     #[test]

@@ -133,44 +133,56 @@ fn error_banner(ui: &mut egui::Ui, error: &str) -> Option<Action> {
         .inner
 }
 
-/// A single-line text field with a `label` the screen readers know it by.
+/// The width of a "Submit" button next to a text field, so that both together
+/// are as wide as a text field alone.
+const SUBMIT_WIDTH: f32 = 72.0;
+
+/// A row of the form: a `label` the screen readers know the single-line text
+/// field by. Call it in a grid, so the fields line up.
 fn labelled_text_edit(ui: &mut egui::Ui, label: &str, hint: &str, text: &mut String, password: bool) -> egui::Response {
-    ui.horizontal(|ui| {
-        let label = ui.label(label);
-        ui.add(TextEdit::singleline(text).hint_text(hint).password(password))
-            .labelled_by(label.id)
-    })
-    .inner
+    let label = ui.label(label);
+    ui.add(TextEdit::singleline(text).hint_text(hint).password(password))
+        .labelled_by(label.id)
 }
 
 fn start(ui: &mut egui::Ui, state: &mut State, warning: Option<&str>) -> Option<Action> {
-    labelled_text_edit(ui, "First name:", "Your first name", &mut state.first_name, false);
-    labelled_text_edit(ui, "Last name:", "Your last name", &mut state.last_name, false);
-    if let Some(warning) = warning {
-        ui.colored_label(ui.visuals().warn_fg_color, warning);
-    }
-    ui.add_space(8.0);
-
     // The one pass phrase field: what it opens is only asked from the backend
     // on a click (or Enter), never while typing.
     let busy = state.is_busy();
-    let mut action = ui
-        .horizontal(|ui| {
-            let field = labelled_text_edit(
-                ui,
-                "Pass phrase:",
-                "The pass phrase you were given",
-                &mut state.pass_phrase,
-                true,
-            );
+    let mut action = None;
+    egui::Grid::new("start").num_columns(2).show(ui, |ui| {
+        labelled_text_edit(ui, "First name:", "Your first name", &mut state.first_name, false);
+        ui.end_row();
+        labelled_text_edit(ui, "Last name:", "Your last name", &mut state.last_name, false);
+        ui.end_row();
+        if let Some(warning) = warning {
+            ui.label("");
+            ui.colored_label(ui.visuals().warn_fg_color, warning);
+            ui.end_row();
+        }
+
+        let label = ui.label("Pass phrase:");
+        ui.horizontal(|ui| {
+            // The field and the button are as wide as the other fields.
+            let width = ui.spacing().text_edit_width - SUBMIT_WIDTH - ui.spacing().item_spacing.x;
+            let field = ui
+                .add(
+                    TextEdit::singleline(&mut state.pass_phrase)
+                        .hint_text("The pass phrase you were given")
+                        .password(true)
+                        .desired_width(width),
+                )
+                .labelled_by(label.id);
             let entered = field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
-            let clicked = ui.add_enabled(!busy, egui::Button::new("Submit")).clicked();
+            let button = egui::Button::new("Submit").min_size(egui::vec2(SUBMIT_WIDTH, 0.0));
+            let clicked = ui.add_enabled(!busy, button).clicked();
             if busy {
                 ui.spinner();
             }
-            (clicked || entered).then_some(Action::SubmitPassPhrase)
-        })
-        .inner;
+            action = (clicked || entered).then_some(Action::SubmitPassPhrase);
+        });
+        ui.end_row();
+    });
     ui.add_space(8.0);
 
     match state.open_surveys() {
@@ -356,7 +368,9 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
+    use egui::accesskit::Role;
     use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable as _;
 
     use super::*;
 
@@ -420,6 +434,22 @@ mod tests {
         harness.run();
 
         assert!(left.get() < before - 50.0, "before: {before}, after: {}", left.get());
+    }
+
+    #[test]
+    fn submit_ends_where_the_name_fields_end() {
+        let mut state = State::default();
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(600.0, 400.0))
+            .build_ui(move |ui| {
+                card(ui, |ui| start(ui, &mut state, None));
+            });
+        harness.run();
+
+        let right = |role, label: &str| harness.get_by_role_and_label(role, label).rect().right();
+        let submit = right(Role::Button, "Submit");
+        assert!((submit - right(Role::TextInput, "First name:")).abs() < 1.0, "{submit}");
+        assert!((submit - right(Role::TextInput, "Last name:")).abs() < 1.0, "{submit}");
     }
 
     #[test]

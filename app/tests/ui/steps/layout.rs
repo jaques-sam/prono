@@ -66,3 +66,19 @@ fn form_moved_left(world: &mut World, points: u16) {
         "the form moved {moved} points"
     );
 }
+
+#[then("the Submit button ends where the name fields end")]
+fn submit_lines_up(world: &mut World) {
+    let submit = world
+        .harness
+        .get_by_role_and_label(Role::Button, "Submit")
+        .rect()
+        .right();
+    for name in name_fields(world) {
+        let right = name.rect().right();
+        assert!(
+            (submit - right).abs() < EPSILON,
+            "Submit ends at {submit}, a name field at {right}"
+        );
+    }
+}

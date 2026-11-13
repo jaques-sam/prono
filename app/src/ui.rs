@@ -137,6 +137,13 @@ fn error_banner(ui: &mut egui::Ui, error: &str) -> Option<Action> {
 /// are as wide as a text field alone.
 const SUBMIT_WIDTH: f32 = 72.0;
 
+/// A green "Submit" button, `min_width` wide.
+fn submit_button(min_width: f32) -> egui::Button<'static> {
+    egui::Button::new("Submit")
+        .fill(egui::Color32::from_rgb(46, 125, 50))
+        .min_size(egui::vec2(min_width, 0.0))
+}
+
 /// A row of the form: a `label` the screen readers know the single-line text
 /// field by. Call it in a grid, so the fields line up.
 fn labelled_text_edit(ui: &mut egui::Ui, label: &str, hint: &str, text: &mut String, password: bool) -> egui::Response {
@@ -174,8 +181,7 @@ fn start(ui: &mut egui::Ui, state: &mut State, warning: Option<&str>) -> Option<
                 )
                 .labelled_by(label.id);
             let entered = field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
-            let button = egui::Button::new("Submit").min_size(egui::vec2(SUBMIT_WIDTH, 0.0));
-            let clicked = ui.add_enabled(!busy, button).clicked();
+            let clicked = ui.add_enabled(!busy, submit_button(SUBMIT_WIDTH)).clicked();
             if busy {
                 ui.spinner();
             }
@@ -225,7 +231,7 @@ fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: b
             if CAN_RESET && ui.add_enabled(!busy, egui::Button::new("Reset")).clicked() {
                 action = Some(Action::ResetAnswers);
             }
-            if ui.add_enabled(!busy, egui::Button::new("Submit")).clicked() {
+            if ui.add_enabled(!busy, submit_button(0.0)).clicked() {
                 action = Some(Action::Submit);
             }
             if ui.add_enabled(!busy, egui::Button::new("Other survey")).clicked() {

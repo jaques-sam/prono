@@ -1,4 +1,4 @@
-use prono_api::{Answer, Invalid, Results, Score, Submission, Survey};
+use prono_api::{Answer, Entry, Invalid, Results, Score, Submission, Survey};
 use serde::{Deserialize, Serialize};
 
 use crate::client::{Backend, Pending};
@@ -90,6 +90,12 @@ enum Request {
     Unlocking {
         pass_phrase: String,
         pending: Pending<Vec<Survey>>,
+    },
+    /// Waiting for the backend to let `user` into a survey with a name list.
+    Entering {
+        survey: Survey,
+        user: String,
+        pending: Pending<()>,
     },
     Submit(Pending<()>),
     Results(Pending<Results>),
@@ -188,6 +194,11 @@ impl State {
                     self.unlocked = None;
                     self.error = Some(err);
                 }
+            },
+            Some(Request::Entering { survey, user, pending }) => match pending.take() {
+                None => self.request = Some(Request::Entering { survey, user, pending }),
+                Some(Ok(())) => self.open(survey, user, backend),
+                Some(Err(err)) => self.error = Some(err),
             },
             Some(Request::Submit(pending)) => match pending.take() {
                 None => self.request = Some(Request::Submit(pending)),
@@ -364,7 +375,25 @@ impl State {
             return;
         };
         self.error = None;
-        self.open(survey, user, backend);
+        if survey.name_list {
+            // The name list stays on the backend: it tells whether this
+            // name may enter, before the questions are shown.
+            let pass_phrase = self
+                .unlocked
+                .as_ref()
+                .and_then(|u| prono_api::clean_pass_phrase(&u.pass_phrase));
+            let entry = Entry {
+                user: user.clone(),
+                pass_phrase,
+            };
+            self.request = Some(Request::Entering {
+                pending: backend.enter(survey.id, &entry),
+                survey,
+                user,
+            });
+        } else {
+            self.open(survey, user, backend);
+        }
     }
 
     /// Shows the questions of `survey` to `user`.
@@ -441,6 +470,10 @@ mod tests {
         /// The pass phrase of each request for surveys, in order.
         open_requests: RefCell<Vec<Option<String>>>,
         results_requests: Cell<usize>,
+        /// What `enter` says, or never answers if `None`.
+        enter_answer: Option<Result<(), String>>,
+        /// The survey and the entry of each request to enter, in order.
+        enter_requests: RefCell<Vec<(u64, Entry)>>,
         /// What `scores` returns, or never answers if `None`.
         scores_answer: Option<Result<Vec<Score>, String>>,
         scores_requests: Cell<usize>,
@@ -464,6 +497,8 @@ mod tests {
                 open_answer: Some(Ok(surveys_of(&[SURVEY_ID, COURSE_ID]))),
                 open_requests: RefCell::default(),
                 results_requests: Cell::default(),
+                enter_answer: Some(Ok(())),
+                enter_requests: RefCell::default(),
                 scores_answer: Some(Ok(Vec::new())),
                 scores_requests: Cell::default(),
                 name_answer: Some(Ok(false)),
@@ -474,6 +509,11 @@ mod tests {
 
         fn with_open_answer(mut self, answer: Option<Result<Vec<Survey>, String>>) -> Self {
             self.open_answer = answer;
+            self
+        }
+
+        fn with_enter_answer(mut self, answer: Option<Result<(), String>>) -> Self {
+            self.enter_answer = answer;
             self
         }
 
@@ -507,6 +547,11 @@ mod tests {
         fn open_surveys(&self, pass_phrase: Option<&str>) -> Pending<Vec<Survey>> {
             self.open_requests.borrow_mut().push(pass_phrase.map(Into::into));
             self.open_answer.clone().map_or_else(Pending::never, Pending::ready)
+        }
+
+        fn enter(&self, survey_id: u64, entry: &Entry) -> Pending<()> {
+            self.enter_requests.borrow_mut().push((survey_id, entry.clone()));
+            self.enter_answer.clone().map_or_else(Pending::never, Pending::ready)
         }
 
         fn results(&self, _survey_id: u64) -> Pending<Results> {
@@ -708,6 +753,47 @@ mod tests {
         start(&mut state, SURVEY_ID, &backend);
         assert!(matches!(state.phase, Phase::Answering { .. }));
         assert!(state.error.is_none());
+    }
+
+    #[test]
+    fn a_survey_with_a_name_list_is_entered_once_the_backend_lets_the_name_in() {
+        let backend = FakeBackend::new(None);
+        let mut state = unlocked("Sam Smith", &backend);
+        start(&mut state, COURSE_ID, &backend);
+        assert!(matches!(state.phase, Phase::Start), "not before the backend said so");
+        assert!(state.is_busy());
+        assert_eq!(backend.results_requests.get(), 0);
+
+        state.poll(&backend);
+        assert!(matches!(state.phase, Phase::Answering { .. }));
+        assert!(state.error.is_none());
+        let entry = Entry {
+            user: "Sam Smith".into(),
+            pass_phrase: Some(PASS_PHRASE.into()),
+        };
+        assert_eq!(*backend.enter_requests.borrow(), [(COURSE_ID, entry)]);
+    }
+
+    #[test]
+    fn a_name_that_is_not_on_the_list_does_not_enter_the_survey() {
+        let backend =
+            FakeBackend::new(None).with_enter_answer(Some(Err("You are not on the list for this survey".into())));
+        let mut state = unlocked("Sam Smith", &backend);
+        start(&mut state, COURSE_ID, &backend);
+        state.poll(&backend);
+        assert!(matches!(state.phase, Phase::Start));
+        assert_eq!(state.error.as_deref(), Some("You are not on the list for this survey"));
+        assert!(!state.is_busy());
+        assert_eq!(backend.results_requests.get(), 0, "the survey was not even loaded");
+    }
+
+    #[test]
+    fn a_survey_without_a_name_list_is_entered_without_asking() {
+        let backend = FakeBackend::new(None).with_enter_answer(None);
+        let mut state = unlocked("Sam Smith", &backend);
+        start(&mut state, SURVEY_ID, &backend);
+        assert!(matches!(state.phase, Phase::Answering { .. }));
+        assert!(backend.enter_requests.borrow().is_empty());
     }
 
     #[test]

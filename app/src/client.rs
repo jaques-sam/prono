@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use prono_api::{API_KEY, DEVICE_ID_HEADER, Results, Score, Submission, Survey};
+use prono_api::{API_KEY, DEVICE_ID_HEADER, Entry, Results, Score, Submission, Survey};
 
 pub const PROD_URL: &str = "https://prono.samagali.myds.me";
 #[cfg(target_arch = "wasm32")]
@@ -13,6 +13,9 @@ pub trait Backend {
     /// The surveys `pass_phrase` (see [`prono_api::clean_pass_phrase`])
     /// opens; an error says it opens none. The only source of surveys.
     fn open_surveys(&self, pass_phrase: Option<&str>) -> Pending<Vec<Survey>>;
+    /// Whether `entry`'s participant may enter survey `survey_id`: an error
+    /// says why not, like a name that is not on the survey's name list.
+    fn enter(&self, survey_id: u64, entry: &Entry) -> Pending<()>;
     fn results(&self, survey_id: u64) -> Pending<Results>;
     /// The scores of a scored survey, best first.
     fn scores(&self, survey_id: u64) -> Pending<Vec<Score>>;
@@ -105,6 +108,13 @@ impl Backend for HttpBackend {
     fn open_surveys(&self, pass_phrase: Option<&str>) -> Pending<Vec<Survey>> {
         match ehttp::Request::post_json(self.url(prono_api::surveys_path()), &pass_phrase) {
             Ok(request) => self.send(self.authorized(request), parse_json),
+            Err(err) => Pending::ready(Err(err.to_string())),
+        }
+    }
+
+    fn enter(&self, survey_id: u64, entry: &Entry) -> Pending<()> {
+        match ehttp::Request::post_json(self.url(&prono_api::entry_path(survey_id)), entry) {
+            Ok(request) => self.send(self.authorized(request), |_| Ok(())),
             Err(err) => Pending::ready(Err(err.to_string())),
         }
     }

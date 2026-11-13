@@ -36,6 +36,15 @@ pub fn surveys_path() -> &'static str {
     "/api/surveys"
 }
 
+/// REST path asking whether a participant may enter a survey: `POST` an
+/// [`Entry`] and get `200`, or `403` with the error message when the pass
+/// phrase is wrong or the survey has a name list without the participant. It
+/// sends the same API key and device id headers as a submission.
+#[must_use]
+pub fn entry_path(survey_id: u64) -> String {
+    format!("/api/surveys/{survey_id}/entry")
+}
+
 /// REST path of a scored survey's scores: `GET` returns a JSON list of
 /// [`Score`]s, best first.
 #[must_use]

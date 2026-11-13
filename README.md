@@ -81,7 +81,8 @@ cargo run --bin prono-cli -- surveys upload my_survey.json
 - `name_list` is optional (default `false`). With `"name_list": true` only the participants on the survey's name list
   may answer it, on top of the pass phrase, which is always needed: put names on it with
   `prono-cli surveys names allow <survey id> <first name> <last name>` (names are matched ignoring case). A name that
-  is not on the list is refused when the answers are submitted.
+  is not on the list is refused as soon as it clicks the survey, so it never sees the questions (and again when
+  answers are submitted).
 - `link` is optional; `possible_answers` is for `poll` questions only. So is `other_label`, the name of the free
   answer next to the options (default: `Other`), for questions where that does not fit.
 - `answer_optional` (default `false`), for `text` and `poll` questions only: with `"answer_optional": true` the

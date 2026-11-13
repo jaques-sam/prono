@@ -2,15 +2,16 @@ use actix_web::http::{StatusCode, header};
 use actix_web::{HttpRequest, HttpResponse, ResponseError, get, post, web};
 use log::error;
 use prono::{Error, Repo};
-use prono_api::{API_KEY, DEVICE_ID_HEADER, Submission};
+use prono_api::{API_KEY, DEVICE_ID_HEADER, Entry, Submission};
 
 /// Registers the REST endpoints; their paths are [`prono_api::answers_path`],
-/// [`prono_api::surveys_path`], [`prono_api::scores_path`] and
+/// [`prono_api::surveys_path`], [`prono_api::entry_path`], [`prono_api::scores_path`] and
 /// [`prono_api::user_path`].
 pub fn routes(config: &mut web::ServiceConfig) {
     config
         .service(submit_answers)
         .service(open_surveys)
+        .service(enter_survey)
         .service(get_answers)
         .service(get_scores)
         .service(get_user);
@@ -40,6 +41,21 @@ async fn open_surveys(
     authorized_device(&req)?;
     let surveys = prono::open_surveys(repo.get_ref(), pass_phrase.as_deref()).await?;
     Ok(HttpResponse::Ok().json(surveys))
+}
+
+/// Whether a participant may enter a survey: `200`, or `403` when the pass
+/// phrase is wrong or the name is not on the survey's name list. Same API key
+/// and device id as a submission.
+#[post("/api/surveys/{survey_id}/entry")]
+async fn enter_survey(
+    repo: web::Data<dyn Repo>,
+    survey_id: web::Path<u64>,
+    entry: web::Json<Entry>,
+    req: HttpRequest,
+) -> Result<HttpResponse, ApiError> {
+    let device_id = authorized_device(&req)?;
+    prono::enter(repo.get_ref(), *survey_id, device_id, &entry).await?;
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[get("/api/surveys/{survey_id}/answers")]
@@ -306,6 +322,38 @@ mod tests {
             req = req.insert_header((DEVICE_ID_HEADER, device_id));
         }
         req
+    }
+
+    fn enter(survey_id: u64, user: &str, pass_phrase: Option<&str>) -> actix_test::TestRequest {
+        let entry = Entry {
+            user: user.into(),
+            pass_phrase: pass_phrase.map(Into::into),
+        };
+        actix_test::TestRequest::post()
+            .uri(&prono_api::entry_path(survey_id))
+            .insert_header((header::AUTHORIZATION, format!("Bearer {API_KEY}")))
+            .insert_header((DEVICE_ID_HEADER, "dev-1"))
+            .set_json(entry)
+    }
+
+    #[actix_web::test]
+    async fn only_a_listed_name_enters_a_name_list_survey() {
+        let (statuses, body) = run(vec![
+            enter(COURSE_ID, "Ada Lovelace", Some(COURSE_PASS_PHRASE)),
+            enter(COURSE_ID, "Bob Ray", Some(COURSE_PASS_PHRASE)),
+        ])
+        .await;
+        assert_eq!(statuses, [StatusCode::OK, StatusCode::FORBIDDEN]);
+        assert_eq!(body, "\"You are not on the list for this survey\"");
+
+        // Any name enters a survey without a name list, but not without its pass phrase.
+        let (statuses, _) = run(vec![
+            enter(SURVEY_ID, "Bob Ray", Some(PASS_PHRASE)),
+            enter(SURVEY_ID, "Bob Ray", Some("nope")),
+            enter(SURVEY_ID, "Bob Ray", None),
+        ])
+        .await;
+        assert_eq!(statuses, [StatusCode::OK, StatusCode::FORBIDDEN, StatusCode::FORBIDDEN]);
     }
 
     fn opened(body: &str) -> Vec<u64> {

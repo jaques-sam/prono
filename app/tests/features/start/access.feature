@@ -95,6 +95,13 @@ Feature: Surveys by pass phrase
     Then I see the error "Please fill in your first and last name"
     And I am on the start screen
 
+  Scenario: A name that is not on the list of a survey does not get to see its questions
+    Given I entered the name "Bob Ray"
+    When I start the course survey
+    Then I see the error "You are not on the list for this survey"
+    And I am not answering a survey
+    And I am offered the course survey
+
   Scenario: The questions do not ask for the pass phrase again
     Given I am answering the survey as "Sam Smith"
     Then there is no pass phrase field

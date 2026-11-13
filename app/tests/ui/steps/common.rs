@@ -175,6 +175,11 @@ fn on_start_screen(world: &mut World) {
     assert!(world.has_button(SURVEY));
 }
 
+#[then("I am not answering a survey")]
+fn is_not_answering(world: &mut World) {
+    assert!(!world.is_answering(), "the questions are shown");
+}
+
 #[then("I am answering the survey")]
 fn is_answering(world: &mut World) {
     assert!(world.is_answering(), "the questions are not shown");

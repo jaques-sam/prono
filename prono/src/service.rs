@@ -1,5 +1,5 @@
 use log::info;
-use prono_api::{Invalid, Results, Score, Submission, Survey, check_user_name};
+use prono_api::{Entry, Invalid, Results, Score, Submission, Survey, check_user_name};
 
 use crate::{Error, Repo, Result};
 
@@ -22,15 +22,7 @@ pub async fn submit(repo: &dyn Repo, survey_id: u64, device_id: &str, submission
     let survey = survey(repo, survey_id).await?;
     submission.validate(&survey)?;
     check_device_id(device_id)?;
-    if !opened_by(repo, submission.pass_phrase.as_deref())
-        .await?
-        .contains(&survey_id)
-    {
-        return Err(Error::WrongPassPhrase);
-    }
-    if survey.name_list && !repo.listed_surveys(&submission.user).await?.contains(&survey_id) {
-        return Err(Error::NotListed);
-    }
+    check_entry(repo, &survey, &submission.user, submission.pass_phrase.as_deref()).await?;
 
     let user = submission.user.as_str();
     if repo.device_of(user).await?.is_some_and(|device| device != device_id) {
@@ -45,6 +37,35 @@ pub async fn submit(repo: &dyn Repo, survey_id: u64, device_id: &str, submission
         "Stored {} answers of '{user}' to survey {survey_id}",
         submission.answers.len()
     );
+    Ok(())
+}
+
+/// Whether a participant may enter survey `survey_id`, so the app can refuse
+/// them before showing the questions.
+///
+/// # Errors
+///
+/// [`Error::Invalid`] for an unknown survey or a bad name,
+/// [`Error::InvalidDeviceId`], [`Error::WrongPassPhrase`],
+/// [`Error::NotListed`] when the survey has a name list that lacks the
+/// participant, or a repository error.
+pub async fn enter(repo: &dyn Repo, survey_id: u64, device_id: &str, entry: &Entry) -> Result<()> {
+    let survey = survey(repo, survey_id).await?;
+    check_user_name(&entry.user)?;
+    check_device_id(device_id)?;
+    check_entry(repo, &survey, &entry.user, entry.pass_phrase.as_deref()).await
+}
+
+/// The pass phrase has to open `survey`, and `user` has to be on its name
+/// list if it has one. A wrong pass phrase does not tell whether the name is
+/// listed.
+async fn check_entry(repo: &dyn Repo, survey: &Survey, user: &str, pass_phrase: Option<&str>) -> Result<()> {
+    if !opened_by(repo, pass_phrase).await?.contains(&survey.id) {
+        return Err(Error::WrongPassPhrase);
+    }
+    if survey.name_list && !repo.listed_surveys(user).await?.contains(&survey.id) {
+        return Err(Error::NotListed);
+    }
     Ok(())
 }
 
@@ -186,7 +207,7 @@ fn check_device_id(device_id: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use prono_api::{Answer, AnswerKind, samples};
+    use prono_api::{Answer, AnswerKind, clean_pass_phrase, samples};
 
     use super::*;
     use crate::MemoryRepo;
@@ -383,6 +404,38 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(repo.users().await.unwrap(), ["ada LOVELACE"]);
+    }
+
+    #[tokio::test]
+    async fn only_a_listed_name_enters_a_name_list_survey() {
+        let repo = repo().await;
+        repo.allow_user(COURSE_ID, "Ada", "Lovelace").await.unwrap();
+        let entry = |user: &str, phrase: &str| Entry {
+            user: user.into(),
+            pass_phrase: clean_pass_phrase(phrase),
+        };
+        enter(&repo, COURSE_ID, "dev-1", &entry("ada LOVELACE", COURSE_PASS_PHRASE))
+            .await
+            .unwrap();
+        let err = enter(&repo, COURSE_ID, "dev-1", &entry("Bob Ray", COURSE_PASS_PHRASE))
+            .await
+            .unwrap_err();
+        assert_eq!(err, Error::NotListed);
+        // A wrong pass phrase does not tell whether the name is listed.
+        for user in ["Ada Lovelace", "Bob Ray"] {
+            let err = enter(&repo, COURSE_ID, "dev-1", &entry(user, PASS_PHRASE))
+                .await
+                .unwrap_err();
+            assert_eq!(err, Error::WrongPassPhrase);
+        }
+        let err = enter(&repo, COURSE_ID, "dev-1", &entry(" Ada", COURSE_PASS_PHRASE))
+            .await
+            .unwrap_err();
+        assert_eq!(err, Error::Invalid(Invalid::UserName));
+        let err = enter(&repo, 999, "dev-1", &entry("Ada Lovelace", COURSE_PASS_PHRASE))
+            .await
+            .unwrap_err();
+        assert_eq!(err, Error::Invalid(Invalid::UnknownSurvey(999)));
     }
 
     #[tokio::test]

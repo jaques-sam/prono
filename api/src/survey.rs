@@ -107,6 +107,16 @@ pub struct Submission {
     pub answers: Vec<(Uuid, Answer)>,
 }
 
+/// A participant asking to enter a survey: the body of an entry request.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Entry {
+    /// The participant's [`full_name`].
+    pub user: String,
+    /// The survey's pass phrase, see [`Submission::pass_phrase`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pass_phrase: Option<String>,
+}
+
 /// One participant's answer to a question.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserAnswer {

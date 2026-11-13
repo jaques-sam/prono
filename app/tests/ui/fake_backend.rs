@@ -8,7 +8,7 @@ use std::cell::{Cell, RefCell};
 
 use futures::FutureExt as _;
 use prono::{MemoryRepo, Repo as _};
-use prono_api::{Answer, AnswerKind, Question, Results, Score, Submission, Survey, samples};
+use prono_api::{Answer, AnswerKind, Entry, Question, Results, Score, Submission, Survey, samples};
 use prono_app::client::{Backend, Pending};
 
 /// The device the app under test runs on.
@@ -181,6 +181,10 @@ impl Backend for FakeBackend {
         // Always answers: the scenarios about a server that fails to deliver
         // the results still start a survey.
         Pending::ready(Self::now(prono::open_surveys(&self.repo, pass_phrase)).map_err(|err| err.to_string()))
+    }
+
+    fn enter(&self, survey_id: u64, entry: &Entry) -> Pending<()> {
+        Pending::ready(Self::now(prono::enter(&self.repo, survey_id, MY_DEVICE, entry)).map_err(|err| err.to_string()))
     }
 
     fn results(&self, survey_id: u64) -> Pending<Results> {

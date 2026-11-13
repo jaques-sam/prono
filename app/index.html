@@ -71,6 +71,21 @@
             height: 100%;
         }
 
+        /* Focusable but invisible: see the script below. */
+        .focus-sentinel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            border: none;
+            opacity: 0;
+            pointer-events: none;
+            /* Prevent auto-zoom on mobile browsers (requires at least 16px). */
+            font-size: 16px;
+        }
+
         .centered {
             margin-right: auto;
             margin-left: auto;
@@ -120,7 +135,10 @@
 <body>
     <!-- The WASM code will resize the canvas dynamically -->
     <!-- the id is hardcoded in main.rs . so, make sure both match. -->
+    <input class="focus-sentinel" id="previous_field" aria-hidden="true" autocomplete="off">
     <canvas id="the_canvas_id"></canvas>
+    <!-- eframe inserts its hidden text input right after the canvas, so it sits between the two sentinels. -->
+    <input class="focus-sentinel" id="next_field" aria-hidden="true" autocomplete="off">
 
     <!-- the loading spinner will be removed in main.rs -->
     <div class="centered" id="loading_text">
@@ -130,6 +148,41 @@
         </p>
         <div class="lds-dual-ring"></div>
     </div>
+
+    <script>
+        // egui draws every text field itself and shares one hidden <input> between them,
+        // so iOS shows its previous/next arrows above the keyboard greyed out. An <input>
+        // before and one after it enable the arrows. Focusing one of them means an arrow was
+        // tapped: give the focus back to egui's input and press (Shift+)Tab there, which
+        // makes egui move to the previous/next field.
+        (function () {
+            const MAX_MS_AFTER_BLUR = 300;
+            let textInput = null;
+            let blurredAt = -Infinity;
+            document.addEventListener('focusout', function (event) {
+                if (event.target.tagName === 'INPUT' && !event.target.classList.contains('focus-sentinel')) {
+                    textInput = event.target;
+                    blurredAt = performance.now();
+                }
+            });
+            [['previous_field', true], ['next_field', false]].forEach(function ([id, shiftKey]) {
+                const sentinel = document.getElementById(id);
+                sentinel.addEventListener('focus', function () {
+                    // Not from an arrow, e.g. Tab on a desktop: leave the page's focus alone.
+                    if (!textInput || performance.now() - blurredAt > MAX_MS_AFTER_BLUR) {
+                        sentinel.blur();
+                        return;
+                    }
+                    textInput.focus({ preventScroll: true });
+                    ['keydown', 'keyup'].forEach(function (type) {
+                        textInput.dispatchEvent(new KeyboardEvent(type, {
+                            key: 'Tab', code: 'Tab', shiftKey: shiftKey, bubbles: true, cancelable: true,
+                        }));
+                    });
+                });
+            });
+        })();
+    </script>
 
     <!--Register Service Worker. this will cache the wasm / js scripts for offline use (for PWA functionality). -->
     <!-- Force refresh (Ctrl + F5) to load the latest files instead of cached files  -->

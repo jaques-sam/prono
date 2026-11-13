@@ -1,6 +1,6 @@
 use cucumber::{given, then, when};
 use egui::accesskit::Role;
-use egui::{Event, Modifiers, MouseWheelUnit, TouchPhase, pos2, vec2};
+use egui::{Event, Key, Modifiers, MouseWheelUnit, TouchPhase, pos2, vec2};
 use egui_kittest::Node;
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
@@ -30,6 +30,24 @@ fn window_width(world: &mut World, width: u16) {
     world.resize(f32::from(width));
 }
 
+#[when(expr = "I focus the {string} field")]
+fn focus_field(world: &mut World, label: String) {
+    field(world, &label).focus();
+    world.settle();
+}
+
+#[when("I press Tab")]
+fn press_tab(world: &mut World) {
+    world.harness.key_press(Key::Tab);
+    world.settle();
+}
+
+#[when("I press Shift+Tab")]
+fn press_shift_tab(world: &mut World) {
+    world.harness.key_press_modifiers(Modifiers::SHIFT, Key::Tab);
+    world.settle();
+}
+
 #[when(expr = "I scroll right by {int} points")]
 fn scroll_right(world: &mut World, points: u16) {
     world.form_left = field(world, "First name:").rect().left();
@@ -44,6 +62,33 @@ fn scroll_right(world: &mut World, points: u16) {
     // The scrolling is animated.
     for _ in 0..10 {
         world.wait(0.1);
+    }
+}
+
+#[then(expr = "the {string} field has focus")]
+fn field_has_focus(world: &mut World, label: String) {
+    assert!(field(world, &label).is_focused(), "the \"{label}\" field has no focus");
+}
+
+#[then("the Submit button has focus")]
+fn submit_has_focus(world: &mut World) {
+    let submit = world.harness.get_by_role_and_label(Role::Button, "Submit");
+    assert!(submit.is_focused(), "the Submit button has no focus");
+}
+
+#[then("the Submit button ends where the name fields end")]
+fn submit_lines_up(world: &mut World) {
+    let submit = world
+        .harness
+        .get_by_role_and_label(Role::Button, "Submit")
+        .rect()
+        .right();
+    for name in name_fields(world) {
+        let right = name.rect().right();
+        assert!(
+            (submit - right).abs() < EPSILON,
+            "Submit ends at {submit}, a name field at {right}"
+        );
     }
 }
 
@@ -65,20 +110,4 @@ fn form_moved_left(world: &mut World, points: u16) {
         (moved - f32::from(points)).abs() < EPSILON,
         "the form moved {moved} points"
     );
-}
-
-#[then("the Submit button ends where the name fields end")]
-fn submit_lines_up(world: &mut World) {
-    let submit = world
-        .harness
-        .get_by_role_and_label(Role::Button, "Submit")
-        .rect()
-        .right();
-    for name in name_fields(world) {
-        let right = name.rect().right();
-        assert!(
-            (submit - right).abs() < EPSILON,
-            "Submit ends at {submit}, a name field at {right}"
-        );
-    }
 }

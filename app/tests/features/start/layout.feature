@@ -25,3 +25,19 @@ Feature: Layout of the start form
   Scenario: A wide window does not scroll sideways
     When I scroll right by 100 points
     Then the form moved left by 0 points
+
+  Scenario: Tab goes from field to field in the order they are shown
+    When I focus the "First name:" field
+    And I press Tab
+    Then the "Last name:" field has focus
+    When I press Tab
+    Then the "Pass phrase:" field has focus
+    When I press Tab
+    Then the Submit button has focus
+
+  Scenario: Shift+Tab goes back through the fields
+    When I focus the "Pass phrase:" field
+    And I press Shift+Tab
+    Then the "Last name:" field has focus
+    When I press Shift+Tab
+    Then the "First name:" field has focus

@@ -42,6 +42,11 @@ pub struct Question {
     /// The options of a `Poll` question, empty for any other kind. Free
     /// "other" answers are always allowed on top of these.
     pub possible_answers: Vec<String>,
+    /// Whether the participant may leave the answer blank: a blank answer is
+    /// then not submitted at all. Never for a `PredictionDate`, which is
+    /// always filled in.
+    #[serde(default)]
+    pub answer_optional: bool,
     /// What the free answer of a `Poll` question is called, when "Other"
     /// does not fit: "Yes, namely:" next to the option "No".
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -130,11 +135,13 @@ impl Survey {
 
 impl Survey {
     /// `user`'s answers to this survey in question order, if `results` hold a
-    /// valid answer of theirs to every question: what to refill when they
-    /// come back.
+    /// valid answer of theirs to every required question (and to at least one
+    /// question): what to refill when they come back. A skipped optional
+    /// answer is refilled blank.
     #[must_use]
     pub fn answers_of(&self, results: &Results, user: &str) -> Option<Vec<Answer>> {
-        self.questions
+        let found: Vec<_> = self
+            .questions
             .iter()
             .map(|question| {
                 results
@@ -143,6 +150,14 @@ impl Survey {
                     .find(|found| found.user == user && found.answer.is_valid_for(question.kind))
                     .map(|found| found.answer.clone())
             })
+            .collect();
+        if found.iter().all(Option::is_none) {
+            return None;
+        }
+        self.questions
+            .iter()
+            .zip(found)
+            .map(|(question, answer)| answer.or_else(|| question.answer_optional.then(|| question.kind.empty_answer())))
             .collect()
     }
 }
@@ -259,6 +274,13 @@ impl Answer {
         }
     }
 
+    /// Whether this is a text or poll answer without any text: what an
+    /// unanswered question holds.
+    #[must_use]
+    pub fn is_blank(&self) -> bool {
+        matches!(self, Answer::Text(text) | Answer::Poll(text) if text.trim().is_empty())
+    }
+
     /// Whether this is a well-formed answer to a question of kind `kind`.
     #[must_use]
     pub fn is_valid_for(&self, kind: AnswerKind) -> bool {
@@ -337,7 +359,8 @@ pub fn clean_pass_phrase(pass_phrase: &str) -> Option<String> {
 }
 
 impl Submission {
-    /// Pairs `answers` (in question order) with `survey`'s questions.
+    /// Pairs `answers` (in question order) with `survey`'s questions, leaving
+    /// out the blank answers that are optional.
     #[must_use]
     pub fn new(user: &str, survey: &Survey, answers: &[Answer]) -> Self {
         Self {
@@ -347,6 +370,7 @@ impl Submission {
                 .questions
                 .iter()
                 .zip(answers)
+                .filter(|(question, answer)| !(question.answer_optional && answer.is_blank()))
                 .map(|(question, answer)| (question.id, answer.clone()))
                 .collect(),
         }
@@ -360,26 +384,33 @@ impl Submission {
         self
     }
 
-    /// Checks the submission against `survey`: a valid name and exactly one
-    /// valid answer per question.
+    /// Checks the submission against `survey`: a valid name, one valid answer
+    /// per question, except that an optional answer may be missing.
     ///
     /// # Errors
     ///
     /// The first problem found, as an [`Invalid`].
     pub fn validate(&self, survey: &Survey) -> Result<(), Invalid> {
         check_user_name(&self.user)?;
-        if self.answers.len() != survey.questions.len() {
-            return Err(Invalid::Incomplete);
-        }
+        let mut answered = 0;
         for question in &survey.questions {
-            let answer = self
+            let Some(answer) = self
                 .answers
                 .iter()
                 .find_map(|(id, answer)| (*id == question.id).then_some(answer))
-                .ok_or(Invalid::Incomplete)?;
+            else {
+                if question.answer_optional {
+                    continue;
+                }
+                return Err(Invalid::Incomplete);
+            };
             if !answer.is_valid_for(question.kind) {
                 return Err(Invalid::Answer(question.text.clone()));
             }
+            answered += 1;
+        }
+        if self.answers.len() != answered {
+            return Err(Invalid::Incomplete);
         }
         Ok(())
     }
@@ -411,6 +442,7 @@ mod tests {
                     text: "When?".into(),
                     kind: AnswerKind::PredictionDate,
                     possible_answers: Vec::new(),
+                    answer_optional: false,
                     other_label: None,
                     correct_answer: None,
                 },
@@ -419,6 +451,7 @@ mod tests {
                     text: "Why?".into(),
                     kind: AnswerKind::Text,
                     possible_answers: Vec::new(),
+                    answer_optional: false,
                     other_label: None,
                     correct_answer: None,
                 },
@@ -489,6 +522,7 @@ mod tests {
             text: "Background?".into(),
             kind: AnswerKind::Poll,
             possible_answers: vec!["C".into(), "C++".into(), "Rust".into()],
+            answer_optional: false,
             other_label: None,
             correct_answer: None,
         }
@@ -583,6 +617,66 @@ mod tests {
             answers: vec![(Q1, date(5, 2030)), (Q9, Answer::Text("x".into()))],
         };
         assert_eq!(unknown.validate(&survey), Err(Invalid::Incomplete));
+    }
+
+    fn survey_with_optional_answer() -> Survey {
+        let mut survey = survey();
+        survey.questions[1].answer_optional = true;
+        survey
+    }
+
+    #[test]
+    fn blank_optional_answers_are_not_submitted() {
+        let survey = survey_with_optional_answer();
+        let skipped = Submission::new("Sam", &survey, &[date(5, 2030), Answer::Text("  ".into())]);
+        assert_eq!(skipped.answers, [(Q1, date(5, 2030))]);
+        assert_eq!(skipped.validate(&survey), Ok(()));
+
+        let answered = Submission::new("Sam", &survey, &[date(5, 2030), Answer::Text("fun".into())]);
+        assert_eq!(answered.answers.len(), 2);
+        assert_eq!(answered.validate(&survey), Ok(()));
+    }
+
+    #[test]
+    fn optional_answers_still_reject_bad_answers_and_strangers() {
+        let survey = survey_with_optional_answer();
+        let too_long = Answer::Text("x".repeat(MAX_TEXT_ANSWER_LEN + 1));
+        let bad = Submission::new("Sam", &survey, &[date(5, 2030), too_long]);
+        assert_eq!(bad.validate(&survey), Err(Invalid::Answer("Why?".into())));
+
+        let unknown = Submission {
+            user: "Sam".into(),
+            pass_phrase: None,
+            answers: vec![(Q1, date(5, 2030)), (Q9, Answer::Text("x".into()))],
+        };
+        assert_eq!(unknown.validate(&survey), Err(Invalid::Incomplete));
+
+        let required_missing = Submission {
+            user: "Sam".into(),
+            pass_phrase: None,
+            answers: vec![(Q2, Answer::Text("fun".into()))],
+        };
+        assert_eq!(required_missing.validate(&survey), Err(Invalid::Incomplete));
+    }
+
+    #[test]
+    fn required_questions_stay_required_when_blank() {
+        let survey = survey();
+        let blank = Submission::new("Sam", &survey, &[date(5, 2030), Answer::Text(String::new())]);
+        assert_eq!(blank.answers.len(), 2);
+        assert_eq!(blank.validate(&survey), Err(Invalid::Answer("Why?".into())));
+    }
+
+    #[test]
+    fn answers_of_refills_skipped_optional_answers_blank() {
+        let survey = survey_with_optional_answer();
+        let results = results_of(&[(Q1, "Sam", date(5, 2030))]);
+        assert_eq!(
+            survey.answers_of(&results, "Sam"),
+            Some(vec![date(5, 2030), Answer::Text(String::new())])
+        );
+        // Someone who answered nothing did not submit.
+        assert_eq!(survey.answers_of(&results, "Ann"), None);
     }
 
     #[test]

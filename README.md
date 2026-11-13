@@ -84,6 +84,8 @@ cargo run --bin prono-cli -- surveys upload my_survey.json
   is not on the list is refused when the answers are submitted.
 - `link` is optional; `possible_answers` is for `poll` questions only. So is `other_label`, the name of the free
   answer next to the options (default: `Other`), for questions where that does not fit.
+- `answer_optional` (default `false`), for `text` and `poll` questions only: with `"answer_optional": true` the
+  participant may leave the answer blank and it is not stored; the app shows "(optional)" next to the question.
 - **Scores:** give every question a `correct_answer` (text or option for `text` and `poll`,
   `{"month": 7, "year": 2028}` for `prediction_date`) and the survey is scored: participants see a ranking of the
   correct answers after submitting. All questions need one, or none. The correct answers never leave the backend, so a

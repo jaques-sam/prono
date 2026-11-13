@@ -36,6 +36,18 @@ const QUIZ_JSON: &str = r#"{
     ]
 }"#;
 
+/// The survey with an optional answer.
+pub const FEEDBACK_TITLE: &str = "Feedback";
+const FEEDBACK_JSON: &str = r#"{
+    "survey_id": 4,
+    "title": "Feedback",
+    "description": "Feedback survey",
+    "questions": [
+        {"question": "How was it", "answer_type": "poll", "possible_answers": ["Good", "Bad"]},
+        {"question": "Any remarks", "answer_type": "text", "answer_optional": true}
+    ]
+}"#;
+
 /// How the fake server reacts to requests.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Health {
@@ -70,10 +82,10 @@ impl FakeBackend {
         }
     }
 
-    /// A repository with the sample surveys and the quiz, each with its pass
+    /// A repository with the sample surveys, the quiz and the feedback survey, each with its pass
     /// phrase.
     fn repo() -> MemoryRepo {
-        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON, QUIZ_JSON]);
+        let repo = MemoryRepo::with_surveys([samples::STARSHIP_JSON, samples::COURSE_JSON, QUIZ_JSON, FEEDBACK_JSON]);
         for survey in Self::now(prono::surveys(&repo)).expect("the surveys are valid") {
             Self::now(repo.set_pass_phrase(survey.id, pass_phrase_of(survey.id))).expect("setting succeeds");
         }

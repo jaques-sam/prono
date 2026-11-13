@@ -209,7 +209,11 @@ fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: b
         .striped(true)
         .show(ui, |ui| {
             for (question, answer) in survey.questions.iter().zip(answers.iter_mut()) {
-                ui.label(&question.text);
+                if question.answer_optional {
+                    ui.label(format!("{} (optional)", question.text));
+                } else {
+                    ui.label(&question.text);
+                }
                 answer_input(ui, question, answer);
                 ui.end_row();
             }

@@ -14,7 +14,8 @@
 //!         { "question": "Which?", "answer_type": "poll",
 //!           "possible_answers": ["A", "B"], "correct_answer": "A" },
 //!         { "question": "Any allergies?", "answer_type": "poll",
-//!           "possible_answers": ["No"], "other_label": "Yes, namely:" }
+//!           "possible_answers": ["No"], "other_label": "Yes, namely:" },
+//!         { "question": "Any remarks?", "answer_type": "text", "answer_optional": true }
 //!     ]
 //! }
 //! ```
@@ -25,7 +26,8 @@
 //! the backend's database, never in the definition. `name_list` is optional (`false`):
 //! when `true`, only the names on the survey's list (`prono-cli surveys names`) may answer it,
 //! on top of the pass phrase, which is always needed. `possible_answers` is for `poll` questions only, and so is `other_label`:
-//! the name of the free answer, "Other" when left out. A `correct_answer`
+//! the name of the free answer, "Other" when left out. `answer_optional` (`false`) is for `text` and
+//! `poll` questions: the participant may leave the answer blank. A `correct_answer`
 //! makes the survey scored, and then every question needs one.
 
 use std::collections::HashSet;
@@ -60,6 +62,9 @@ struct QuestionFile {
     /// The name of the free answer of a `poll` question, and only of those.
     #[serde(default)]
     other_label: Option<String>,
+    /// Whether the answer may be left blank, for `text` and `poll` questions.
+    #[serde(default)]
+    answer_optional: bool,
     #[serde(default)]
     correct_answer: Option<CorrectAnswerFile>,
 }
@@ -75,6 +80,12 @@ enum CorrectAnswerFile {
 
 impl QuestionFile {
     fn check<E: serde::de::Error>(&self) -> Result<(), E> {
+        if self.answer_optional && self.answer_type == AnswerKind::PredictionDate {
+            return Err(E::custom(format!(
+                "question \"{}\" is a prediction_date, which is always filled in: its answer cannot be optional",
+                self.question
+            )));
+        }
         let options = &self.possible_answers;
         let is_poll = self.answer_type == AnswerKind::Poll;
         if is_poll && options.is_empty() {
@@ -195,6 +206,7 @@ impl Survey {
                     text: q.question.clone(),
                     kind: q.answer_type,
                     possible_answers: q.possible_answers.clone(),
+                    answer_optional: q.answer_optional,
                     other_label: q.other_label.clone(),
                     correct_answer: q.correct_answer()?,
                 })
@@ -376,6 +388,28 @@ mod tests {
             r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A"], "other_label": " Else"}"#,
         ] {
             assert!(Survey::from_json(&survey_json(question)).is_err(), "{question}");
+        }
+    }
+
+    #[test]
+    fn an_answer_is_optional_only_when_the_question_says_so() {
+        let with = |question: &str| Survey::from_json(&survey_json(question)).map(|s| s.questions[0].clone());
+        assert!(
+            !with(r#"{"question": "Q?", "answer_type": "text"}"#)
+                .unwrap()
+                .answer_optional
+        );
+        let optional = with(r#"{"question": "Q?", "answer_type": "text", "answer_optional": true}"#).unwrap();
+        assert!(optional.answer_optional);
+        // Part of the definition, not of the identity.
+        assert_eq!(optional.id, question_id("Q?", AnswerKind::Text));
+        let poll = r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A"], "answer_optional": true}"#;
+        assert!(with(poll).unwrap().answer_optional);
+        for bad in [
+            r#"{"question": "Q?", "answer_type": "prediction_date", "answer_optional": true}"#,
+            r#"{"question": "Q?", "answer_type": "text", "answer_optional": "yes"}"#,
+        ] {
+            assert!(with(bad).is_err(), "{bad}");
         }
     }
 

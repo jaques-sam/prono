@@ -14,6 +14,25 @@ Feature: Submitting answers
     And I see everyone's answers
     And I see no error
 
+  Scenario: An optional answer can be left blank
+    Given I answer the feedback survey as "Sam Smith"
+    And I choose "Good" for "How was it"
+    When I submit my answers
+    Then the server received the answers of "Sam Smith"
+    And I see the thanks to "Sam Smith"
+    And I see no error
+
+  Scenario: Questions with an optional answer are marked
+    When I answer the feedback survey as "Sam Smith"
+    Then I see the question "Any remarks (optional)"
+    And I see the question "How was it"
+
+  Scenario: A required question cannot be left blank
+    Given I answer the feedback survey as "Sam Smith"
+    And I type the text answer "Fine"
+    When I submit my answers
+    Then I see the error "Invalid answer to"
+
   Scenario: The name is trimmed when submitting
     Given I entered the first name "  Sam " and the last name " Smith  "
     And I start the survey

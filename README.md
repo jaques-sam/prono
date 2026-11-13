@@ -87,6 +87,8 @@ cargo run --bin prono-cli -- surveys upload my_survey.json
   answer next to the options (default: `Other`), for questions where that does not fit.
 - `answer_optional` (default `false`), for `text` and `poll` questions only: with `"answer_optional": true` the
   participant may leave the answer blank and it is not stored; the app shows "(optional)" next to the question.
+- `multiline` (default `false`), for `text` questions only: with `"multiline": true` the participant gets a bigger
+  input field (several rows high) in which long answers wrap.
 - **Scores:** give every question a `correct_answer` (text or option for `text` and `poll`,
   `{"month": 7, "year": 2028}` for `prediction_date`) and the survey is scored: participants see a ranking of the
   correct answers after submitting. All questions need one, or none. The correct answers never leave the backend, so a

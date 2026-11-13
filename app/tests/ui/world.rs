@@ -60,6 +60,8 @@ pub struct World {
     clock: f64,
     /// Where the left side of the form was, before a scroll.
     pub form_left: f32,
+    /// How tall an input field was, before something was typed into it.
+    pub field_height: f32,
 }
 
 impl fmt::Debug for World {
@@ -88,6 +90,7 @@ impl World {
             harness,
             clock: START_TIME,
             form_left: 0.0,
+            field_height: 0.0,
         }
     }
 

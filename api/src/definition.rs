@@ -15,7 +15,7 @@
 //!           "possible_answers": ["A", "B"], "correct_answer": "A" },
 //!         { "question": "Any allergies?", "answer_type": "poll",
 //!           "possible_answers": ["No"], "other_label": "Yes, namely:" },
-//!         { "question": "Any remarks?", "answer_type": "text", "answer_optional": true }
+//!         { "question": "Any remarks?", "answer_type": "text", "answer_optional": true, "multiline": true }
 //!     ]
 //! }
 //! ```
@@ -27,7 +27,7 @@
 //! when `true`, only the names on the survey's list (`prono-cli surveys names`) may answer it,
 //! on top of the pass phrase, which is always needed. `possible_answers` is for `poll` questions only, and so is `other_label`:
 //! the name of the free answer, "Other" when left out. `answer_optional` (`false`) is for `text` and
-//! `poll` questions: the participant may leave the answer blank. A `correct_answer`
+//! `poll` questions: the participant may leave the answer blank. `multiline` (`false`) is for `text` questions: a bigger, wrapping input field. A `correct_answer`
 //! makes the survey scored, and then every question needs one.
 
 use std::collections::HashSet;
@@ -65,6 +65,9 @@ struct QuestionFile {
     /// Whether the answer may be left blank, for `text` and `poll` questions.
     #[serde(default)]
     answer_optional: bool,
+    /// Whether the answer gets a bigger input field, for `text` questions only.
+    #[serde(default)]
+    multiline: bool,
     #[serde(default)]
     correct_answer: Option<CorrectAnswerFile>,
 }
@@ -83,6 +86,12 @@ impl QuestionFile {
         if self.answer_optional && self.answer_type == AnswerKind::PredictionDate {
             return Err(E::custom(format!(
                 "question \"{}\" is a prediction_date, which is always filled in: its answer cannot be optional",
+                self.question
+            )));
+        }
+        if self.multiline && self.answer_type != AnswerKind::Text {
+            return Err(E::custom(format!(
+                "question \"{}\" is not a text question, it cannot be multiline",
                 self.question
             )));
         }
@@ -207,6 +216,7 @@ impl Survey {
                     kind: q.answer_type,
                     possible_answers: q.possible_answers.clone(),
                     answer_optional: q.answer_optional,
+                    multiline: q.multiline,
                     other_label: q.other_label.clone(),
                     correct_answer: q.correct_answer()?,
                 })
@@ -408,6 +418,23 @@ mod tests {
         for bad in [
             r#"{"question": "Q?", "answer_type": "prediction_date", "answer_optional": true}"#,
             r#"{"question": "Q?", "answer_type": "text", "answer_optional": "yes"}"#,
+        ] {
+            assert!(with(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_text_question_is_multiline_only_when_it_says_so() {
+        let with = |question: &str| Survey::from_json(&survey_json(question)).map(|s| s.questions[0].clone());
+        assert!(!with(r#"{"question": "Q?", "answer_type": "text"}"#).unwrap().multiline);
+        let big = with(r#"{"question": "Q?", "answer_type": "text", "multiline": true}"#).unwrap();
+        assert!(big.multiline);
+        // Part of the definition, not of the identity.
+        assert_eq!(big.id, question_id("Q?", AnswerKind::Text));
+        for bad in [
+            r#"{"question": "Q?", "answer_type": "poll", "possible_answers": ["A"], "multiline": true}"#,
+            r#"{"question": "Q?", "answer_type": "prediction_date", "multiline": true}"#,
+            r#"{"question": "Q?", "answer_type": "text", "multiline": "yes"}"#,
         ] {
             assert!(with(bad).is_err(), "{bad}");
         }

@@ -8,3 +8,4 @@ mod poll;
 mod results;
 mod scores;
 mod submit;
+mod text;

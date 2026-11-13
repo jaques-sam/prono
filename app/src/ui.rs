@@ -137,6 +137,9 @@ fn error_banner(ui: &mut egui::Ui, error: &str) -> Option<Action> {
 /// are as wide as a text field alone.
 const SUBMIT_WIDTH: f32 = 72.0;
 
+/// The height of the input field of a multiline question, in text rows.
+const MULTILINE_ROWS: usize = 5;
+
 /// A green "Submit" button, `min_width` wide.
 fn submit_button(min_width: f32) -> egui::Button<'static> {
     egui::Button::new("Submit")
@@ -263,6 +266,14 @@ fn answering(ui: &mut egui::Ui, survey: &Survey, answers: &mut [Answer], busy: b
 
 fn answer_input(ui: &mut egui::Ui, question: &Question, answer: &mut Answer) {
     match answer {
+        Answer::Text(text) if question.multiline => {
+            // Wraps at the field's edge and grows with the text.
+            ui.add(
+                TextEdit::multiline(text)
+                    .hint_text("your answer here")
+                    .desired_rows(MULTILINE_ROWS),
+            );
+        }
         Answer::Text(text) => {
             ui.add(TextEdit::singleline(text).hint_text("your answer here"));
         }

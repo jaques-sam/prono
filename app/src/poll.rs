@@ -242,6 +242,7 @@ mod tests {
             kind: AnswerKind::Poll,
             possible_answers: vec!["C".into(), "C++".into()],
             answer_optional: false,
+            multiline: false,
             other_label: None,
             correct_answer: None,
         }

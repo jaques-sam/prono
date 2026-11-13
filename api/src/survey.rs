@@ -47,6 +47,10 @@ pub struct Question {
     /// always filled in.
     #[serde(default)]
     pub answer_optional: bool,
+    /// Whether a `Text` answer gets a bigger, wrapping input field, for a
+    /// longer answer. Never for another kind.
+    #[serde(default)]
+    pub multiline: bool,
     /// What the free answer of a `Poll` question is called, when "Other"
     /// does not fit: "Yes, namely:" next to the option "No".
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -456,6 +460,7 @@ mod tests {
                     kind: AnswerKind::PredictionDate,
                     possible_answers: Vec::new(),
                     answer_optional: false,
+                    multiline: false,
                     other_label: None,
                     correct_answer: None,
                 },
@@ -465,6 +470,7 @@ mod tests {
                     kind: AnswerKind::Text,
                     possible_answers: Vec::new(),
                     answer_optional: false,
+                    multiline: false,
                     other_label: None,
                     correct_answer: None,
                 },
@@ -536,6 +542,7 @@ mod tests {
             kind: AnswerKind::Poll,
             possible_answers: vec!["C".into(), "C++".into(), "Rust".into()],
             answer_optional: false,
+            multiline: false,
             other_label: None,
             correct_answer: None,
         }

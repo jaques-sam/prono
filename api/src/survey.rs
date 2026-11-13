@@ -137,7 +137,8 @@ impl Survey {
     /// `user`'s answers to this survey in question order, if `results` hold a
     /// valid answer of theirs to every required question (and to at least one
     /// question): what to refill when they come back. A skipped optional
-    /// answer is refilled blank.
+    /// answer is refilled blank. Names match regardless of case, like the
+    /// database does when it decides whose name is taken.
     #[must_use]
     pub fn answers_of(&self, results: &Results, user: &str) -> Option<Vec<Answer>> {
         let found: Vec<_> = self
@@ -147,7 +148,9 @@ impl Survey {
                 results
                     .get(&question.id)?
                     .iter()
-                    .find(|found| found.user == user && found.answer.is_valid_for(question.kind))
+                    .find(|found| {
+                        found.user.to_lowercase() == user.to_lowercase() && found.answer.is_valid_for(question.kind)
+                    })
                     .map(|found| found.answer.clone())
             })
             .collect();
@@ -717,6 +720,18 @@ mod tests {
         ]);
         assert_eq!(
             survey().answers_of(&results, "Sam"),
+            Some(vec![date(5, 2030), Answer::Text("sam".into())])
+        );
+    }
+
+    #[test]
+    fn answers_of_ignores_the_case_of_the_name() {
+        let results = results_of(&[
+            (Q1, "Sam Smith", date(5, 2030)),
+            (Q2, "Sam Smith", Answer::Text("sam".into())),
+        ]);
+        assert_eq!(
+            survey().answers_of(&results, "sam smith"),
             Some(vec![date(5, 2030), Answer::Text("sam".into())])
         );
     }

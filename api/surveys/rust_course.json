@@ -24,7 +24,8 @@
     {
       "question": "Other requests or questions?",
       "answer_type": "text",
-      "answer_optional": true
+      "answer_optional": true,
+      "multiline": true
     }
   ]
 }

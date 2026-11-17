@@ -83,6 +83,10 @@ cargo run --bin prono-cli -- surveys upload my_survey.json
   `prono-cli surveys names allow <survey id> <first name> <last name>` (names are matched ignoring case). A name that
   is not on the list is refused as soon as it clicks the survey, so it never sees the questions (and again when
   answers are submitted).
+- `private_results` is optional (default `false`). With `"private_results": true` the results screen shows a
+  participant only their own answers, not everybody's. The backend enforces it: it recognises the participant by the
+  device id of their submission (so only on the device that answered), and anyone else gets an empty result. Not for
+  scored surveys, whose ranking shows everybody.
 - `link` is optional; `possible_answers` is for `poll` questions only. So is `other_label`, the name of the free
   answer next to the options (default: `Other`), for questions where that does not fit.
 - `answer_optional` (default `false`), for `text` and `poll` questions only: with `"answer_optional": true` the

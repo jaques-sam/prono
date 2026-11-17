@@ -120,10 +120,9 @@ impl Backend for HttpBackend {
     }
 
     fn results(&self, survey_id: u64) -> Pending<Results> {
-        self.send(
-            ehttp::Request::get(self.url(&prono_api::answers_path(survey_id))),
-            parse_json,
-        )
+        // The device id tells the backend whose answers a survey with private results may show.
+        let request = ehttp::Request::get(self.url(&prono_api::answers_path(survey_id)));
+        self.send(self.authorized(request), parse_json)
     }
 
     fn scores(&self, survey_id: u64) -> Pending<Vec<Score>> {

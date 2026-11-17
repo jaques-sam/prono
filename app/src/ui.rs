@@ -313,7 +313,11 @@ fn done(
     }
 
     ui.separator();
-    ui.heading("All answers");
+    ui.heading(if survey.private_results {
+        "Your answers"
+    } else {
+        "All answers"
+    });
     let Some(results) = results else {
         ui.spinner();
         return action;

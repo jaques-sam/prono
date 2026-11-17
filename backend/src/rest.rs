@@ -58,9 +58,18 @@ async fn enter_survey(
     Ok(HttpResponse::Ok().finish())
 }
 
+/// The [`prono_api::Results`] of a survey: everybody's answers, or only the
+/// caller's own when the survey has `private_results`. The caller is
+/// recognised by the API key and device id of a submission; without them a
+/// private survey shows no answers at all.
 #[get("/api/surveys/{survey_id}/answers")]
-async fn get_answers(repo: web::Data<dyn Repo>, survey_id: web::Path<u64>) -> Result<HttpResponse, ApiError> {
-    let results = prono::results(repo.get_ref(), *survey_id).await?;
+async fn get_answers(
+    repo: web::Data<dyn Repo>,
+    survey_id: web::Path<u64>,
+    req: HttpRequest,
+) -> Result<HttpResponse, ApiError> {
+    let device_id = authorized_device(&req).ok();
+    let results = prono::visible_results(repo.get_ref(), *survey_id, device_id).await?;
     Ok(HttpResponse::Ok().json(results))
 }
 
@@ -209,6 +218,50 @@ mod tests {
         let first = &results[&survey.questions[0].id];
         assert_eq!(first.len(), 1);
         assert_eq!(first[0].user, "alice");
+    }
+
+    fn get_answers(survey_id: u64, device_id: Option<&str>, key: &str) -> actix_test::TestRequest {
+        let mut req = actix_test::TestRequest::get()
+            .uri(&prono_api::answers_path(survey_id))
+            .insert_header((header::AUTHORIZATION, format!("Bearer {key}")));
+        if let Some(device_id) = device_id {
+            req = req.insert_header((DEVICE_ID_HEADER, device_id));
+        }
+        req
+    }
+
+    /// The users that answered `body`, the results of the course survey.
+    fn users_in(body: &str) -> Vec<String> {
+        let results: Results = serde_json::from_str(body).unwrap();
+        let mut users: Vec<_> = results.into_values().flatten().map(|answer| answer.user).collect();
+        users.dedup();
+        users
+    }
+
+    #[actix_web::test]
+    async fn a_private_survey_returns_only_the_answers_of_the_calling_device() {
+        let survey = samples::course();
+        let answers = samples::course_answers();
+        let submit = |user: &str, device: &str| {
+            let submission = Submission::new(user, &survey, &answers).with_pass_phrase(COURSE_PASS_PHRASE);
+            post(COURSE_ID, Some(device), API_KEY, &submission)
+        };
+        let ada = || submit("Ada Lovelace", "dev-1");
+
+        let (statuses, body) = run(vec![ada(), get_answers(COURSE_ID, Some("dev-1"), API_KEY)]).await;
+        assert_eq!(statuses, [StatusCode::OK; 2]);
+        assert_eq!(users_in(&body), ["Ada Lovelace"]);
+
+        // Another device, a missing device id and a wrong key all see nothing.
+        for get in [
+            get_answers(COURSE_ID, Some("dev-2"), API_KEY),
+            get_answers(COURSE_ID, None, API_KEY),
+            get_answers(COURSE_ID, Some("dev-1"), "wrong key"),
+        ] {
+            let (statuses, body) = run(vec![ada(), get]).await;
+            assert_eq!(statuses[1], StatusCode::OK);
+            assert_eq!(users_in(&body), Vec::<String>::new());
+        }
     }
 
     #[actix_web::test]

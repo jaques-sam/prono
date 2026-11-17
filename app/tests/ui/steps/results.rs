@@ -96,6 +96,12 @@ fn sees_thanks(world: &mut World, name: String) {
     assert!(world.shows(&thanks), "no \"{thanks}\"");
 }
 
+#[then("I see only my own answers")]
+fn sees_own_answers(world: &mut World) {
+    assert!(world.shows("Your answers"));
+    assert!(!world.shows("All answers"));
+}
+
 #[then("I see everyone's answers")]
 fn sees_all_answers(world: &mut World) {
     assert!(world.shows("All answers"));

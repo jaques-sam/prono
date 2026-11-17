@@ -25,7 +25,9 @@
 //! pass phrase, which is set with `prono-cli surveys pass-phrase` and lives in
 //! the backend's database, never in the definition. `name_list` is optional (`false`):
 //! when `true`, only the names on the survey's list (`prono-cli surveys names`) may answer it,
-//! on top of the pass phrase, which is always needed. `possible_answers` is for `poll` questions only, and so is `other_label`:
+//! on top of the pass phrase, which is always needed. `private_results` is optional (`false`):
+//! when `true`, the results show each participant only their own answers, not
+//! everybody's (not for a scored survey). `possible_answers` is for `poll` questions only, and so is `other_label`:
 //! the name of the free answer, "Other" when left out. `answer_optional` (`false`) is for `text` and
 //! `poll` questions: the participant may leave the answer blank. `multiline` (`false`) is for `text` questions: a bigger, wrapping input field. A `correct_answer`
 //! makes the survey scored, and then every question needs one.
@@ -48,6 +50,8 @@ struct SurveyFile {
     link: Option<String>,
     #[serde(default)]
     name_list: bool,
+    #[serde(default)]
+    private_results: bool,
     questions: Vec<QuestionFile>,
 }
 
@@ -229,12 +233,18 @@ impl Survey {
                 "a scored survey needs a correct_answer for every question",
             ));
         }
+        if file.private_results && with_answer != 0 {
+            return Err(serde_json::Error::custom(
+                "a scored survey ranks everybody, so its results cannot be private_results",
+            ));
+        }
         Ok(Survey {
             id: file.survey_id,
             title,
             description: file.description,
             link: file.link,
             name_list: file.name_list,
+            private_results: file.private_results,
             scored: with_answer != 0,
             questions,
         })
@@ -340,6 +350,27 @@ mod tests {
         }
         assert!(samples::course().name_list);
         assert!(!samples::starship().name_list);
+    }
+
+    #[test]
+    fn a_survey_has_private_results_only_when_it_says_so() {
+        let with = |key: &str, question: &str| {
+            Survey::from_json(&format!(
+                r#"{{"survey_id": 1, "title": "T", "description": "", {key} "questions": [{question}]}}"#
+            ))
+        };
+        assert!(!with("", "").unwrap().private_results);
+        assert!(!with(r#""private_results": false,"#, "").unwrap().private_results);
+        assert!(with(r#""private_results": true,"#, "").unwrap().private_results);
+        for bad in [r#""private_results": "yes","#, r#""private_results": null,"#] {
+            assert!(with(bad, "").is_err(), "{bad}");
+        }
+        assert!(samples::course().private_results);
+        assert!(!samples::starship().private_results);
+
+        let scored = r#"{"question": "Q?", "answer_type": "text", "correct_answer": "A"}"#;
+        assert!(with("", scored).unwrap().scored);
+        assert!(with(r#""private_results": true,"#, scored).is_err());
     }
 
     #[test]

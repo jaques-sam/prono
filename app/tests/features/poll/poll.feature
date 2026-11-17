@@ -74,15 +74,30 @@ Feature: Poll questions
     Then the answer to "What is your background" is ""
     And the option "Other" of "What is your background" is not selected
 
-  Scenario: The results show a bar for every option and for the other answers
-    Given "Alice Adams" already answered "C" to "What is your background" from another device
-    And "Bob Brown" already answered "Rust" to "What is your background" from another device
-    And I answer the course survey as "Sam Smith"
+  Scenario: The results show a bar for every option, also one without votes
+    Given I answer the course survey as "Sam Smith"
     And I choose "C" for "What is your background"
     And I choose "Of course!" for "I come to the course!"
     And I choose "no" for "Do you have any diatery requirements or allergies?"
-    And I type the text answer "Nothing"
     When I submit my answers
-    Then the poll results show "C: 2 votes (67%)"
+    Then the poll results show "C: 1 vote (100%)"
     And the poll results show "C++: 0 votes (0%)"
-    And the poll results show "Rust (other): 1 vote (33%)"
+
+  Scenario: The course survey shows only my own answers, not those of the others
+    Given "Alice Adams" already answered "C" to "What is your background" from another device
+    And "Bob Brown" already answered "Rust" to "What is your background" from another device
+    And I answer the course survey as "Sam Smith"
+    And I choose "C++" for "What is your background"
+    And I choose "Of course!" for "I come to the course!"
+    And I choose "no" for "Do you have any diatery requirements or allergies?"
+    When I submit my answers
+    Then I see only my own answers
+    And the poll results show "C++: 1 vote (100%)"
+    And the poll results show "C: 0 votes (0%)"
+
+  Scenario: Another device does not see the answers of a participant
+    Given "Sam Smith" already answered "C" to "What is your background" from another device
+    When I enter the name "Sam Smith"
+    And I start the course survey
+    Then I see the question "What is your background"
+    And the "Submit" button is enabled

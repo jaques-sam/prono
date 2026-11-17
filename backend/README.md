@@ -94,6 +94,8 @@ an earlier version count again as soon as the survey says `"name_list": true`. T
 also converts a database and its tables to `utf8mb4`, which the
 emoji in surveys and answers need (`utf8mb3` fails with `Incorrect string value`); this needs a user with `ALTER`
 rights, so run it as root, like `create_db.sh` does.
+Surveys with `"private_results": true` only return the answers of the participant registered on the calling device
+(`GET /api/surveys/{id}/answers` with the API key and device id headers); without them that survey returns no answers.
 Answers are stored as text: `DD/MM/YYYY` for dates (`00` when there is no day), the text itself otherwise.
 
 

@@ -117,13 +117,38 @@ pub async fn has_answered(repo: &dyn Repo, device_id: &str, user: &str) -> Resul
     Ok(repo.device_of(user).await?.is_some())
 }
 
-/// Every participant's answers to survey `survey_id`.
+/// Every participant's answers to survey `survey_id`, for the administrator:
+/// the participants get [`visible_results`].
 ///
 /// # Errors
 ///
 /// [`Error::Invalid`] for an unknown survey, or a repository error.
 pub async fn results(repo: &dyn Repo, survey_id: u64) -> Result<Results> {
     collect_results(repo, &survey(repo, survey_id).await?).await
+}
+
+/// The results survey `survey_id` shows to the participant on `device_id`:
+/// everybody's answers, or for a survey with
+/// [`private_results`](Survey::private_results) only those of the participant
+/// registered on that device. A requester that is unknown, or not identified
+/// by a device, gets no answers from such a survey.
+///
+/// # Errors
+///
+/// [`Error::Invalid`] for an unknown survey, or a repository error.
+pub async fn visible_results(repo: &dyn Repo, survey_id: u64, device_id: Option<&str>) -> Result<Results> {
+    let survey = survey(repo, survey_id).await?;
+    let mut results = collect_results(repo, &survey).await?;
+    if survey.private_results {
+        let own = match device_id {
+            Some(device_id) => repo.user_of(device_id).await?,
+            None => None,
+        };
+        for answers in results.values_mut() {
+            answers.retain(|answer| own.as_deref() == Some(answer.user.as_str()));
+        }
+    }
+    Ok(results)
 }
 
 /// What each participant got right in survey `survey_id`, best first.
@@ -238,6 +263,80 @@ mod tests {
 
     fn ids(surveys: &[Survey]) -> Vec<u64> {
         surveys.iter().map(|survey| survey.id).collect()
+    }
+
+    /// The course survey (private results, name list) answered by Ada from
+    /// `dev-ada` and Bob from `dev-bob`.
+    async fn answered_course() -> MemoryRepo {
+        let repo = repo().await;
+        for (first, last, device) in [("Ada", "Lovelace", "dev-ada"), ("Bob", "Ray", "dev-bob")] {
+            repo.allow_user(COURSE_ID, first, last).await.unwrap();
+            let user = format!("{first} {last}");
+            submit(&repo, COURSE_ID, device, &course_submission(&user))
+                .await
+                .unwrap();
+        }
+        repo
+    }
+
+    fn users(results: &Results) -> Vec<&str> {
+        let mut users: Vec<_> = results.values().flatten().map(|answer| answer.user.as_str()).collect();
+        users.sort_unstable();
+        users.dedup();
+        users
+    }
+
+    #[tokio::test]
+    async fn a_private_survey_shows_a_device_only_its_own_answers() {
+        let repo = answered_course().await;
+        let questions = samples::course().questions.len();
+
+        let own = visible_results(&repo, COURSE_ID, Some("dev-ada")).await.unwrap();
+        assert_eq!(users(&own), ["Ada Lovelace"]);
+        assert_eq!(own.len(), questions, "every question is there, answered or not");
+        assert_eq!(
+            users(&visible_results(&repo, COURSE_ID, Some("dev-bob")).await.unwrap()),
+            ["Bob Ray"]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_private_survey_shows_nothing_to_an_unknown_or_unidentified_requester() {
+        let repo = answered_course().await;
+        for device in [Some("dev-new"), None] {
+            let results = visible_results(&repo, COURSE_ID, device).await.unwrap();
+            assert!(users(&results).is_empty(), "{device:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_survey_without_private_results_shows_everybody() {
+        let repo = repo().await;
+        for (user, device) in [("alice", "dev-1"), ("bob", "dev-2")] {
+            submit(&repo, SURVEY_ID, device, &submission(user)).await.unwrap();
+        }
+        for device in [Some("dev-1"), Some("dev-new"), None] {
+            let results = visible_results(&repo, SURVEY_ID, device).await.unwrap();
+            assert_eq!(users(&results), ["alice", "bob"], "{device:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_administrator_still_gets_every_answer_of_a_private_survey() {
+        let repo = answered_course().await;
+        assert_eq!(
+            users(&results(&repo, COURSE_ID).await.unwrap()),
+            ["Ada Lovelace", "Bob Ray"]
+        );
+    }
+
+    #[tokio::test]
+    async fn visible_results_of_an_unknown_survey_are_invalid() {
+        let repo = repo().await;
+        assert!(matches!(
+            visible_results(&repo, 999, None).await,
+            Err(Error::Invalid(Invalid::UnknownSurvey(999)))
+        ));
     }
 
     #[tokio::test]

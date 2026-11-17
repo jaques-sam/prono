@@ -27,6 +27,11 @@ pub struct Survey {
     /// never leaves the backend.
     #[serde(default)]
     pub name_list: bool,
+    /// Whether the results only show a participant their own answers, instead
+    /// of everybody's. Never for a [`scored`](Survey::scored) survey, whose
+    /// scores rank everybody.
+    #[serde(default)]
+    pub private_results: bool,
     /// Whether every question has a correct answer, so the participants get
     /// a [`Score`]. The correct answers themselves never leave the backend.
     pub scored: bool,
@@ -452,6 +457,7 @@ mod tests {
             description: "Test".into(),
             link: None,
             name_list: false,
+            private_results: false,
             scored: false,
             questions: vec![
                 Question {

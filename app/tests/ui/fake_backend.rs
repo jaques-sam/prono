@@ -206,7 +206,9 @@ impl Backend for FakeBackend {
     }
 
     fn results(&self, survey_id: u64) -> Pending<Results> {
-        Self::respond(self.results.get(), || Self::now(prono::results(&self.repo, survey_id)))
+        Self::respond(self.results.get(), || {
+            Self::now(prono::visible_results(&self.repo, survey_id, Some(MY_DEVICE)))
+        })
     }
 
     fn scores(&self, survey_id: u64) -> Pending<Vec<Score>> {

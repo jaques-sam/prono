@@ -3,6 +3,7 @@
   "title": "Rust course",
   "description": "You were chosen to follow a splendid course...",
   "name_list": true,
+  "private_results": true,
   "questions": [
     {
       "question": "What is your background",
